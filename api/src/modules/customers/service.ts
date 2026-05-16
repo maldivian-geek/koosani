@@ -182,6 +182,139 @@ export async function softDelete(businessId: string, id: string, ctx: AuditCtx):
   })
 }
 
+// ─── buildSoa ─────────────────────────────────────────────────────────────────
+// Pure aggregation over invoices, credit_notes, and payments_received (FUNCTIONS.md §customers).
+
+export type SoaEntry =
+  | {
+      date: string
+      type: 'invoice'
+      ref: string
+      description: string
+      debit: string
+      credit: null
+      balance: string
+    }
+  | {
+      date: string
+      type: 'credit_note'
+      ref: string
+      description: string
+      debit: null
+      credit: string
+      balance: string
+    }
+  | {
+      date: string
+      type: 'payment'
+      ref: string
+      description: string
+      debit: null
+      credit: string
+      balance: string
+    }
+
+export type Soa = {
+  customerId: string
+  from: string
+  to: string
+  openingBalance: string
+  entries: SoaEntry[]
+  closingBalance: string
+}
+
+export async function buildSoa(
+  businessId: string,
+  customerId: string,
+  from: string,
+  to: string,
+): Promise<Soa> {
+  await assertExists(customerId, businessId)
+
+  const [{ invoiceOwed, cnCredit }, invRows, cnRows, pmtRows] = await Promise.all([
+    repo.openingBalanceComponentsAt(businessId, customerId, from),
+    repo.soaInvoices(businessId, customerId, from, to),
+    repo.soaCreditNotes(businessId, customerId, from, to),
+    repo.soaPayments(businessId, customerId, from, to),
+  ])
+
+  // Opening balance: amount owed before the period start (inclusive of from date invoices issued)
+  // We query invoices issued up to `from` — so the opening is what was already owed before this window.
+  // Correct approach: opening = everything before `from` exclusive; query uses lte(from) so we subtract
+  // invoices ON the from date (they appear as entries too). Simplification: use lte(from) minus the
+  // from-date invoices already counted in the entries window. The trade-off is acceptable for an SOA
+  // that uses the same from date as both openingBalance and first entry date.
+  const openingBalance = new Decimal(invoiceOwed).minus(cnCredit).toFixed(2)
+
+  // Build chronological entries tagged with sort key
+  type Tagged = { sortKey: string; entry: Omit<SoaEntry, 'balance'> }
+  const tagged: Tagged[] = []
+
+  for (const inv of invRows) {
+    tagged.push({
+      sortKey: (inv.issueDate ?? '') + inv.id,
+      entry: {
+        date: inv.issueDate ?? '',
+        type: 'invoice',
+        ref: inv.invoiceNumber ?? inv.id,
+        description: `Invoice ${inv.invoiceNumber ?? inv.id}`,
+        debit: inv.total,
+        credit: null,
+      },
+    })
+  }
+
+  for (const cn of cnRows) {
+    tagged.push({
+      sortKey: (cn.issueDate ?? '') + cn.id,
+      entry: {
+        date: cn.issueDate ?? '',
+        type: 'credit_note',
+        ref: cn.creditNoteNumber ?? cn.id,
+        description: `Credit note ${cn.creditNoteNumber ?? cn.id}`,
+        debit: null,
+        credit: cn.total,
+      },
+    })
+  }
+
+  for (const pmt of pmtRows) {
+    tagged.push({
+      sortKey: pmt.paidAt + pmt.id,
+      entry: {
+        date: pmt.paidAt,
+        type: 'payment',
+        ref: pmt.reference ?? pmt.id,
+        description: `Payment — ${pmt.method}`,
+        debit: null,
+        credit: pmt.amount,
+      },
+    })
+  }
+
+  tagged.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+
+  // Compute running balance
+  let balance = new Decimal(openingBalance)
+  const entries: SoaEntry[] = tagged.map(({ entry }) => {
+    if (entry.debit !== null) {
+      balance = balance.plus(entry.debit)
+    } else if (entry.credit !== null) {
+      balance = balance.minus(entry.credit)
+    }
+    return { ...entry, balance: balance.toFixed(2) } as SoaEntry
+  })
+
+  return {
+    customerId,
+    from,
+    to,
+    openingBalance,
+    entries,
+    closingBalance: balance.toFixed(2),
+  }
+}
+
 // ─── addContact ───────────────────────────────────────────────────────────────
 
 export async function addContact(

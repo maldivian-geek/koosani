@@ -91,9 +91,22 @@ customerRoutes.delete('/:id', async (c) => {
   }
 })
 
-// GET /customers/:id/soa — implemented in Phase 7 (invoicing)
+// GET /customers/:id/soa
 customerRoutes.get('/:id/soa', async (c) => {
-  return c.json({ error: 'not_implemented' }, 501)
+  const from = c.req.query('from')
+  const to = c.req.query('to')
+  const format = c.req.query('format') ?? 'json'
+
+  if (!from || !to) return c.json({ error: 'from and to are required' }, 422)
+  if (format === 'pdf') return c.json({ error: 'pdf_not_implemented' }, 501)
+
+  try {
+    const soa = await svc.buildSoa(c.get('businessId'), c.req.param('id'), from, to)
+    return c.json(soa)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
 })
 
 // POST /customers/:id/contacts

@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 7 — Invoicing (sales):**
+  - `shared/src/invoicing.ts` — Zod schemas: `InvoiceLineCreate`, `InvoiceDraftCreate`, `InvoiceDraftPatch`, `InvoicePaymentCreate`, `InvoiceVoidBody`, `CreditNoteCreate` — all exported from `@koosani/shared` (FUNCTIONS.md §invoicing).
+  - `api/src/modules/invoicing/repository.ts` — full repository: invoice CRUD + lines, payment CRUD + sync, credit note CRUD + lines, per-business advisory-locked number sequences (`INV-NNNNNN`, `CN-NNNNNN`).
+  - `api/src/modules/invoicing/service.ts` — `createDraft` (preliminary GST rates via `gst.rateAt` at today's MV date), `patchDraft` (replaces lines, recomputes totals), `issue` (re-snapshots GST at issueDate, checks + commits stock via `inventory.assertAvailable` / `inventory.applyMovement`, allocates invoice number, period-lock checked, audit written), `voidInvoice` (auto-creates and auto-issues reversing CN, reverses stock), `addPayment` / `reversePayment` (syncs `paid_amount`, derives status: issued → partially_paid → paid), `createCreditNote`, `issueCreditNote` (allocates CN number, reverses stock), `listInvoices`, `getInvoice`, `listCreditNotes`, `assertNotLocked`, `computeTotals` (FUNCTIONS.md §invoicing, ARCHITECTURE.md §4.1).
+  - `api/src/modules/invoicing/routes.ts` — `GET /invoices`, `GET /invoices/:id`, `POST /invoices`, `PATCH /invoices/:id`, `POST /invoices/:id/issue`, `POST /invoices/:id/void`, `GET /invoices/:id/pdf` (501 stub — Phase 8), `POST /invoices/:id/payments`, `DELETE /invoices/:id/payments/:pid`, `GET /credit-notes`, `POST /credit-notes`, `POST /credit-notes/:id/issue` (FUNCTIONS.md §invoicing).
+  - `api/src/modules/customers/repository.ts` — added SOA query functions: `soaInvoices`, `soaCreditNotes`, `soaPayments`, `openingBalanceComponentsAt`.
+  - `api/src/modules/customers/service.ts` — `buildSoa(businessId, customerId, from, to) → Soa` pure aggregation over issued invoices, credit notes, and non-reversed payments; computes running balance per entry (FUNCTIONS.md §customers).
+  - `api/src/modules/customers/routes.ts` — `GET /customers/:id/soa?from&to&format` implemented (json only; pdf returns 501) (FUNCTIONS.md §customers).
+  - `api/src/server.ts` — registers `invoiceRoutes` at `/invoices` and `creditNoteRoutes` at `/credit-notes`.
+  - 22 new tests: GST total math with mixed categories, per-line rounding before summing, draft create/patch, issue with stock commitment, sequential number allocation under concurrency, period-lock rejection, insufficient stock rejection, void with reversing CN + stock restoration, payment / reversal, credit note create + issue, immutability guards (PATCH/issue on issued invoices).
+
 - **Phase 6 — GST configuration & period locking:**
   - `shared/src/gst.ts` — `GstRateCreate` Zod schema (`category`, `rate`, `validFrom`) exported from `@koosani/shared` (FUNCTIONS.md §gst).
   - `api/src/modules/gst/repository.ts` — `getRateAt`, `listRates`, `insertRate`, `getPeriodForDate`, `upsertPeriod` (ON CONFLICT DO NOTHING), `getPeriodById`, `listPeriods`, `lockPeriod`, `unlockPeriod`, `getBusinessPeriodType`.

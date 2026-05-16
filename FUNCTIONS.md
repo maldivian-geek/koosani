@@ -47,18 +47,18 @@
 
 ## Module: `customers`
 
-| Kind  | Name                             | Signature                                                                  | Purpose                                                            |
-| ----- | -------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| route | `GET    /customers`              | `?q&page&pageSize&active` → `{ items: Customer[], total, page, pageSize }` | List with offset pagination (ARCHITECTURE.md §11.5)                |
-| route | `GET    /customers/:id`          | → `Customer & { contacts, balance }`                                       | Detail + outstanding balance                                       |
-| route | `POST   /customers`              | `CustomerCreate` → `Customer`                                              | —                                                                  |
-| route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`                                               | —                                                                  |
-| route | `DELETE /customers/:id`          | → `204`                                                                    | Soft delete (must have zero balance + no draft invoices)           |
-| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF`                                 | Statement of account                                               |
-| route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                                                      | —                                                                  |
-| svc   | `customers.assertExists`         | `(id) → Customer`                                                          | Throws if not in `business_id`                                     |
-| svc   | `customers.outstandingBalance`   | `(id) → Decimal`                                                           | Sum of issued invoices − payments                                  |
-| svc   | `customers.buildSoa`             | `(id, from, to) → Soa`                                                     | Pure function over `invoices`, `credit_notes`, `payments_received` |
+| Kind  | Name                             | Signature                                                                  | Purpose                                                                         |
+| ----- | -------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| route | `GET    /customers`              | `?q&page&pageSize&active` → `{ items: Customer[], total, page, pageSize }` | List with offset pagination (ARCHITECTURE.md §11.5)                             |
+| route | `GET    /customers/:id`          | → `Customer & { contacts, balance }`                                       | Detail + outstanding balance                                                    |
+| route | `POST   /customers`              | `CustomerCreate` → `Customer`                                              | —                                                                               |
+| route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`                                               | —                                                                               |
+| route | `DELETE /customers/:id`          | → `204`                                                                    | Soft delete (must have zero balance + no draft invoices)                        |
+| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF`                                 | Statement of account (json implemented; pdf stub — Phase 8)                     |
+| route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                                                      | —                                                                               |
+| svc   | `customers.assertExists`         | `(id, businessId) → Customer`                                              | Throws if not in `business_id`                                                  |
+| svc   | `customers.outstandingBalance`   | `(id, businessId) → Decimal`                                               | Sum of issued invoices − payments                                               |
+| svc   | `customers.buildSoa`             | `(businessId, id, from, to) → Soa`                                         | Aggregates invoices, credit_notes, payments_received; running balance per entry |
 
 ---
 
@@ -109,23 +109,30 @@
 
 ## Module: `invoicing`
 
-| Kind  | Name                                 | Signature                                         | Purpose                                        |
-| ----- | ------------------------------------ | ------------------------------------------------- | ---------------------------------------------- |
-| route | `GET    /invoices`                   | `?status&customerId&from&to&q&page` → `Invoice[]` | —                                              |
-| route | `GET    /invoices/:id`               | → `Invoice & { lines, payments, creditNotes }`    | —                                              |
-| route | `POST   /invoices`                   | `InvoiceDraftCreate` → `Invoice`                  | Creates draft, no number, no stock movement    |
-| route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                   | Drafts only                                    |
-| route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                  | Allocates number, commits stock, locks row     |
-| route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                          | Issued only; creates reversing credit note     |
-| route | `GET    /invoices/:id/pdf`           | → `PDF` (signed URL)                              | —                                              |
-| route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`    | —                                              |
-| route | `DELETE /invoices/:id/payments/:pid` | → `204`                                           | Reverses payment                               |
-| route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`            | —                                              |
-| route | `POST   /credit-notes`               | `CreditNoteCreate` → `CreditNote`                 | References an issued invoice                   |
-| route | `POST   /credit-notes/:id/issue`     | `{}` → `CreditNote`                               | Allocates number, reverses stock               |
-| svc   | `invoicing.issue`                    | `(invoiceId, tx) → Invoice`                       | Number, stock, GST snapshot, audit             |
-| svc   | `invoicing.computeTotals`            | `(lines) → Totals`                                | Pure function — see ARCHITECTURE.md §4.1       |
-| svc   | `invoicing.assertNotLocked`          | `(date) → void`                                   | Rejects if `date` falls in a locked GST period |
+| Kind  | Name                                 | Signature                                           | Purpose                                        |
+| ----- | ------------------------------------ | --------------------------------------------------- | ---------------------------------------------- |
+| route | `GET    /invoices`                   | `?status&customerId&from&to&q&page` → `Invoice[]`   | —                                              |
+| route | `GET    /invoices/:id`               | → `Invoice & { lines, payments, creditNotes }`      | —                                              |
+| route | `POST   /invoices`                   | `InvoiceDraftCreate` → `Invoice`                    | Creates draft, no number, no stock movement    |
+| route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                     | Drafts only                                    |
+| route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                    | Allocates number, commits stock, locks row     |
+| route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                            | Issued only; creates reversing credit note     |
+| route | `GET    /invoices/:id/pdf`           | → `PDF` (signed URL)                                | —                                              |
+| route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`      | —                                              |
+| route | `DELETE /invoices/:id/payments/:pid` | → `204`                                             | Reverses payment                               |
+| route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`              | —                                              |
+| route | `POST   /credit-notes`               | `CreditNoteCreate` → `CreditNote`                   | References an issued invoice                   |
+| route | `POST   /credit-notes/:id/issue`     | `{}` → `CreditNote`                                 | Allocates number, reverses stock               |
+| svc   | `invoicing.createDraft`              | `(businessId, data, ctx) → Invoice & { lines }`     | Creates draft; GST rates preliminary           |
+| svc   | `invoicing.patchDraft`               | `(businessId, id, data, ctx) → Invoice & { lines }` | Drafts only; replaces lines if provided        |
+| svc   | `invoicing.issue`                    | `(businessId, invoiceId, ctx) → Invoice`            | Number, stock, GST snapshot, audit             |
+| svc   | `invoicing.voidInvoice`              | `(businessId, invoiceId, reason, ctx) → Invoice`    | Auto-issues reversing CN; reverses stock       |
+| svc   | `invoicing.addPayment`               | `(businessId, invoiceId, data, ctx) → Payment`      | Syncs paidAmount, derives status               |
+| svc   | `invoicing.reversePayment`           | `(businessId, invoiceId, paymentId, ctx) → void`    | Marks reversed, re-syncs paidAmount            |
+| svc   | `invoicing.createCreditNote`         | `(businessId, data, ctx) → CreditNote & { lines }`  | Draft CN against issued invoice                |
+| svc   | `invoicing.issueCreditNote`          | `(businessId, creditNoteId, ctx) → CreditNote`      | Allocates CN number, reverses stock            |
+| svc   | `invoicing.computeTotals`            | `(lines) → Totals`                                  | Pure function — see ARCHITECTURE.md §4.1       |
+| svc   | `invoicing.assertNotLocked`          | `(businessId, date, ctx) → void`                    | Rejects if `date` falls in a locked GST period |
 
 ---
 
