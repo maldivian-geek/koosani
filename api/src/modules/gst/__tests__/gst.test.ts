@@ -523,6 +523,368 @@ describe('gst — lock / unlock period routes', () => {
   })
 })
 
+// ─── buildReturn end-to-end ───────────────────────────────────────────────────
+
+async function seedReturnFixture() {
+  const { business, user, token, appDb, schema } = await seedBusiness('monthly')
+  await seedMiraRates(business.id, user.id)
+
+  // Customer
+  const [customer] = await appDb
+    .insert(schema.customers)
+    .values({
+      businessId: business.id,
+      name: 'Test Customer',
+      tin: null,
+      email: null,
+      phone: null,
+      address: null,
+      creditTermsDays: '30',
+      notes: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!customer) throw new Error('seed: no customer')
+
+  // Supplier (ABC Supplies, TIN 1234567)
+  const [supplier] = await appDb
+    .insert(schema.suppliers)
+    .values({
+      businessId: business.id,
+      name: 'ABC Supplies',
+      tin: '1234567',
+      email: null,
+      phone: null,
+      address: null,
+      paymentTermsDays: '30',
+      notes: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!supplier) throw new Error('seed: no supplier')
+
+  // Invoice 1 (issued 2026-03-10):
+  //   Line A: general_8, net=1000.00, gst=80.00, total=1080.00
+  //   Line B: zero,      net=200.00,  gst=0.00,  total=200.00
+  const [inv1] = await appDb
+    .insert(schema.invoices)
+    .values({
+      businessId: business.id,
+      customerId: customer.id,
+      invoiceNumber: 'INV-001',
+      status: 'issued',
+      issueDate: '2026-03-10',
+      dueDate: '2026-04-10',
+      subtotal: '1200.00',
+      gstAmount: '80.00',
+      total: '1280.00',
+      paidAmount: '0.00',
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!inv1) throw new Error('seed: no inv1')
+
+  await appDb.insert(schema.invoiceLines).values([
+    {
+      businessId: business.id,
+      invoiceId: inv1.id,
+      description: 'General goods',
+      qty: '2',
+      unitPrice: '500.00',
+      gstCategory: 'general_8',
+      gstRate: '0.0800',
+      gstAmount: '80.00',
+      lineTotal: '1080.00',
+      sortOrder: 0,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+    {
+      businessId: business.id,
+      invoiceId: inv1.id,
+      description: 'Zero-rated item',
+      qty: '1',
+      unitPrice: '200.00',
+      gstCategory: 'zero',
+      gstRate: '0.0000',
+      gstAmount: '0.00',
+      lineTotal: '200.00',
+      sortOrder: 1,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+  ])
+
+  // Invoice 2 (issued 2026-03-20): tourism_17, net=1000.00, gst=170.00
+  const [inv2] = await appDb
+    .insert(schema.invoices)
+    .values({
+      businessId: business.id,
+      customerId: customer.id,
+      invoiceNumber: 'INV-002',
+      status: 'issued',
+      issueDate: '2026-03-20',
+      dueDate: '2026-04-20',
+      subtotal: '1000.00',
+      gstAmount: '170.00',
+      total: '1170.00',
+      paidAmount: '0.00',
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!inv2) throw new Error('seed: no inv2')
+
+  await appDb.insert(schema.invoiceLines).values({
+    businessId: business.id,
+    invoiceId: inv2.id,
+    description: 'Tourism service (post-2025-07-01 rate)',
+    qty: '1',
+    unitPrice: '1000.00',
+    gstCategory: 'tourism_17',
+    gstRate: '0.1700',
+    gstAmount: '170.00',
+    lineTotal: '1170.00',
+    sortOrder: 0,
+    createdBy: user.id,
+    updatedBy: user.id,
+  })
+
+  // Credit Note (issued 2026-03-15, general_8, net=100.00, gst=8.00)
+  const [cn1] = await appDb
+    .insert(schema.creditNotes)
+    .values({
+      businessId: business.id,
+      invoiceId: inv1.id,
+      customerId: customer.id,
+      creditNoteNumber: 'CN-001',
+      status: 'issued',
+      issueDate: '2026-03-15',
+      subtotal: '100.00',
+      gstAmount: '8.00',
+      total: '108.00',
+      reason: 'Partial return',
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!cn1) throw new Error('seed: no cn1')
+
+  await appDb.insert(schema.creditNoteLines).values({
+    businessId: business.id,
+    creditNoteId: cn1.id,
+    description: 'Partial return',
+    qty: '1',
+    unitPrice: '100.00',
+    gstCategory: 'general_8',
+    gstRate: '0.0800',
+    gstAmount: '8.00',
+    lineTotal: '108.00',
+    sortOrder: 0,
+    createdBy: user.id,
+    updatedBy: user.id,
+  })
+
+  // Bill (confirmed 2026-03-12, ABC Supplies, general_8, net=500.00, gst=40.00)
+  const [bill1] = await appDb
+    .insert(schema.bills)
+    .values({
+      businessId: business.id,
+      supplierId: supplier.id,
+      billNumber: 'BILL-001',
+      supplierRef: 'SUP-REF-001',
+      status: 'confirmed',
+      billDate: '2026-03-12',
+      dueDate: '2026-04-12',
+      subtotal: '500.00',
+      inputGstAmount: '40.00',
+      total: '540.00',
+      paidAmount: '0.00',
+      createdBy: user.id,
+      updatedBy: user.id,
+    })
+    .returning()
+  if (!bill1) throw new Error('seed: no bill1')
+
+  await appDb.insert(schema.billLines).values({
+    businessId: business.id,
+    billId: bill1.id,
+    description: 'Office supplies',
+    qty: '5',
+    unitCost: '100.00',
+    gstCategory: 'general_8',
+    gstRate: '0.0800',
+    gstAmount: '40.00',
+    lineTotal: '540.00',
+    sortOrder: 0,
+    createdBy: user.id,
+    updatedBy: user.id,
+  })
+
+  // GST period for March 2026
+  const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+  const svcMod = await import('../service.js')
+  await svcMod.assertPeriodOpen(business.id, '2026-03-10', ctx)
+  const periods = await svcMod.listPeriods(business.id)
+  const period = periods[0]
+  if (!period) throw new Error('seed: no period')
+
+  return { business, user, token, appDb, schema, period, ctx }
+}
+
+describe('gst — buildReturn', () => {
+  it('produces correct MIRA 205 and 206 summaries with manually-computed totals', async () => {
+    const { business, period, ctx } = await seedReturnFixture()
+    const svcMod = await import('../service.js')
+
+    const gstReturn = await svcMod.buildReturn(business.id, period.id, ctx)
+
+    expect(gstReturn.periodId).toBe(period.id)
+
+    const summary = gstReturn.summaryJson as {
+      mira205: {
+        taxableSuppliesStandardRate: string
+        outputTax: string
+        zeroRatedSupplies: string
+        totalOutputTax: string
+        inputTax: string
+        netTaxPayable: string
+      }
+      mira206: {
+        taxableSupplies17: string
+        outputTax17: string
+        totalOutputTax: string
+        netTaxPayable: string
+      }
+      inputTaxRows: Array<{ supplierTin: string; supplierName: string; totalPurchases: string; inputGst: string }>
+    }
+
+    // MIRA 205 (general_8):
+    // Output: inv1 general_8 net=1000.00, gst=80.00
+    // Less CN: net=100.00, gst=8.00  → net=900.00, tax=72.00
+    // Zero-rated: inv1 zero net=200.00 (no CN) → 200.00
+    // Input: bill general_8 gst=40.00
+    // Net payable: 72.00 - 40.00 = 32.00
+    expect(summary.mira205).toBeTruthy()
+    expect(summary.mira205.taxableSuppliesStandardRate).toBe('900.00')
+    expect(summary.mira205.outputTax).toBe('72.00')
+    expect(summary.mira205.zeroRatedSupplies).toBe('200.00')
+    expect(summary.mira205.totalOutputTax).toBe('72.00')
+    expect(summary.mira205.inputTax).toBe('40.00')
+    expect(summary.mira205.netTaxPayable).toBe('32.00')
+
+    // MIRA 206 (tourism_17):
+    // Output: inv2 tourism_17 net=1000.00, gst=170.00 (no CN)
+    // Input: no tourism bills → 0.00
+    // Net payable: 170.00
+    expect(summary.mira206).toBeTruthy()
+    expect(summary.mira206.taxableSupplies17).toBe('1000.00')
+    expect(summary.mira206.outputTax17).toBe('170.00')
+    expect(summary.mira206.totalOutputTax).toBe('170.00')
+    expect(summary.mira206.netTaxPayable).toBe('170.00')
+
+    // Input Tax Statement: one supplier row
+    expect(summary.inputTaxRows).toHaveLength(1)
+    expect(summary.inputTaxRows[0]?.supplierTin).toBe('1234567')
+    expect(summary.inputTaxRows[0]?.supplierName).toBe('ABC Supplies')
+    expect(summary.inputTaxRows[0]?.totalPurchases).toBe('500.00')
+    expect(summary.inputTaxRows[0]?.inputGst).toBe('40.00')
+  })
+
+  it('stores the ITS CSV file reference and marks period as built', async () => {
+    const { business, period, ctx, appDb, schema } = await seedReturnFixture()
+    const svcMod = await import('../service.js')
+    const { eq } = await import('drizzle-orm')
+
+    const gstReturn = await svcMod.buildReturn(business.id, period.id, ctx)
+
+    // Files array has ITS entry
+    const storedFiles = gstReturn.files as Array<{ kind: string; fileId: string }>
+    expect(storedFiles).toHaveLength(1)
+    expect(storedFiles[0]?.kind).toBe('its')
+
+    // Period status updated to 'built'
+    const [updatedPeriod] = await appDb
+      .select()
+      .from(schema.gstPeriods)
+      .where(eq(schema.gstPeriods.id, period.id))
+    expect(updatedPeriod?.status).toBe('built')
+  })
+
+  it('writes audit row for gst.return_built', async () => {
+    const { business, period, ctx, appDb, schema } = await seedReturnFixture()
+    const svcMod = await import('../service.js')
+    const { and, eq } = await import('drizzle-orm')
+
+    await svcMod.buildReturn(business.id, period.id, ctx)
+
+    const logs = await appDb
+      .select()
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.businessId, business.id),
+          eq(schema.auditLogs.action, 'gst.return_built'),
+        ),
+      )
+    expect(logs.length).toBeGreaterThan(0)
+    expect(logs[0]?.entityType).toBe('gst_return')
+  })
+
+  it('getLatestReturn returns the most recently built return', async () => {
+    const { business, period, ctx } = await seedReturnFixture()
+    const svcMod = await import('../service.js')
+
+    const r1 = await svcMod.buildReturn(business.id, period.id, ctx)
+    const r2 = await svcMod.buildReturn(business.id, period.id, ctx)
+
+    const latest = await svcMod.getLatestReturn(business.id, period.id)
+    // r2 is built after r1, so latest should be r2
+    expect(latest?.id).toBe(r2.id)
+    expect(r1.id).not.toBe(r2.id) // two distinct snapshots
+  })
+
+  it('produces mira205=null and mira206=null for a period with no activity', async () => {
+    const { business, user } = await seedBusiness('monthly')
+    const svcMod = await import('../service.js')
+
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    await svcMod.assertPeriodOpen(business.id, '2026-04-01', ctx)
+    const periods = await svcMod.listPeriods(business.id)
+    const period = periods[0]
+    if (!period) throw new Error('no period')
+
+    const gstReturn = await svcMod.buildReturn(business.id, period.id, ctx)
+    const summary = gstReturn.summaryJson as { mira205: null; mira206: null }
+    expect(summary.mira205).toBeNull()
+    expect(summary.mira206).toBeNull()
+  })
+
+  it('GET /gst/periods/:id/return returns built status and ITS file URL', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, period, ctx, token } = await seedReturnFixture()
+    const svcMod = await import('../service.js')
+
+    await svcMod.buildReturn(business.id, period.id, ctx)
+
+    const res = await app.request(`/gst/periods/${period.id}/return`, {
+      headers: authHeaders(token),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      status: string
+      files: Array<{ kind: string; url: string }>
+    }
+    expect(body.status).toBe('built')
+    expect(Array.isArray(body.files)).toBe(true)
+    expect(body.files.some((f) => f.kind === 'its')).toBe(true)
+    expect(body.files[0]?.url).toBeTruthy()
+  })
+})
+
 describe('gst — audit log', () => {
   it('writes audit row when creating a rate', async () => {
     const { app } = await import('../../../server.js')

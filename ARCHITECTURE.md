@@ -86,6 +86,10 @@ Each module is a folder under `api/src/modules/` and `web/src/modules/`. A modul
 - `gst` recomputing tax from raw line items → must read from `invoices.gst_amount` / `bills.input_gst_amount` already persisted.
 - Any module writing to `audit_logs` directly except through `audit.record(...)`.
 
+**MIRAconnect integration note:**
+
+MIRAconnect (MIRA's online filing portal) has no public API. The `gst` module produces export files (MIRA 205 / 206 JSON summaries stored in `gst_returns.summary_json`; Input Tax Statement CSV uploaded to object storage via the `files` module) that the operator downloads and uploads manually to MIRAconnect. The app does **not** submit returns programmatically. Period lock (`POST /gst/periods/:id/lock`) is a manual step that the operator performs after successful MIRAconnect upload, entering the MIRAconnect reference number to record the filing.
+
 ---
 
 ## 4. Core domain invariants

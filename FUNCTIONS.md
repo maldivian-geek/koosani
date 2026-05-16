@@ -198,18 +198,24 @@
 
 ## Module: `gst`
 
-| Kind  | Name                           | Signature                                                         | Purpose                                                        |
-| ----- | ------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------------------- |
-| route | `GET  /gst/periods`            | → `Period[]`                                                      | List with status                                               |
-| route | `POST /gst/periods/:id/build`  | `{}` → `{ jobId }`                                                | Enqueue MIRA 205/206 build                                     |
-| route | `GET  /gst/periods/:id/return` | → `{ status, files: [{ kind, url }] }`                            | Built artefacts                                                |
-| route | `POST /gst/periods/:id/lock`   | `{ miraReturnRef }` → `Period`                                    | Mark filed; locks period                                       |
-| route | `POST /gst/periods/:id/unlock` | `{ reason }` → `Period`                                           | Admin only, fully audited                                      |
-| route | `GET  /gst/rates`              | → `RateRow[]`                                                     | Active and historical                                          |
-| route | `POST /gst/rates`              | `{ category, rate, validFrom }` → `RateRow`                       | Admin only                                                     |
-| svc   | `gst.buildReturn`              | `(periodId) → { mira205?, mira206?, inputTaxStatement, summary }` | Pure aggregation over issued docs in period                    |
-| svc   | `gst.rateAt`                   | `(category, date) → Decimal`                                      | Resolves historical rate (e.g., tourism 16%→17% on 2025-07-01) |
-| svc   | `gst.assertPeriodOpen`         | `(date) → void`                                                   | Used by invoicing and purchases on issue/confirm               |
+| Kind  | Name                           | Signature                                                                                                                     | Purpose                                                                                                  |
+| ----- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| route | `GET  /gst/periods`            | → `Period[]`                                                                                                                  | List with status                                                                                         |
+| route | `POST /gst/periods/:id/build`  | `{}` → `{ jobId }`                                                                                                            | Enqueue MIRA 205/206 build (rate-limited 3/5 min/business — SECURITY.md §13.7)                          |
+| route | `GET  /gst/periods/:id/return` | → `{ status: 'not_built'\|'built', builtAt?, summary?, files: [{ kind, url }] }`                                             | Latest built artefacts; signed URLs for file downloads                                                   |
+| route | `POST /gst/periods/:id/lock`   | `{ miraReturnRef }` → `Period`                                                                                                | Mark period filed with MIRAconnect reference; transitions to `locked`                                    |
+| route | `POST /gst/periods/:id/unlock` | `{ reason }` → `Period`                                                                                                       | Admin only, fully audited                                                                                |
+| route | `GET  /gst/rates`              | → `RateRow[]`                                                                                                                 | Active and historical                                                                                    |
+| route | `POST /gst/rates`              | `{ category, rate, validFrom }` → `RateRow`                                                                                  | Admin only                                                                                               |
+| svc   | `gst.buildReturn`              | `(businessId, periodId, ctx) → GstReturn`                                                                                    | Aggregates issued invoices, credit notes, confirmed bills; produces MIRA 205/206 + ITS CSV; stores snapshot in `gst_returns`; marks period `built` |
+| svc   | `gst.getLatestReturn`          | `(businessId, periodId) → GstReturn \| null`                                                                                 | Most recently built snapshot for a period                                                                |
+| svc   | `gst.rateAt`                   | `(businessId, category, date) → Decimal`                                                                                     | Resolves historical rate (e.g., tourism 16%→17% on 2025-07-01)                                         |
+| svc   | `gst.assertPeriodOpen`         | `(businessId, date, ctx) → void`                                                                                             | Auto-creates period if needed; throws `PeriodLockedError` if locked. Used by invoicing + purchases.     |
+| svc   | `gst.lockPeriod`               | `(businessId, periodId, miraReturnRef, ctx) → Period`                                                                        | Transitions period `open\|built` → `locked`; audited                                                    |
+| svc   | `gst.unlockPeriod`             | `(businessId, periodId, reason, ctx) → Period`                                                                               | Admin only; `locked` → `open`; audited                                                                  |
+| repo  | `gst.getInvoiceLinesForPeriod` | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                                                                     | Aggregates invoice_lines by gst_category; reads persisted amounts only                                  |
+| repo  | `gst.getCreditNoteLinesForPeriod` | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                                                                  | Aggregates credit_note_lines by gst_category                                                            |
+| repo  | `gst.getBillLinesForPeriod`    | `(businessId, periodStart, periodEnd) → BillLineAgg[]`                                                                       | Aggregates bill_lines by supplier + gst_category (with TIN)                                             |
 
 ---
 

@@ -4,8 +4,25 @@ import { z } from 'zod'
 import { GstRateCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { getRealIp } from '../../lib/ip.js'
+import { gstQueue } from '../../lib/queues.js'
 import * as svc from './service.js'
+import * as filesService from '../files/service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-business rate limit: 3 builds per 5 minutes (SECURITY.md §13.7)
+const buildWindows = new Map<string, { count: number; resetAt: number }>()
+
+function checkBuildLimit(businessId: string): boolean {
+  const now = Date.now()
+  const win = buildWindows.get(businessId)
+  if (!win || now > win.resetAt) {
+    buildWindows.set(businessId, { count: 1, resetAt: now + 5 * 60 * 1000 })
+    return true
+  }
+  if (win.count >= 3) return false
+  win.count++
+  return true
+}
 
 const LockBody = z.object({ miraReturnRef: z.string().min(1) })
 const UnlockBody = z.object({ reason: z.string().min(1) })
@@ -78,17 +95,51 @@ gstRoutes.post('/periods/:id/unlock', zValidator('json', UnlockBody), async (c) 
   }
 })
 
-// POST /gst/periods/:id/build — deferred to Phase 7 (return building)
+// POST /gst/periods/:id/build — enqueues GST return build (SECURITY.md §13.7: 3/5 min/business)
 gstRoutes.post('/periods/:id/build', async (c) => {
-  const period = await svc.getPeriodById(c.get('businessId'), c.req.param('id'))
+  const businessId = c.get('businessId')
+  const periodId = c.req.param('id')
+
+  if (!checkBuildLimit(businessId)) {
+    return c.json({ error: 'rate_limited', message: 'Max 3 builds per 5 minutes per business' }, 429)
+  }
+
+  const period = await svc.getPeriodById(businessId, periodId)
   if (!period) return c.json({ error: 'not_found' }, 404)
-  const jobId = `gst-build-${c.req.param('id')}-${Date.now()}`
-  return c.json({ jobId })
+
+  const job = await gstQueue.add('build', {
+    businessId,
+    periodId,
+    userId: c.get('userId'),
+    ip: getRealIp(c),
+  })
+
+  return c.json({ jobId: job.id })
 })
 
-// GET /gst/periods/:id/return — deferred to Phase 7
+// GET /gst/periods/:id/return — returns built artefacts with signed URLs
 gstRoutes.get('/periods/:id/return', async (c) => {
-  const period = await svc.getPeriodById(c.get('businessId'), c.req.param('id'))
+  const businessId = c.get('businessId')
+  const periodId = c.req.param('id')
+
+  const period = await svc.getPeriodById(businessId, periodId)
   if (!period) return c.json({ error: 'not_found' }, 404)
-  return c.json({ status: 'not_built', files: [] })
+
+  const gstReturn = await svc.getLatestReturn(businessId, periodId)
+  if (!gstReturn) return c.json({ status: 'not_built', files: [] })
+
+  const storedFiles = gstReturn.files as Array<{ kind: string; fileId: string }>
+  const files = await Promise.all(
+    storedFiles.map(async (f) => ({
+      kind: f.kind,
+      url: await filesService.getSignedUrl(businessId, f.fileId),
+    })),
+  )
+
+  return c.json({
+    status: 'built',
+    builtAt: gstReturn.builtAt,
+    summary: gstReturn.summaryJson,
+    files,
+  })
 })

@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 10 — GST return building (MIRA 205 / 206 + Input Tax Statement):**
+  - `gst.buildReturn(businessId, periodId, ctx)` — aggregates issued invoices, credit notes, and confirmed bills for a period by GST category; produces MIRA 205 (general sector) and MIRA 206 (tourism sector) JSON summaries + an Input Tax Statement CSV; uploads CSV via the `files` module; stores snapshot in `gst_returns` (append-only per SECURITY.md §13.4); marks period `built` (FUNCTIONS.md §gst).
+  - `gst.getLatestReturn(businessId, periodId)` — retrieves the most recently built return snapshot for a period (FUNCTIONS.md §gst).
+  - Repository additions: `getInvoiceLinesForPeriod`, `getCreditNoteLinesForPeriod`, `getBillLinesForPeriod` — Drizzle aggregation queries that read persisted `gst_amount` / `line_total` columns only; never recompute rates (ARCHITECTURE.md §3). `insertGstReturn`, `getLatestReturnForPeriod`, `markPeriodBuilt`.
+  - `POST /gst/periods/:id/build` wired to enqueue a job on the `gst` BullMQ queue; rate-limited 3 requests per 5 minutes per business (SECURITY.md §13.7).
+  - `GET /gst/periods/:id/return` returns latest build status, MIRA 205/206 summary JSON, and signed download URLs for CSV artefacts.
+  - `api/src/worker/gst.ts` — BullMQ worker handler for the `gst` queue; calls `gst.buildReturn` and logs completion. Registered in `worker/index.ts`.
+  - `gstQueue` added to `lib/queues.ts`.
+  - Tests: totals verified against manually-computed fixture (MIRA 205: taxable supplies 900.00, output tax 72.00, input tax 40.00, net payable 32.00; MIRA 206: taxable supplies 1000.00, output tax 170.00, net payable 170.00); audit row written; period status transitions to `built`; `getLatestReturn` returns most recent snapshot; empty-period build produces null MIRA 205/206; route returns built status with signed ITS file URL.
+  - **ARCHITECTURE.md §3** — added MIRAconnect integration note: the app exports files for manual upload; it does not submit returns programmatically.
+  - **FUNCTIONS.md §gst** — updated with full signatures for `buildReturn`, `getLatestReturn`, and all new repository functions.
+
 - **Phase 9 — Purchase Orders (PO lifecycle, GRN, PO→Bill):**
   - `shared/src/po.ts` — Zod schemas: `PoLineCreate`, `PoDraftCreate`, `PoDraftPatch`, `PoCancelBody`, `GrnLineCreate`, `GrnCreate` — exported from `@koosani/shared` (FUNCTIONS.md §po).
   - `api/src/lib/queues.ts` — added `pdfQueue` (BullMQ, `pdf` queue name; handles invoice, credit note, PO, SOA PDF generation per ARCHITECTURE.md §8).

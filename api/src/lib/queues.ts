@@ -8,3 +8,6 @@ export const soaExtractQueue = new Queue('soa-extract', { connection: redis })
 
 // PDF generation: invoice, credit note, PO, SOA (ARCHITECTURE.md §8)
 export const pdfQueue = new Queue('pdf', { connection: redis })
+
+// GST return building: MIRA 205 / 206 + Input Tax Statement (ARCHITECTURE.md §8)
+export const gstQueue = new Queue('gst', { connection: redis })
