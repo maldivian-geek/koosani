@@ -218,11 +218,35 @@
 
 Detailed Zod schemas live in `/shared/src/*.ts`. Names you'll see in this file:
 
-- `Money` — `z.string().regex(/^-?\d+(\.\d{1,2})?$/)` (stringified decimal)
-- `Qty` — `z.string().regex(/^-?\d+(\.\d{1,4})?$/)`
+- `Money` — `z.string().regex(/^-?\d+(\.\d{1,2})?$/)` (stringified decimal, 2dp)
+- `Qty` — `z.string().regex(/^-?\d+(\.\d{1,4})?$/)` (stringified decimal, 4dp)
 - `IsoDate` — `YYYY-MM-DD`
+- `Email` — `z.string().email().max(254)`
+- `Tin` — `z.string().regex(/^\d{7,10}$/)` (Maldives TIN: 7–10 digit numeric string)
 - `GstCategory` — `'general_8' | 'tourism_16' | 'tourism_17' | 'zero' | 'exempt'` (extend as MIRA evolves)
 - `Permission` — `{ resource: 'customers'|'suppliers'|'items'|'invoices'|'bills'|'po'|'gst'|'reports', action: 'view'|'add'|'edit'|'delete' }`
+- `Role` — `'admin' | 'manager' | 'staff'`
+
+**Utilities (all in `@koosani/shared`):**
+
+| Export                                                                                                           | Purpose                                                               |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `money.{add,sub,mul,round2,negate,gt,gte,lt,lte,eq,isZero,isNegative,sum}`                                       | Money math (2dp, `decimal.js`)                                        |
+| `qty.{add,sub,mul,round4,negate,gt,gte,lt,eq,isZero,isNegative,sum}`                                             | Quantity math (4dp, `decimal.js`)                                     |
+| `gstFor(taxableValue, rate)`                                                                                     | Per-line GST calc → `{ gst, gross }` (ARCHITECTURE.md §4.1)           |
+| `sumGstLines(lines)`                                                                                             | Aggregate per-line results → `{ totalTaxable, totalGst, totalGross }` |
+| `GST_RATES`                                                                                                      | Rate fraction map keyed by `GstCategory`                              |
+| `formatMvDate(date)`, `todayMv()`, `parseMvDate(iso)`, `endOfMvDay(iso)`                                         | Maldives tz date I/O                                                  |
+| `isInMvRange(date, from, to)`, `mvYearMonth(iso)`, `startOfMvMonth(iso)`, `endOfMvMonth(iso)`, `addDays(iso, n)` | Maldives tz date arithmetic                                           |
+| `MV_TZ`                                                                                                          | `'Indian/Maldives'` (UTC+5, no DST)                                   |
+
+**CRUD schemas (Phase 3 — request shapes only):**
+
+| File                      | Exports                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `shared/src/customers.ts` | `CustomerCreate`, `CustomerPatch`, `ContactCreate`         |
+| `shared/src/suppliers.ts` | `SupplierCreate`, `SupplierPatch`, `SupplierContactCreate` |
+| `shared/src/items.ts`     | `ItemCreate`, `ItemPatch`, `ItemCategoryCreate`            |
 
 ---
 

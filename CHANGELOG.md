@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 3 — Shared schemas & money/date utilities (`/shared`):**
+  - `shared/src/primitives.ts` — Zod primitives: `Money` (`/^-?\d+(\.\d{1,2})?$/`), `Qty` (4dp), `IsoDate` (YYYY-MM-DD), `Email`, `Tin` (Maldives TIN: 7–10 digits), `GstCategory` (enum), `Permission`, `Role` (FUNCTIONS.md §Shared types).
+  - `shared/src/money.ts` — `money` and `qty` namespaces: `add`, `sub`, `mul`, `round2`/`round4`, `negate`, `gt`, `gte`, `lt`, `lte`, `eq`, `isZero`, `isNegative`, `sum` — all using `decimal.js`, all operating on stringified decimals, never native `Number`.
+  - `shared/src/gst.ts` — `gstFor(taxableValue, rate)` returning `{ gst, gross }` with **per-line** `ROUND_HALF_UP` to 2dp (ARCHITECTURE.md §4.1); `sumGstLines()` for document totals; `GST_RATES` constant map.
+  - `shared/src/dates.ts` — Maldives tz helpers using native `Intl.DateTimeFormat` (no extra deps): `formatMvDate`, `todayMv`, `parseMvDate`, `endOfMvDay`, `isInMvRange`, `mvYearMonth`, `startOfMvMonth`, `endOfMvMonth`, `addDays`; `MV_TZ = 'Indian/Maldives'`.
+  - `shared/src/customers.ts` — `CustomerCreate`, `CustomerPatch`, `ContactCreate` schemas (FUNCTIONS.md §customers).
+  - `shared/src/suppliers.ts` — `SupplierCreate`, `SupplierPatch`, `SupplierContactCreate` schemas (FUNCTIONS.md §suppliers).
+  - `shared/src/items.ts` — `ItemCreate`, `ItemPatch`, `ItemCategoryCreate` schemas (FUNCTIONS.md §items).
+  - 148 tests across 7 test files; 100% function coverage on all shared modules.
+
 - **Phase 2 — Auth module:**
   - `api/src/lib/config.ts` — boot-time env validation via Zod; exits with FATAL if `JWT_SECRET` is missing or under 32 chars (SECURITY.md §JWT).
   - `api/src/lib/redis.ts` — ioredis singleton with `maxRetriesPerRequest: null` (BullMQ-compatible) and error logging.
