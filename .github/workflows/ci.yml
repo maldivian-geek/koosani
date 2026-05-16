@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: koosani
+          POSTGRES_PASSWORD: koosani
+          POSTGRES_DB: koosani_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Typecheck (shared)
+        run: pnpm --filter @koosani/shared typecheck
+
+      - name: Typecheck (api)
+        run: pnpm --filter @koosani/api typecheck
+
+      - name: Typecheck (web)
+        run: pnpm --filter @koosani/web typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test (shared)
+        run: pnpm --filter @koosani/shared test
+
+      - name: Test (api)
+        run: pnpm --filter @koosani/api test
+        env:
+          DATABASE_URL: postgresql://koosani:koosani@localhost:5432/koosani_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Test (web)
+        run: pnpm --filter @koosani/web test

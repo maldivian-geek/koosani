@@ -1,0 +1,19 @@
+pnpm lint-staged
+
+# Typecheck only the packages that have staged changes
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if echo "$STAGED" | grep -q "^shared/"; then
+  echo "→ typecheck: shared"
+  pnpm --filter @koosani/shared typecheck
+fi
+
+if echo "$STAGED" | grep -q "^api/"; then
+  echo "→ typecheck: api"
+  pnpm --filter @koosani/api typecheck
+fi
+
+if echo "$STAGED" | grep -q "^web/"; then
+  echo "→ typecheck: web"
+  pnpm --filter @koosani/web typecheck
+fi

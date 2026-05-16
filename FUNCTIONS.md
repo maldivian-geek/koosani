@@ -1,0 +1,235 @@
+# Functions
+
+> Public surface of each module — the contract Claude Code reads instead of grepping. Keep signatures, not implementations. When a signature changes, update the matching row here in the same PR.
+>
+> Notation:
+>
+> - `route` = HTTP endpoint (auth required unless marked `public`)
+> - `svc` = service-layer function (callable from other services)
+> - `repo` = repository-layer function (DB only, no business rules)
+>
+> Every authenticated route receives an implicit `ctx` with `{ userId, businessId, role, ip }`. Not shown in signatures.
+
+---
+
+## Module: `auth`
+
+| Kind         | Name                           | Signature                                                | Purpose                                   |
+| ------------ | ------------------------------ | -------------------------------------------------------- | ----------------------------------------- |
+| route public | `POST /auth/login`             | `{ email, password }` → `{ user, permissions }` + cookie | Password login                            |
+| route public | `POST /auth/magic-link`        | `{ email }` → `204`                                      | Request magic link                        |
+| route public | `POST /auth/magic-link/verify` | `{ token }` → `{ user, permissions }` + cookie           | Consume magic link                        |
+| route public | `POST /auth/forgot-password`   | `{ email }` → `204`                                      | Request reset link                        |
+| route public | `POST /auth/reset-password`    | `{ token, password }` → `204`                            | Set new password                          |
+| route public | `POST /auth/accept-invite`     | `{ token, password }` → `{ user, permissions }` + cookie | Activate invited account                  |
+| route        | `POST /auth/logout`            | `{}` → `204`                                             | Logout current session                    |
+| route        | `POST /auth/logout-all`        | `{}` → `204`                                             | Bump token_version, revoke all sessions   |
+| route        | `POST /auth/logout-others`     | `{}` → `204`                                             | Revoke all sessions except current        |
+| route        | `GET  /me`                     | `→ { ...profile, permissions, sessions }`                | Bootstrap on page load                    |
+| svc          | `auth.issueSession`            | `(userId, ip, ua) → { sid, jwt }`                        | Used by login and magic-link              |
+| svc          | `auth.verifyToken`             | `(jwt) → payload \| null`                                | Current secret then `JWT_SECRET_PREVIOUS` |
+| svc          | `auth.recordEvent`             | `(userId, event, ip, ua) → void`                         | Writes `auth_logs`                        |
+
+---
+
+## Module: `users`
+
+| Kind  | Name                   | Signature                                                     | Purpose                           |
+| ----- | ---------------------- | ------------------------------------------------------------- | --------------------------------- |
+| route | `GET  /users`          | `?q&role&page` → `User[]`                                     | Admin only                        |
+| route | `POST /users`          | `{ email, name, role, departmentId?, permissions? }` → `User` | Creates user + sends invite       |
+| route | `PATCH /users/:id`     | `{ name?, role?, permissions? }` → `User`                     | Admin only                        |
+| route | `DELETE /users/:id`    | → `204`                                                       | Soft delete + revoke all sessions |
+| svc   | `users.create`         | `(input, actorId) → User`                                     | Generates invite token            |
+| svc   | `users.setPermissions` | `(userId, perms) → void`                                      | —                                 |
+
+---
+
+## Module: `customers`
+
+| Kind  | Name                             | Signature                                  | Purpose                                                            |
+| ----- | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| route | `GET    /customers`              | `?q&page&active` → `Customer[]`            | List                                                               |
+| route | `GET    /customers/:id`          | → `Customer & { contacts, balance }`       | Detail + outstanding balance                                       |
+| route | `POST   /customers`              | `CustomerCreate` → `Customer`              | —                                                                  |
+| route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`               | —                                                                  |
+| route | `DELETE /customers/:id`          | → `204`                                    | Soft delete (must have zero balance + no draft invoices)           |
+| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF` | Statement of account                                               |
+| route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                      | —                                                                  |
+| svc   | `customers.assertExists`         | `(id) → Customer`                          | Throws if not in `business_id`                                     |
+| svc   | `customers.outstandingBalance`   | `(id) → Decimal`                           | Sum of issued invoices − payments                                  |
+| svc   | `customers.buildSoa`             | `(id, from, to) → Soa`                     | Pure function over `invoices`, `credit_notes`, `payments_received` |
+
+---
+
+## Module: `suppliers`
+
+| Kind  | Name                             | Signature                            | Purpose                                               |
+| ----- | -------------------------------- | ------------------------------------ | ----------------------------------------------------- |
+| route | `GET    /suppliers`              | `?q&page&active` → `Supplier[]`      | —                                                     |
+| route | `GET    /suppliers/:id`          | → `Supplier & { contacts, balance }` | —                                                     |
+| route | `POST   /suppliers`              | `SupplierCreate` → `Supplier`        | —                                                     |
+| route | `PATCH  /suppliers/:id`          | `SupplierPatch` → `Supplier`         | —                                                     |
+| route | `DELETE /suppliers/:id`          | → `204`                              | Soft delete (must have zero balance + no draft bills) |
+| route | `GET    /suppliers/:id/soa`      | `?from&to&format` → `Soa \| PDF`     | —                                                     |
+| route | `POST   /suppliers/:id/contacts` | `Contact` → `Contact`                | —                                                     |
+| svc   | `suppliers.outstandingBalance`   | `(id) → Decimal`                     | Sum of bills − payments made                          |
+| svc   | `suppliers.buildSoa`             | `(id, from, to) → Soa`               | —                                                     |
+
+---
+
+## Module: `items`
+
+| Kind  | Name                      | Signature                                                 | Purpose                                                   |
+| ----- | ------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| route | `GET    /items`           | `?q&categoryId&active` → `Item[]`                         | —                                                         |
+| route | `GET    /items/:id`       | → `Item & { stockOnHand, lastCost }`                      | —                                                         |
+| route | `POST   /items`           | `ItemCreate` → `Item`                                     | SKU unique per business                                   |
+| route | `PATCH  /items/:id`       | `ItemPatch` → `Item`                                      | GST category change requires reason; logged               |
+| route | `DELETE /items/:id`       | → `204`                                                   | Soft delete (must have zero stock + no active references) |
+| route | `GET    /item-categories` | → `Category[]`                                            | —                                                         |
+| route | `POST   /item-categories` | `{ name, parentId? }` → `Category`                        | —                                                         |
+| svc   | `items.priceFor`          | `(itemId, customerId?) → { price, gstRate, gstCategory }` | Resolves customer-specific overrides if any               |
+
+---
+
+## Module: `inventory`
+
+| Kind  | Name                          | Signature                                                  | Purpose                                                                                   |
+| ----- | ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| route | `GET  /inventory/movements`   | `?itemId&from&to&page` → `Movement[]`                      | —                                                                                         |
+| route | `GET  /inventory/on-hand`     | `?categoryId&belowReorder` → `[{ item, qty }]`             | —                                                                                         |
+| route | `POST /inventory/adjustments` | `{ itemId, qty, reason }` → `Movement`                     | Manual adjustment (write-off, recount)                                                    |
+| route | `POST /inventory/stock-count` | `{ counts: [{ itemId, qty }] }` → `{ adjustmentsCreated }` | Bulk recount                                                                              |
+| svc   | `inventory.applyMovement`     | `(itemId, qty, source, sourceId, tx) → void`               | The only function that writes `stock_movements`. Takes a tx; caller controls transaction. |
+| svc   | `inventory.assertAvailable`   | `(itemId, qty, tx) → void`                                 | Throws if would go negative (unless backorder flag)                                       |
+| repo  | `inventory.recomputeOnHand`   | `(itemId, tx) → Decimal`                                   | Used by nightly reconcile                                                                 |
+
+---
+
+## Module: `invoicing`
+
+| Kind  | Name                                 | Signature                                         | Purpose                                        |
+| ----- | ------------------------------------ | ------------------------------------------------- | ---------------------------------------------- |
+| route | `GET    /invoices`                   | `?status&customerId&from&to&q&page` → `Invoice[]` | —                                              |
+| route | `GET    /invoices/:id`               | → `Invoice & { lines, payments, creditNotes }`    | —                                              |
+| route | `POST   /invoices`                   | `InvoiceDraftCreate` → `Invoice`                  | Creates draft, no number, no stock movement    |
+| route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                   | Drafts only                                    |
+| route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                  | Allocates number, commits stock, locks row     |
+| route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                          | Issued only; creates reversing credit note     |
+| route | `GET    /invoices/:id/pdf`           | → `PDF` (signed URL)                              | —                                              |
+| route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`    | —                                              |
+| route | `DELETE /invoices/:id/payments/:pid` | → `204`                                           | Reverses payment                               |
+| route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`            | —                                              |
+| route | `POST   /credit-notes`               | `CreditNoteCreate` → `CreditNote`                 | References an issued invoice                   |
+| route | `POST   /credit-notes/:id/issue`     | `{}` → `CreditNote`                               | Allocates number, reverses stock               |
+| svc   | `invoicing.issue`                    | `(invoiceId, tx) → Invoice`                       | Number, stock, GST snapshot, audit             |
+| svc   | `invoicing.computeTotals`            | `(lines) → Totals`                                | Pure function — see ARCHITECTURE.md §4.1       |
+| svc   | `invoicing.assertNotLocked`          | `(date) → void`                                   | Rejects if `date` falls in a locked GST period |
+
+---
+
+## Module: `purchases`
+
+| Kind  | Name                         | Signature                                      | Purpose                                        |
+| ----- | ---------------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| route | `GET    /bills`              | `?status&supplierId&from&to&page` → `Bill[]`   | —                                              |
+| route | `GET    /bills/:id`          | → `Bill & { lines, payments, po, grn }`        | —                                              |
+| route | `POST   /bills`              | `BillCreate` → `Bill`                          | Draft; can link to PO/GRN                      |
+| route | `PATCH  /bills/:id`          | `BillPatch` → `Bill`                           | Drafts only                                    |
+| route | `POST   /bills/:id/confirm`  | `{}` → `Bill`                                  | Posts to ledger; commits stock if not from GRN |
+| route | `POST   /bills/:id/payments` | `{ amount, method, ref?, paidAt }` → `Payment` | —                                              |
+| route | `POST   /bills/:id/attach`   | `multipart` → `{ fileId }`                     | Upload supplier invoice scan/PDF               |
+| route | `POST   /soa-extract`        | `multipart (PDF\|CSV)` → `{ jobId }`           | Enqueues SOA extraction job                    |
+| route | `GET    /soa-extract/:jobId` | → `{ status, matches?: [{ billId?, line }] }`  | Poll                                           |
+| svc   | `purchases.confirm`          | `(billId, tx) → Bill`                          | Stock + audit + period-lock check              |
+| svc   | `purchases.matchSoaLine`     | `(supplierId, line) → Bill \| null`            | Used by extract worker                         |
+
+---
+
+## Module: `po`
+
+| Kind  | Name                      | Signature                                  | Purpose                               |
+| ----- | ------------------------- | ------------------------------------------ | ------------------------------------- |
+| route | `GET    /pos`             | `?status&supplierId&from&to&page` → `Po[]` | —                                     |
+| route | `GET    /pos/:id`         | → `Po & { lines, grns, billStatus }`       | —                                     |
+| route | `POST   /pos`             | `PoCreate` → `Po`                          | Draft                                 |
+| route | `PATCH  /pos/:id`         | `PoPatch` → `Po`                           | Drafts only                           |
+| route | `POST   /pos/:id/approve` | `{}` → `Po`                                | Allocates number, freezes lines       |
+| route | `POST   /pos/:id/cancel`  | `{ reason }` → `Po`                        | Only if no GRN yet                    |
+| route | `GET    /pos/:id/pdf`     | → `PDF` (signed URL)                       | —                                     |
+| route | `POST   /pos/:id/grns`    | `GrnCreate (qty per line)` → `Grn`         | Receive goods; commits stock          |
+| route | `GET    /grns/:id`        | → `Grn`                                    | —                                     |
+| svc   | `po.canReceive`           | `(poId, line, qty) → bool`                 | Prevents over-receipt unless flag set |
+
+---
+
+## Module: `gst`
+
+| Kind  | Name                           | Signature                                                         | Purpose                                                        |
+| ----- | ------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------------------- |
+| route | `GET  /gst/periods`            | → `Period[]`                                                      | List with status                                               |
+| route | `POST /gst/periods/:id/build`  | `{}` → `{ jobId }`                                                | Enqueue MIRA 205/206 build                                     |
+| route | `GET  /gst/periods/:id/return` | → `{ status, files: [{ kind, url }] }`                            | Built artefacts                                                |
+| route | `POST /gst/periods/:id/lock`   | `{ miraReturnRef }` → `Period`                                    | Mark filed; locks period                                       |
+| route | `POST /gst/periods/:id/unlock` | `{ reason }` → `Period`                                           | Admin only, fully audited                                      |
+| route | `GET  /gst/rates`              | → `RateRow[]`                                                     | Active and historical                                          |
+| route | `POST /gst/rates`              | `{ category, rate, validFrom }` → `RateRow`                       | Admin only                                                     |
+| svc   | `gst.buildReturn`              | `(periodId) → { mira205?, mira206?, inputTaxStatement, summary }` | Pure aggregation over issued docs in period                    |
+| svc   | `gst.rateAt`                   | `(category, date) → Decimal`                                      | Resolves historical rate (e.g., tourism 16%→17% on 2025-07-01) |
+| svc   | `gst.assertPeriodOpen`         | `(date) → void`                                                   | Used by invoicing and purchases on issue/confirm               |
+
+---
+
+## Module: `reports`
+
+| Kind  | Name                            | Signature                                               | Purpose                     |
+| ----- | ------------------------------- | ------------------------------------------------------- | --------------------------- |
+| route | `GET /reports/sales`            | `?from&to&groupBy=customer\|item\|day&format=json\|csv` | Sales register              |
+| route | `GET /reports/purchases`        | `?from&to&groupBy=supplier\|item\|day&format`           | Purchases register          |
+| route | `GET /reports/stock-valuation`  | `?asOf&method=avg\|fifo`                                | Inventory valuation         |
+| route | `GET /reports/aged-receivables` | `?asOf`                                                 | Customer ageing buckets     |
+| route | `GET /reports/aged-payables`    | `?asOf`                                                 | Supplier ageing buckets     |
+| route | `GET /reports/gst-summary`      | `?from&to`                                              | Output vs input tax preview |
+| svc   | `reports.*`                     | Pure read-only aggregation; no writes anywhere          |
+
+---
+
+## Module: `files`
+
+| Kind  | Name                      | Signature                          | Purpose                                                           |
+| ----- | ------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
+| route | `POST /files`             | `multipart` → `{ fileId, sha256 }` | Upload, scan, store                                               |
+| route | `GET  /files/:id/url`     | → `{ url, expiresAt }`             | Signed download URL                                               |
+| svc   | `files.requirePermission` | `(fileId, ctx) → File`             | File belongs to ctx's business AND user has read on linked entity |
+
+---
+
+## Module: `audit`
+
+| Kind  | Name           | Signature                                                       | Purpose                                                                |
+| ----- | -------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| route | `GET /audit`   | `?entityType&entityId&userId&from&to&page` → `AuditRow[]`       | Admin only                                                             |
+| svc   | `audit.record` | `(action, entityType, entityId, before, after, ctx, tx) → void` | The only writer of `audit_logs`. Always called inside the mutating tx. |
+
+---
+
+## Shared types (overview)
+
+Detailed Zod schemas live in `/shared/src/*.ts`. Names you'll see in this file:
+
+- `Money` — `z.string().regex(/^-?\d+(\.\d{1,2})?$/)` (stringified decimal)
+- `Qty` — `z.string().regex(/^-?\d+(\.\d{1,4})?$/)`
+- `IsoDate` — `YYYY-MM-DD`
+- `GstCategory` — `'general_8' | 'tourism_16' | 'tourism_17' | 'zero' | 'exempt'` (extend as MIRA evolves)
+- `Permission` — `{ resource: 'customers'|'suppliers'|'items'|'invoices'|'bills'|'po'|'gst'|'reports', action: 'view'|'add'|'edit'|'delete' }`
+
+---
+
+## Change protocol
+
+When a route or service signature changes:
+
+1. Update its row here.
+2. If the change is breaking for the SPA, note it in `CHANGELOG.md` under "Breaking".
+3. If the function moved between layers (e.g., logic pulled from route into service), update `ARCHITECTURE.md` if a new pattern emerged.
