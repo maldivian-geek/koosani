@@ -154,3 +154,14 @@ If you find yourself reading more than ~5 source files in a task, you are doing 
 - [ ] No new dependency without `STACK.md` update.
 - [ ] No new endpoint without `FUNCTIONS.md` row.
 - [ ] If touching auth/files/audit: re-read SECURITY.md §relevant before submitting.
+- [ ] **Git commit created** — one commit per completed phase (message: `Phase N: <summary>`).
+
+---
+
+## 11. Git commit protocol
+
+- Commit at the end of **every completed phase** (or logical sub-phase if a phase is multi-session).
+- Commit message format: `Phase N: <one-line summary>` — e.g. `Phase 1: Drizzle schema, migration, seed`.
+- Stage all changed and new files relevant to the phase; do not leave phase work uncommitted.
+- Never commit: secrets, `.env` files, generated `dist/` output, or drizzle migration snapshots from a non-local DB run.
+- Push to the remote branch only when the user explicitly asks.

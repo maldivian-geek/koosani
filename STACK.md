@@ -51,15 +51,15 @@
 
 ### Dev / test
 
-| Package                                 | Purpose                                                                      |
-| --------------------------------------- | ---------------------------------------------------------------------------- |
-| `tsx`                                   | Run TS without build in dev                                                  |
-| `typescript`                            | TypeScript compiler — strict mode, frontend uses it too (not just `vue-tsc`) |
-| `vitest`                                | Unit + integration tests                                                     |
-| `supertest` _or_ Hono's `app.request()` | HTTP-level tests                                                             |
-| `@testcontainers/postgresql`            | Real Postgres in tests                                                       |
-| `eslint` + `@typescript-eslint`         | Lint                                                                         |
-| `prettier`                              | Format                                                                       |
+| Package                                 | Purpose                                                                                                                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tsx`                                   | Run TS without build in dev (and production build via esbuild bundling)                                                                                                                  |
+| `typescript`                            | TypeScript compiler — strict mode, frontend uses it too (not just `vue-tsc`). `api` uses `moduleResolution: Bundler` (not NodeNext) so drizzle-kit's esbuild can resolve schema imports. |
+| `vitest`                                | Unit + integration tests                                                                                                                                                                 |
+| `supertest` _or_ Hono's `app.request()` | HTTP-level tests                                                                                                                                                                         |
+| `@testcontainers/postgresql`            | Real Postgres in tests                                                                                                                                                                   |
+| `eslint` + `@typescript-eslint`         | Lint                                                                                                                                                                                     |
+| `prettier`                              | Format                                                                                                                                                                                   |
 
 ---
 

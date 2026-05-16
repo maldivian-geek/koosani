@@ -111,7 +111,7 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
 ### 4.3 Stock movement ledger
 
 - `stock_movements` is append-only. Every change to on-hand stock is a row: `+10` (GRN), `-3` (invoice line), `-1` (adjustment write-off), etc.
-- `items.stock_on_hand` is a _derived_ cache (`SUM(stock_movements.qty)` for that item). Recomputed by trigger on insert into `stock_movements`, or read live via view — pick one and document here. **Decision:** trigger-maintained column for read speed; nightly reconcile job verifies.
+- `items.stock_on_hand` is a _derived_ cache (`SUM(stock_movements.qty)` for that item). **Decision:** trigger-maintained column (`update_stock_on_hand()` AFTER INSERT on `stock_movements`) for read speed; nightly reconcile job verifies.
 - Negative stock is rejected by default (configurable per-business flag for back-orders).
 
 ### 4.4 GST period locking
