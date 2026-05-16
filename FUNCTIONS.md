@@ -47,18 +47,18 @@
 
 ## Module: `customers`
 
-| Kind  | Name                             | Signature                                  | Purpose                                                            |
-| ----- | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
-| route | `GET    /customers`              | `?q&page&active` → `Customer[]`            | List                                                               |
-| route | `GET    /customers/:id`          | → `Customer & { contacts, balance }`       | Detail + outstanding balance                                       |
-| route | `POST   /customers`              | `CustomerCreate` → `Customer`              | —                                                                  |
-| route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`               | —                                                                  |
-| route | `DELETE /customers/:id`          | → `204`                                    | Soft delete (must have zero balance + no draft invoices)           |
-| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF` | Statement of account                                               |
-| route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                      | —                                                                  |
-| svc   | `customers.assertExists`         | `(id) → Customer`                          | Throws if not in `business_id`                                     |
-| svc   | `customers.outstandingBalance`   | `(id) → Decimal`                           | Sum of issued invoices − payments                                  |
-| svc   | `customers.buildSoa`             | `(id, from, to) → Soa`                     | Pure function over `invoices`, `credit_notes`, `payments_received` |
+| Kind  | Name                             | Signature                                                                  | Purpose                                                            |
+| ----- | -------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| route | `GET    /customers`              | `?q&page&pageSize&active` → `{ items: Customer[], total, page, pageSize }` | List with offset pagination (ARCHITECTURE.md §11.5)                |
+| route | `GET    /customers/:id`          | → `Customer & { contacts, balance }`                                       | Detail + outstanding balance                                       |
+| route | `POST   /customers`              | `CustomerCreate` → `Customer`                                              | —                                                                  |
+| route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`                                               | —                                                                  |
+| route | `DELETE /customers/:id`          | → `204`                                                                    | Soft delete (must have zero balance + no draft invoices)           |
+| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF`                                 | Statement of account                                               |
+| route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                                                      | —                                                                  |
+| svc   | `customers.assertExists`         | `(id) → Customer`                                                          | Throws if not in `business_id`                                     |
+| svc   | `customers.outstandingBalance`   | `(id) → Decimal`                                                           | Sum of issued invoices − payments                                  |
+| svc   | `customers.buildSoa`             | `(id, from, to) → Soa`                                                     | Pure function over `invoices`, `credit_notes`, `payments_received` |
 
 ---
 
@@ -80,16 +80,16 @@
 
 ## Module: `items`
 
-| Kind  | Name                      | Signature                                                 | Purpose                                                   |
-| ----- | ------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| route | `GET    /items`           | `?q&categoryId&active` → `Item[]`                         | —                                                         |
-| route | `GET    /items/:id`       | → `Item & { stockOnHand, lastCost }`                      | —                                                         |
-| route | `POST   /items`           | `ItemCreate` → `Item`                                     | SKU unique per business                                   |
-| route | `PATCH  /items/:id`       | `ItemPatch` → `Item`                                      | GST category change requires reason; logged               |
-| route | `DELETE /items/:id`       | → `204`                                                   | Soft delete (must have zero stock + no active references) |
-| route | `GET    /item-categories` | → `Category[]`                                            | —                                                         |
-| route | `POST   /item-categories` | `{ name, parentId? }` → `Category`                        | —                                                         |
-| svc   | `items.priceFor`          | `(itemId, customerId?) → { price, gstRate, gstCategory }` | Resolves customer-specific overrides if any               |
+| Kind  | Name                      | Signature                                                   | Purpose                                                                 |
+| ----- | ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| route | `GET    /items`           | `?q&categoryId&active` → `Item[]`                           | —                                                                       |
+| route | `GET    /items/:id`       | → `Item & { stockOnHand, lastCost }`                        | —                                                                       |
+| route | `POST   /items`           | `ItemCreate` → `Item`                                       | SKU unique per business                                                 |
+| route | `PATCH  /items/:id`       | `ItemPatch & { gstCategoryChangeReason?: string }` → `Item` | GST category change requires `gstCategoryChangeReason`; logged in audit |
+| route | `DELETE /items/:id`       | → `204`                                                     | Soft delete (must have zero stock + no active references)               |
+| route | `GET    /item-categories` | → `Category[]`                                              | —                                                                       |
+| route | `POST   /item-categories` | `{ name, parentId? }` → `Category`                          | —                                                                       |
+| svc   | `items.priceFor`          | `(itemId, customerId?) → { price, gstRate, gstCategory }`   | Resolves customer-specific overrides if any                             |
 
 ---
 
@@ -207,10 +207,12 @@
 
 ## Module: `audit`
 
-| Kind  | Name           | Signature                                                       | Purpose                                                                |
-| ----- | -------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| route | `GET /audit`   | `?entityType&entityId&userId&from&to&page` → `AuditRow[]`       | Admin only                                                             |
-| svc   | `audit.record` | `(action, entityType, entityId, before, after, ctx, tx) → void` | The only writer of `audit_logs`. Always called inside the mutating tx. |
+| Kind  | Name           | Signature                                                                       | Purpose                                                                |
+| ----- | -------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| route | `GET /audit`   | `?entityType&entityId&userId&from&to&page` → `AuditRow[]`                       | Admin only; not yet implemented                                        |
+| svc   | `audit.record` | `(action, entityType, entityId, before, after, ctx: AuditCtx, tx: DbTx) → void` | The only writer of `audit_logs`. Always called inside the mutating tx. |
+
+`AuditCtx = { userId: string; businessId: string; ip: string; ua?: string }`
 
 ---
 

@@ -222,6 +222,18 @@ Jobs are **idempotent**. Each takes a domain ID (e.g., `invoiceId`) and re-reads
 
 ---
 
+## 11.5 Pagination convention
+
+All list endpoints use **offset-based pagination** via `page` (1-indexed) + `pageSize` query params.
+
+- Default `pageSize`: 50
+- Maximum `pageSize`: 200
+- Response shape: `{ items: T[], total: number, page: number, pageSize: number }`
+
+Cursor-based pagination may be introduced for high-volume lists in a later phase.
+
+---
+
 ## 12. What lives where (directory layout)
 
 ```

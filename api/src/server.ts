@@ -7,6 +7,9 @@ import type { Context, Next } from 'hono'
 import { config } from './lib/config.js'
 import { ping } from './db/client.js'
 import { authRoutes } from './modules/auth/routes.js'
+import { customerRoutes } from './modules/customers/routes.js'
+import { supplierRoutes } from './modules/suppliers/routes.js'
+import { itemRoutes, categoryRoutes } from './modules/items/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
@@ -72,6 +75,11 @@ app.route('/auth', authRoutes)
 // /me lives at root, handled inside authRoutes as GET /me
 // Re-route: authRoutes registers GET /me; mount auth at root for /me
 app.route('/', authRoutes)
+
+app.route('/customers', customerRoutes)
+app.route('/suppliers', supplierRoutes)
+app.route('/items', itemRoutes)
+app.route('/item-categories', categoryRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

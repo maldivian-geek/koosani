@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 4 — Master data: customers, suppliers, items:**
+  - `api/src/modules/audit/service.ts` — `audit.record(action, entityType, entityId, before, after, ctx, tx)`: the only writer of `audit_logs`; called inside every mutating transaction (SECURITY.md §13.3, ARCHITECTURE.md §3).
+  - `api/src/modules/customers/` — full CRUD: `GET /customers`, `GET /customers/:id` (with contacts + balance), `POST /customers`, `PATCH /customers/:id`, `DELETE /customers/:id` (soft-delete guard: no draft invoices, zero balance), `POST /customers/:id/contacts`; `GET /customers/:id/soa` stub (Phase 7). (FUNCTIONS.md §customers)
+  - `api/src/modules/suppliers/` — full CRUD: `GET /suppliers`, `GET /suppliers/:id` (with contacts + balance), `POST /suppliers`, `PATCH /suppliers/:id`, `DELETE /suppliers/:id` (soft-delete guard: no draft bills, zero balance), `POST /suppliers/:id/contacts`; `GET /suppliers/:id/soa` stub (Phase 8). (FUNCTIONS.md §suppliers)
+  - `api/src/modules/items/` — full CRUD: `GET /items`, `GET /items/:id`, `POST /items`, `PATCH /items/:id` (GST category change requires `gstCategoryChangeReason`; reason recorded in audit), `DELETE /items/:id` (guard: zero stock + no active draft/PO references), `GET /item-categories`, `POST /item-categories`. (FUNCTIONS.md §items)
+  - All mutations write an audit log row inside the same transaction.
+  - Offset-based pagination (`page` + `pageSize`, default 50, max 200) documented in ARCHITECTURE.md §11.5.
+  - `api/src/db/client.ts` — exports `DbTx` type for typed transaction parameters in repositories and audit service.
+  - Tests for all three modules: CRUD happy path, soft-delete-guard rejection, audit log written (customers, suppliers, items test files).
+
 - **Phase 3 — Shared schemas & money/date utilities (`/shared`):**
   - `shared/src/primitives.ts` — Zod primitives: `Money` (`/^-?\d+(\.\d{1,2})?$/`), `Qty` (4dp), `IsoDate` (YYYY-MM-DD), `Email`, `Tin` (Maldives TIN: 7–10 digits), `GstCategory` (enum), `Permission`, `Role` (FUNCTIONS.md §Shared types).
   - `shared/src/money.ts` — `money` and `qty` namespaces: `add`, `sub`, `mul`, `round2`/`round4`, `negate`, `gt`, `gte`, `lt`, `lte`, `eq`, `isZero`, `isNegative`, `sum` — all using `decimal.js`, all operating on stringified decimals, never native `Number`.
