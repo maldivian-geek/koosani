@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 6 — GST configuration & period locking:**
+  - `shared/src/gst.ts` — `GstRateCreate` Zod schema (`category`, `rate`, `validFrom`) exported from `@koosani/shared` (FUNCTIONS.md §gst).
+  - `api/src/modules/gst/repository.ts` — `getRateAt`, `listRates`, `insertRate`, `getPeriodForDate`, `upsertPeriod` (ON CONFLICT DO NOTHING), `getPeriodById`, `listPeriods`, `lockPeriod`, `unlockPeriod`, `getBusinessPeriodType`.
+  - `api/src/modules/gst/service.ts` — `rateAt(businessId, category, date) → Decimal` (resolves historical rate; throws `NotFoundError` if gap in coverage); `assertPeriodOpen(businessId, date, ctx) → void` (auto-creates period on first use per business `gstPeriodType`, throws `PeriodLockedError` if locked — ARCHITECTURE.md §4.4); `listPeriods`, `listRates`, `createRate`, `lockPeriod`, `unlockPeriod`.
+  - `api/src/modules/gst/routes.ts` — `GET /gst/rates`, `POST /gst/rates` (admin only), `GET /gst/periods`, `POST /gst/periods/:id/lock`, `POST /gst/periods/:id/unlock` (admin only, fully audited), `POST /gst/periods/:id/build` (stub — Phase 7), `GET /gst/periods/:id/return` (stub — Phase 7) (FUNCTIONS.md §gst).
+  - `api/src/db/seed.ts` — seeds MIRA GST rates: `general_8` 8% from 2023-01-01; `tourism_16` 16% from 2023-01-01 to 2025-06-30; `tourism_17` 17% from 2025-07-01; `zero` and `exempt` at 0%.
+  - `api/src/server.ts` — registers `gstRoutes` at `/gst`.
+  - 19 new tests: rate resolution across the 2025-07-01 tourism rate boundary, monthly/quarterly period auto-creation, period-lock rejection, lock/unlock routes, audit log written on rate creation.
+
 - **Phase 5 — Inventory module:**
   - `shared/src/inventory.ts` — `InventoryAdjustmentCreate` (itemId + non-zero Qty + reason) and `StockCountCreate` (array of `{itemId, qty≥0}`) schemas exported from `@koosani/shared`.
   - `api/src/modules/inventory/repository.ts` — `insertMovement`, `listMovements`, `listOnHand`, `getItemOnHand`, `recomputeOnHand`, `getBackorderFlag`.

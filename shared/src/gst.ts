@@ -1,4 +1,15 @@
+import { z } from 'zod'
+import { GstCategory, IsoDate } from './primitives.js'
 import { Decimal } from 'decimal.js'
+
+// Request schema for creating a new GST rate row (FUNCTIONS.md §gst)
+export const GstRateCreate = z.object({
+  category: GstCategory,
+  // Decimal fraction: 0.0800 for 8%, 0.1700 for 17%
+  rate: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Rate must be a decimal fraction (e.g. "0.0800")'),
+  validFrom: IsoDate,
+})
+export type GstRateCreate = z.infer<typeof GstRateCreate>
 
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP })
 

@@ -11,6 +11,7 @@ import { customerRoutes } from './modules/customers/routes.js'
 import { supplierRoutes } from './modules/suppliers/routes.js'
 import { itemRoutes, categoryRoutes } from './modules/items/routes.js'
 import { inventoryRoutes } from './modules/inventory/routes.js'
+import { gstRoutes } from './modules/gst/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ app.route('/suppliers', supplierRoutes)
 app.route('/items', itemRoutes)
 app.route('/item-categories', categoryRoutes)
 app.route('/inventory', inventoryRoutes)
+app.route('/gst', gstRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

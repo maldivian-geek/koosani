@@ -53,6 +53,56 @@ async function seed() {
     .set({ createdBy: user.id, updatedBy: user.id })
     .where(eq(schema.businesses.id, business.id))
 
+  // Seed MIRA GST rates (FUNCTIONS.md §gst, ARCHITECTURE.md §4.4)
+  // tourism_16 was valid 2023-01-01 to 2025-06-30; tourism_17 applies from 2025-07-01.
+  await db.insert(schema.gstRates).values([
+    {
+      businessId: business.id,
+      category: 'general_8',
+      rate: '0.0800',
+      validFrom: '2023-01-01',
+      validTo: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+    {
+      businessId: business.id,
+      category: 'tourism_16',
+      rate: '0.1600',
+      validFrom: '2023-01-01',
+      validTo: '2025-06-30',
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+    {
+      businessId: business.id,
+      category: 'tourism_17',
+      rate: '0.1700',
+      validFrom: '2025-07-01',
+      validTo: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+    {
+      businessId: business.id,
+      category: 'zero',
+      rate: '0.0000',
+      validFrom: '2023-01-01',
+      validTo: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+    {
+      businessId: business.id,
+      category: 'exempt',
+      rate: '0.0000',
+      validFrom: '2023-01-01',
+      validTo: null,
+      createdBy: user.id,
+      updatedBy: user.id,
+    },
+  ])
+
   console.log('Seed complete.')
   console.log(`  Business: ${business.id} — ${business.name}`)
   console.log(`  Admin:    ${user.id} — ${user.email}  (password: Admin1234!)`)
