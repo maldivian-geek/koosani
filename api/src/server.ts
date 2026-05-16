@@ -2,24 +2,16 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { serve } from '@hono/node-server'
-import pino from 'pino'
 import type { Context, Next } from 'hono'
 import { config } from './lib/config.js'
+import { logger } from './lib/logger.js'
 import { ping } from './db/client.js'
 import { authRoutes } from './modules/auth/routes.js'
 import { customerRoutes } from './modules/customers/routes.js'
 import { supplierRoutes } from './modules/suppliers/routes.js'
 import { itemRoutes, categoryRoutes } from './modules/items/routes.js'
+import { inventoryRoutes } from './modules/inventory/routes.js'
 import type { AppEnv } from './types.js'
-
-// ─── Logger ───────────────────────────────────────────────────────────────────
-
-export const logger = pino({
-  level: config.NODE_ENV === 'test' ? 'silent' : 'info',
-  ...(config.NODE_ENV === 'development'
-    ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
-    : {}),
-})
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -80,6 +72,7 @@ app.route('/customers', customerRoutes)
 app.route('/suppliers', supplierRoutes)
 app.route('/items', itemRoutes)
 app.route('/item-categories', categoryRoutes)
+app.route('/inventory', inventoryRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

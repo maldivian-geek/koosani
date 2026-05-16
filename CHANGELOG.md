@@ -10,6 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 5 — Inventory module:**
+  - `shared/src/inventory.ts` — `InventoryAdjustmentCreate` (itemId + non-zero Qty + reason) and `StockCountCreate` (array of `{itemId, qty≥0}`) schemas exported from `@koosani/shared`.
+  - `api/src/modules/inventory/repository.ts` — `insertMovement`, `listMovements`, `listOnHand`, `getItemOnHand`, `recomputeOnHand`, `getBackorderFlag`.
+  - `api/src/modules/inventory/service.ts` — `applyMovement` (sole writer of `stock_movements`; caller owns the transaction), `assertAvailable` (rejects if would go negative, respects `businesses.allow_backorders`), `createAdjustment`, `bulkStockCount`, `listMovements`, `listOnHand`.
+  - `api/src/modules/inventory/routes.ts` — `GET /inventory/movements`, `GET /inventory/on-hand`, `POST /inventory/adjustments`, `POST /inventory/stock-count` (FUNCTIONS.md §inventory).
+  - `api/src/lib/queues.ts` — `reconcileQueue` (BullMQ Queue); scheduling deferred to Phase 11 (ARCHITECTURE.md §8).
+  - `api/src/lib/logger.ts` — extracted from `server.ts` so the worker process can import it without starting the HTTP server.
+  - `api/src/worker/reconcile.ts` — `registerReconcileWorker()`: verifies `items.stock_on_hand` matches `SUM(stock_movements.qty)`, logs discrepancies.
+  - `api/src/worker/index.ts` — `registerWorkers()` entry point; Phase 11 wires scheduling.
+  - 14 new tests covering trigger-maintained cache, negative-stock rejection, backorder flag, recount diffs, audit log, auth guard.
+
 - **Phase 4 — Master data: customers, suppliers, items:**
   - `api/src/modules/audit/service.ts` — `audit.record(action, entityType, entityId, before, after, ctx, tx)`: the only writer of `audit_logs`; called inside every mutating transaction (SECURITY.md §13.3, ARCHITECTURE.md §3).
   - `api/src/modules/customers/` — full CRUD: `GET /customers`, `GET /customers/:id` (with contacts + balance), `POST /customers`, `PATCH /customers/:id`, `DELETE /customers/:id` (soft-delete guard: no draft invoices, zero balance), `POST /customers/:id/contacts`; `GET /customers/:id/soa` stub (Phase 7). (FUNCTIONS.md §customers)
