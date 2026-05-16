@@ -26,9 +26,9 @@
 | route        | `POST /auth/logout-all`        | `{}` → `204`                                             | Bump token_version, revoke all sessions   |
 | route        | `POST /auth/logout-others`     | `{}` → `204`                                             | Revoke all sessions except current        |
 | route        | `GET  /me`                     | `→ { ...profile, permissions, sessions }`                | Bootstrap on page load                    |
-| svc          | `auth.issueSession`            | `(userId, ip, ua) → { sid, jwt }`                        | Used by login and magic-link              |
-| svc          | `auth.verifyToken`             | `(jwt) → payload \| null`                                | Current secret then `JWT_SECRET_PREVIOUS` |
-| svc          | `auth.recordEvent`             | `(userId, event, ip, ua) → void`                         | Writes `auth_logs`                        |
+| svc          | `auth.issueSession`            | `(user, { ip, ua }) → { sid, jwt }`                      | Used by login, magic-link, invite         |
+| svc          | `auth.verifyToken`             | `(jwt) → JwtPayload \| null`                             | Current secret then `JWT_SECRET_PREVIOUS` |
+| svc          | `auth.toProfile`               | `(user) → MeProfile`                                     | Shapes user row for API responses         |
 
 ---
 

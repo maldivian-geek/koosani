@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 2 — Auth module:**
+  - `api/src/lib/config.ts` — boot-time env validation via Zod; exits with FATAL if `JWT_SECRET` is missing or under 32 chars (SECURITY.md §JWT).
+  - `api/src/lib/redis.ts` — ioredis singleton with `maxRetriesPerRequest: null` (BullMQ-compatible) and error logging.
+  - `api/src/lib/ip.ts` — `getRealIp()` per SECURITY.md priority order: X-Real-IP → X-Forwarded-For (first public IP) → raw socket; `isPrivateIp()` helper.
+  - `api/src/lib/geo.ts` — `geoLookup()` supporting `disabled` (default) and `ip-api` providers; private IPs always return null.
+  - `api/src/lib/mailer.ts` — Resend client with dev fallback (log-only when `RESEND_API_KEY` absent); `magicLinkEmail`, `passwordResetEmail`, `inviteEmail` template helpers.
+  - `api/src/modules/auth/schema.ts` — Zod schemas for all auth request bodies (login, magic-link, reset, invite).
+  - `api/src/modules/auth/repository.ts` — all DB queries: user lookup, session CRUD (with 10-session cap + oldest eviction), `touchSession` throttle (60s in-process Map capped at 10 000), login-attempt recording + `countRecentAttempts`, probabilistic `maybePurgeStaleAttempts` (~1%), `createAuthToken` / `consumeAuthToken` (atomic DELETE+RETURNING for single-use), `hasRecentResetToken`, `incrementTokenVersion`, `activateAccount`.
+  - `api/src/modules/auth/service.ts` — Argon2id with OWASP params (`memoryCost: 19456, timeCost: 2, parallelism: 1`); `DUMMY_HASH_PROMISE` pre-computed at module load (never per-request); `dummyVerify` for timing-safe rejection; `signToken` / `verifyToken` (tries `JWT_SECRET` then `JWT_SECRET_PREVIOUS`); full flows: `login` (dual lockout: 5/15 min per-source, 20/1 hr per-email), `logout`, `logoutAll`, `logoutOthers`, `requestMagicLink` (15 min token), `verifyMagicLink`, `forgotPassword` (1 hr token, 10 min cooldown), `resetPassword` (increments token_version + deactivates all sessions), `acceptInvite`, `issueSession`, `toProfile`.
+  - `api/src/middleware/requireAuth.ts` — JWT signature check → 30-second in-process cache keyed `(userId, sid)` → session validity check → `touchSession`; `invalidateSessionCache` exported for logout paths; prevents stolen-JWT+swapped-sid attack.
+  - `api/src/modules/auth/routes.ts` — all auth endpoints with rate limiters (`rate-limiter-flexible` on Redis with `RateLimiterMemory` insurance fallback); fire-and-forget magic-link / forgot-password to prevent email enumeration; generic fixed error strings on all auth failures (SECURITY.md).
+  - `api/src/server.ts` — full Hono server: `secureHeaders`, CORS, request logger (pino), auth routes, `/healthz`, `/readyz`, global error handler; boots via `@hono/node-server`; silent in `NODE_ENV=test`.
+  - Tests (`api/src/modules/auth/__tests__/auth.test.ts`): happy path login, wrong password / unverified account rejection, per-source lockout threshold, timing-safe dummy-verify path, `JWT_SECRET_PREVIOUS` fallback logic, `token_version` bump invalidating existing sessions, `/me` with session list.
+
 - Initial project documentation: `ARCHITECTURE.md`, `STACK.md`, `FUNCTIONS.md`, `CLAUDE.md`, `PROMPTS.md`, `CHANGELOG.md`.
 - `SECURITY.md` carried over from previous app, with a new section _"Domain-specific additions for accounting app"_ covering financial audit log, invoice immutability, file-upload threat surface, PII export controls, PDF rate-limit, and tax-record retention (SECURITY.md §13).
 - **Phase 0 — Repo & tooling scaffolding:**
