@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import { readFile, writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -47,8 +47,7 @@ const LOCAL_ROOT = join(tmpdir(), 'koosani-uploads')
 class LocalStorage implements StorageBackend {
   async put(key: string, data: Buffer): Promise<void> {
     const fullPath = join(LOCAL_ROOT, key)
-    const dir = fullPath.split('/').slice(0, -1).join('/')
-    await mkdir(dir, { recursive: true }).catch(() => {})
+    await mkdir(dirname(fullPath), { recursive: true })
     await writeFile(fullPath, data)
   }
 
