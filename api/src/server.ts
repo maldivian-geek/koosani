@@ -13,6 +13,8 @@ import { itemRoutes, categoryRoutes } from './modules/items/routes.js'
 import { inventoryRoutes } from './modules/inventory/routes.js'
 import { gstRoutes } from './modules/gst/routes.js'
 import { invoiceRoutes, creditNoteRoutes } from './modules/invoicing/routes.js'
+import { billRoutes } from './modules/purchases/routes.js'
+import { fileRoutes } from './modules/files/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -78,6 +80,8 @@ app.route('/inventory', inventoryRoutes)
 app.route('/gst', gstRoutes)
 app.route('/invoices', invoiceRoutes)
 app.route('/credit-notes', creditNoteRoutes)
+app.route('/bills', billRoutes)
+app.route('/files', fileRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

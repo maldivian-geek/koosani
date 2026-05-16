@@ -10,6 +10,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 8 — Purchases (bills), files module, and SOA extraction:**
+  - `shared/src/purchases.ts` — Zod schemas: `BillLineCreate`, `BillDraftCreate`, `BillDraftPatch`, `BillPaymentCreate`, `SoaExtractLine` — all exported from `@koosani/shared` (FUNCTIONS.md §purchases).
+  - `api/src/lib/storage.ts` — dual-backend storage abstraction (`local` for dev/test, `s3` for prod, controlled by `FILES_STORAGE` env var); `sha256Hex` and `isAllowedMime` helpers; MIME allow-list: PDF, PNG, JPEG, WebP, CSV, XLS, XLSX (SECURITY.md §13.5).
+  - `api/src/lib/soa-parser.ts` — `parseCsv(text) → SoaExtractLine[]` (papaparse, case-insensitive column headers), `parsePdf(buffer) → Promise<SoaExtractLine[]>` (pdf-parse + text line extraction), `parseTextLines(text) → SoaExtractLine[]` (date ref [description] amount pattern).
+  - `api/src/lib/queues.ts` — added `soaExtractQueue` (BullMQ, `soa-extract` queue name).
+  - `api/src/modules/files/repository.ts` — `insertFile`, `findById`, `attachToEntity`.
+  - `api/src/modules/files/service.ts` — `uploadFile` (MIME + 25 MB validation, SHA-256 keyed storage path, DB record + audit), `getSignedUrl` (1-hour TTL), `attachToEntity`.
+  - `api/src/modules/files/routes.ts` — `POST /files` (multipart upload), `GET /files/:id/url` (FUNCTIONS.md §files).
+  - `api/src/modules/purchases/repository.ts` — full repository: bill CRUD + lines, advisory-locked bill number allocation (`BILL-NNNNNN`), payment CRUD + reversal, active-payment sum, SOA queries, `findMatchingBill` for SOA line matching.
+  - `api/src/modules/purchases/service.ts` — `createDraft` (preliminary GST rates), `patchDraft` (replaces lines, recomputes totals), `confirmBill` (re-snapshots GST at billDate, commits stock via `inventory.applyMovement` with `grn` source for goods-in, allocates bill number, period-lock checked, audit written), `addPayment` / `reversePayment` (syncs `paid_amount`, derives status), `getBill`, `listBills`, `buildSupplierSoa` (entries + running balance), `matchSoaLine` (±14-day date window, ref + amount match) (FUNCTIONS.md §purchases).
+  - `api/src/modules/purchases/routes.ts` — `GET /bills`, `GET /bills/:id`, `POST /bills`, `PATCH /bills/:id`, `POST /bills/:id/confirm`, `POST /bills/:id/payments`, `DELETE /bills/:id/payments/:paymentId`, `POST /bills/:id/attach` (file upload + entity link), `POST /soa-extract` (multipart upload → BullMQ job), `GET /soa-extract/:jobId` (poll) (FUNCTIONS.md §purchases).
+  - `api/src/worker/soa-extract.ts` — BullMQ worker: retrieves file from storage, parses CSV/PDF, calls `purchases.matchSoaLine` per line, returns `{ matches: [{ line, billId }] }`.
+  - `api/src/modules/suppliers/routes.ts` — implemented `GET /suppliers/:id/soa?from&to` (calls `purchases.buildSupplierSoa`, returns `{ entries, closingBalance }`) (FUNCTIONS.md §suppliers).
+  - `api/src/server.ts` — registers `billRoutes` at `/bills` and `fileRoutes` at `/files`.
+  - 12 new tests: confirm math (GST totals, sequential number allocation), payment paidAmount + status derivation, immutability guard (double-confirm), period-lock rejection, SOA CSV parse (canonical + no-description + reference-alias + invalid-row skip), SOA text line parse, SOA PDF parse.
+
 - **Phase 7 — Invoicing (sales):**
   - `shared/src/invoicing.ts` — Zod schemas: `InvoiceLineCreate`, `InvoiceDraftCreate`, `InvoiceDraftPatch`, `InvoicePaymentCreate`, `InvoiceVoidBody`, `CreditNoteCreate` — all exported from `@koosani/shared` (FUNCTIONS.md §invoicing).
   - `api/src/modules/invoicing/repository.ts` — full repository: invoice CRUD + lines, payment CRUD + sync, credit note CRUD + lines, per-business advisory-locked number sequences (`INV-NNNNNN`, `CN-NNNNNN`).

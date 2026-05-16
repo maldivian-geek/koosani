@@ -5,6 +5,7 @@ import { SupplierCreate, SupplierPatch, SupplierContactCreate } from '@koosani/s
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
+import * as purchases from '../purchases/service.js'
 import type { AppEnv } from '../../types.js'
 
 const ListQuery = z.object({
@@ -91,9 +92,22 @@ supplierRoutes.delete('/:id', async (c) => {
   }
 })
 
-// GET /suppliers/:id/soa — implemented in Phase 8 (purchases)
-supplierRoutes.get('/:id/soa', async (c) => {
-  return c.json({ error: 'not_implemented' }, 501)
+// GET /suppliers/:id/soa
+const SoaQuery = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+})
+
+supplierRoutes.get('/:id/soa', zValidator('query', SoaQuery), async (c) => {
+  const { from, to } = c.req.valid('query')
+  const supplierId = c.req.param('id')
+  try {
+    const soa = await purchases.buildSupplierSoa(c.get('businessId'), supplierId, from, to)
+    return c.json(soa)
+  } catch (err) {
+    if (err instanceof purchases.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
 })
 
 // POST /suppliers/:id/contacts

@@ -64,17 +64,17 @@
 
 ## Module: `suppliers`
 
-| Kind  | Name                             | Signature                            | Purpose                                               |
-| ----- | -------------------------------- | ------------------------------------ | ----------------------------------------------------- |
-| route | `GET    /suppliers`              | `?q&page&active` → `Supplier[]`      | —                                                     |
-| route | `GET    /suppliers/:id`          | → `Supplier & { contacts, balance }` | —                                                     |
-| route | `POST   /suppliers`              | `SupplierCreate` → `Supplier`        | —                                                     |
-| route | `PATCH  /suppliers/:id`          | `SupplierPatch` → `Supplier`         | —                                                     |
-| route | `DELETE /suppliers/:id`          | → `204`                              | Soft delete (must have zero balance + no draft bills) |
-| route | `GET    /suppliers/:id/soa`      | `?from&to&format` → `Soa \| PDF`     | —                                                     |
-| route | `POST   /suppliers/:id/contacts` | `Contact` → `Contact`                | —                                                     |
-| svc   | `suppliers.outstandingBalance`   | `(id) → Decimal`                     | Sum of bills − payments made                          |
-| svc   | `suppliers.buildSoa`             | `(id, from, to) → Soa`               | —                                                     |
+| Kind  | Name                             | Signature                                  | Purpose                                               |
+| ----- | -------------------------------- | ------------------------------------------ | ----------------------------------------------------- |
+| route | `GET    /suppliers`              | `?q&page&active` → `Supplier[]`            | —                                                     |
+| route | `GET    /suppliers/:id`          | → `Supplier & { contacts, balance }`       | —                                                     |
+| route | `POST   /suppliers`              | `SupplierCreate` → `Supplier`              | —                                                     |
+| route | `PATCH  /suppliers/:id`          | `SupplierPatch` → `Supplier`               | —                                                     |
+| route | `DELETE /suppliers/:id`          | → `204`                                    | Soft delete (must have zero balance + no draft bills) |
+| route | `GET    /suppliers/:id/soa`      | `?from&to` → `{ entries, closingBalance }` | Delegates to `purchases.buildSupplierSoa`             |
+| route | `POST   /suppliers/:id/contacts` | `Contact` → `Contact`                      | —                                                     |
+| svc   | `suppliers.outstandingBalance`   | `(id) → Decimal`                           | Sum of bills − payments made                          |
+| svc   | `suppliers.buildSoa`             | `(id, from, to) → Soa`                     | —                                                     |
 
 ---
 
@@ -136,21 +136,39 @@
 
 ---
 
+## Module: `files`
+
+| Kind  | Name                    | Signature                                                     | Purpose                                                     |
+| ----- | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
+| route | `POST   /files`         | `multipart { file }` → `{ id, url }`                          | Upload file; validates MIME + 25 MB cap (SECURITY.md §13.5) |
+| route | `GET    /files/:id/url` | → `{ url }`                                                   | Get 1-hour signed download URL                              |
+| svc   | `files.uploadFile`      | `(businessId, buffer, name, mime, ctx) → File`                | SHA-256 keyed storage + DB record + audit                   |
+| svc   | `files.getSignedUrl`    | `(businessId, fileId) → string`                               | Delegates to storage backend                                |
+| svc   | `files.attachToEntity`  | `(businessId, fileId, entityType, entityId, ctx, tx?) → void` | Links file to any entity; audited                           |
+
+---
+
 ## Module: `purchases`
 
-| Kind  | Name                         | Signature                                      | Purpose                                        |
-| ----- | ---------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| route | `GET    /bills`              | `?status&supplierId&from&to&page` → `Bill[]`   | —                                              |
-| route | `GET    /bills/:id`          | → `Bill & { lines, payments, po, grn }`        | —                                              |
-| route | `POST   /bills`              | `BillCreate` → `Bill`                          | Draft; can link to PO/GRN                      |
-| route | `PATCH  /bills/:id`          | `BillPatch` → `Bill`                           | Drafts only                                    |
-| route | `POST   /bills/:id/confirm`  | `{}` → `Bill`                                  | Posts to ledger; commits stock if not from GRN |
-| route | `POST   /bills/:id/payments` | `{ amount, method, ref?, paidAt }` → `Payment` | —                                              |
-| route | `POST   /bills/:id/attach`   | `multipart` → `{ fileId }`                     | Upload supplier invoice scan/PDF               |
-| route | `POST   /soa-extract`        | `multipart (PDF\|CSV)` → `{ jobId }`           | Enqueues SOA extraction job                    |
-| route | `GET    /soa-extract/:jobId` | → `{ status, matches?: [{ billId?, line }] }`  | Poll                                           |
-| svc   | `purchases.confirm`          | `(billId, tx) → Bill`                          | Stock + audit + period-lock check              |
-| svc   | `purchases.matchSoaLine`     | `(supplierId, line) → Bill \| null`            | Used by extract worker                         |
+| Kind  | Name                              | Signature                                                          | Purpose                                                     |
+| ----- | --------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| route | `GET    /bills`                   | `?status&supplierId&from&to&page` → `Bill[]`                       | —                                                           |
+| route | `GET    /bills/:id`               | → `Bill & { lines, payments }`                                     | —                                                           |
+| route | `POST   /bills`                   | `BillDraftCreate` → `Bill & { lines }`                             | Draft; GST rates preliminary                                |
+| route | `PATCH  /bills/:id`               | `BillDraftPatch` → `Bill & { lines }`                              | Drafts only; replaces lines if provided                     |
+| route | `POST   /bills/:id/confirm`       | `{}` → `Bill`                                                      | Allocates number, re-snapshots GST, commits stock (grn src) |
+| route | `POST   /bills/:id/payments`      | `BillPaymentCreate` → `PaymentMade`                                | Syncs paidAmount, derives status                            |
+| route | `DELETE /bills/:id/payments/:pid` | → `204`                                                            | Marks reversed, re-syncs paidAmount                         |
+| route | `POST   /bills/:id/attach`        | `multipart { file }` → `{ fileId }`                                | Upload + attach supplier invoice scan                       |
+| route | `POST   /soa-extract`             | `multipart { file, supplierId }` → `{ jobId }`                     | Enqueues SOA extraction job                                 |
+| route | `GET    /soa-extract/:jobId`      | → `{ status, matches?: [{ billId?, line }] }`                      | Poll job result                                             |
+| svc   | `purchases.createDraft`           | `(businessId, data, ctx) → Bill & { lines }`                       | Creates draft; preliminary GST rates                        |
+| svc   | `purchases.patchDraft`            | `(businessId, id, data, ctx) → Bill & { lines }`                   | Drafts only; replaces lines if provided                     |
+| svc   | `purchases.confirmBill`           | `(businessId, billId, ctx) → Bill`                                 | Number, stock (grn), GST snapshot, period-lock, audit       |
+| svc   | `purchases.addPayment`            | `(businessId, billId, data, ctx) → PaymentMade`                    | Syncs paidAmount, derives status                            |
+| svc   | `purchases.reversePayment`        | `(businessId, billId, paymentId, ctx) → void`                      | Marks reversed, re-syncs paidAmount                         |
+| svc   | `purchases.buildSupplierSoa`      | `(businessId, supplierId, from, to) → { entries, closingBalance }` | Aggregates confirmed bills + payments; running balance      |
+| svc   | `purchases.matchSoaLine`          | `(businessId, supplierId, line) → Bill \| null`                    | ±14-day date window, ref + amount fuzzy match               |
 
 ---
 
