@@ -198,38 +198,53 @@
 
 ## Module: `gst`
 
-| Kind  | Name                           | Signature                                                                                                                     | Purpose                                                                                                  |
-| ----- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| route | `GET  /gst/periods`            | → `Period[]`                                                                                                                  | List with status                                                                                         |
-| route | `POST /gst/periods/:id/build`  | `{}` → `{ jobId }`                                                                                                            | Enqueue MIRA 205/206 build (rate-limited 3/5 min/business — SECURITY.md §13.7)                          |
-| route | `GET  /gst/periods/:id/return` | → `{ status: 'not_built'\|'built', builtAt?, summary?, files: [{ kind, url }] }`                                             | Latest built artefacts; signed URLs for file downloads                                                   |
-| route | `POST /gst/periods/:id/lock`   | `{ miraReturnRef }` → `Period`                                                                                                | Mark period filed with MIRAconnect reference; transitions to `locked`                                    |
-| route | `POST /gst/periods/:id/unlock` | `{ reason }` → `Period`                                                                                                       | Admin only, fully audited                                                                                |
-| route | `GET  /gst/rates`              | → `RateRow[]`                                                                                                                 | Active and historical                                                                                    |
-| route | `POST /gst/rates`              | `{ category, rate, validFrom }` → `RateRow`                                                                                  | Admin only                                                                                               |
-| svc   | `gst.buildReturn`              | `(businessId, periodId, ctx) → GstReturn`                                                                                    | Aggregates issued invoices, credit notes, confirmed bills; produces MIRA 205/206 + ITS CSV; stores snapshot in `gst_returns`; marks period `built` |
-| svc   | `gst.getLatestReturn`          | `(businessId, periodId) → GstReturn \| null`                                                                                 | Most recently built snapshot for a period                                                                |
-| svc   | `gst.rateAt`                   | `(businessId, category, date) → Decimal`                                                                                     | Resolves historical rate (e.g., tourism 16%→17% on 2025-07-01)                                         |
-| svc   | `gst.assertPeriodOpen`         | `(businessId, date, ctx) → void`                                                                                             | Auto-creates period if needed; throws `PeriodLockedError` if locked. Used by invoicing + purchases.     |
-| svc   | `gst.lockPeriod`               | `(businessId, periodId, miraReturnRef, ctx) → Period`                                                                        | Transitions period `open\|built` → `locked`; audited                                                    |
-| svc   | `gst.unlockPeriod`             | `(businessId, periodId, reason, ctx) → Period`                                                                               | Admin only; `locked` → `open`; audited                                                                  |
-| repo  | `gst.getInvoiceLinesForPeriod` | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                                                                     | Aggregates invoice_lines by gst_category; reads persisted amounts only                                  |
-| repo  | `gst.getCreditNoteLinesForPeriod` | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                                                                  | Aggregates credit_note_lines by gst_category                                                            |
-| repo  | `gst.getBillLinesForPeriod`    | `(businessId, periodStart, periodEnd) → BillLineAgg[]`                                                                       | Aggregates bill_lines by supplier + gst_category (with TIN)                                             |
+| Kind  | Name                              | Signature                                                                        | Purpose                                                                                                                                            |
+| ----- | --------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET  /gst/periods`               | → `Period[]`                                                                     | List with status                                                                                                                                   |
+| route | `POST /gst/periods/:id/build`     | `{}` → `{ jobId }`                                                               | Enqueue MIRA 205/206 build (rate-limited 3/5 min/business — SECURITY.md §13.7)                                                                     |
+| route | `GET  /gst/periods/:id/return`    | → `{ status: 'not_built'\|'built', builtAt?, summary?, files: [{ kind, url }] }` | Latest built artefacts; signed URLs for file downloads                                                                                             |
+| route | `POST /gst/periods/:id/lock`      | `{ miraReturnRef }` → `Period`                                                   | Mark period filed with MIRAconnect reference; transitions to `locked`                                                                              |
+| route | `POST /gst/periods/:id/unlock`    | `{ reason }` → `Period`                                                          | Admin only, fully audited                                                                                                                          |
+| route | `GET  /gst/rates`                 | → `RateRow[]`                                                                    | Active and historical                                                                                                                              |
+| route | `POST /gst/rates`                 | `{ category, rate, validFrom }` → `RateRow`                                      | Admin only                                                                                                                                         |
+| svc   | `gst.buildReturn`                 | `(businessId, periodId, ctx) → GstReturn`                                        | Aggregates issued invoices, credit notes, confirmed bills; produces MIRA 205/206 + ITS CSV; stores snapshot in `gst_returns`; marks period `built` |
+| svc   | `gst.getLatestReturn`             | `(businessId, periodId) → GstReturn \| null`                                     | Most recently built snapshot for a period                                                                                                          |
+| svc   | `gst.rateAt`                      | `(businessId, category, date) → Decimal`                                         | Resolves historical rate (e.g., tourism 16%→17% on 2025-07-01)                                                                                     |
+| svc   | `gst.assertPeriodOpen`            | `(businessId, date, ctx) → void`                                                 | Auto-creates period if needed; throws `PeriodLockedError` if locked. Used by invoicing + purchases.                                                |
+| svc   | `gst.lockPeriod`                  | `(businessId, periodId, miraReturnRef, ctx) → Period`                            | Transitions period `open\|built` → `locked`; audited                                                                                               |
+| svc   | `gst.unlockPeriod`                | `(businessId, periodId, reason, ctx) → Period`                                   | Admin only; `locked` → `open`; audited                                                                                                             |
+| repo  | `gst.getInvoiceLinesForPeriod`    | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                         | Aggregates invoice_lines by gst_category; reads persisted amounts only                                                                             |
+| repo  | `gst.getCreditNoteLinesForPeriod` | `(businessId, periodStart, periodEnd) → PeriodLineAgg[]`                         | Aggregates credit_note_lines by gst_category                                                                                                       |
+| repo  | `gst.getBillLinesForPeriod`       | `(businessId, periodStart, periodEnd) → BillLineAgg[]`                           | Aggregates bill_lines by supplier + gst_category (with TIN)                                                                                        |
 
 ---
 
 ## Module: `reports`
 
-| Kind  | Name                            | Signature                                               | Purpose                     |
-| ----- | ------------------------------- | ------------------------------------------------------- | --------------------------- |
-| route | `GET /reports/sales`            | `?from&to&groupBy=customer\|item\|day&format=json\|csv` | Sales register              |
-| route | `GET /reports/purchases`        | `?from&to&groupBy=supplier\|item\|day&format`           | Purchases register          |
-| route | `GET /reports/stock-valuation`  | `?asOf&method=avg\|fifo`                                | Inventory valuation         |
-| route | `GET /reports/aged-receivables` | `?asOf`                                                 | Customer ageing buckets     |
-| route | `GET /reports/aged-payables`    | `?asOf`                                                 | Supplier ageing buckets     |
-| route | `GET /reports/gst-summary`      | `?from&to`                                              | Output vs input tax preview |
-| svc   | `reports.*`                     | Pure read-only aggregation; no writes anywhere          |
+| Kind  | Name                            | Signature                                                                                                     | Purpose                                                                         |
+| ----- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| route | `GET /reports/sales`            | `?from&to&groupBy=customer\|item\|day&format=json\|csv` → `{ from, to, groupBy, rows: NetGroupRow[] } \| CSV` | Sales register — issued invoices net of credit notes, grouped by entity         |
+| route | `GET /reports/purchases`        | `?from&to&groupBy=supplier\|item\|day&format=json\|csv` → `{ from, to, groupBy, rows: NetGroupRow[] } \| CSV` | Purchases register — confirmed bills grouped by entity                          |
+| route | `GET /reports/stock-valuation`  | `?asOf&method=avg\|fifo&format=json\|csv` → `{ asOf, method, rows: StockValuationRow[] } \| CSV`              | Inventory valuation as of date; avg uses weighted avg cost, fifo uses lot order |
+| route | `GET /reports/aged-receivables` | `?asOf&format=json\|csv` → `{ asOf, rows: AgedEntityRow[] } \| CSV`                                           | Outstanding invoices bucketed into current / 1-30 / 31-60 / 61-90 / 91+ days    |
+| route | `GET /reports/aged-payables`    | `?asOf&format=json\|csv` → `{ asOf, rows: AgedEntityRow[] } \| CSV`                                           | Outstanding bills bucketed into same age bands                                  |
+| route | `GET /reports/gst-summary`      | `?from&to&format=json\|csv` → `GstSummaryResult \| CSV`                                                       | Live preview of output vs input tax for an arbitrary date range; no storage     |
+| svc   | `reports.salesReport`           | `(businessId, from, to, groupBy) → NetGroupRow[]`                                                             | Merges invoice + credit note aggregates; pure read                              |
+| svc   | `reports.purchasesReport`       | `(businessId, from, to, groupBy) → NetGroupRow[]`                                                             | Aggregates confirmed bills; pure read                                           |
+| svc   | `reports.stockValuationReport`  | `(businessId, asOf, method) → StockValuationRow[]`                                                            | avg: weighted avg cost × net qty; fifo: FIFO lot consumption in app layer       |
+| svc   | `reports.agedReceivablesReport` | `(businessId, asOf) → AgedEntityRow[]`                                                                        | Buckets outstanding invoices by (asOf − dueDate) per customer                   |
+| svc   | `reports.agedPayablesReport`    | `(businessId, asOf) → AgedEntityRow[]`                                                                        | Buckets outstanding bills by (asOf − dueDate) per supplier                      |
+| svc   | `reports.gstSummaryReport`      | `(businessId, from, to) → GstSummaryResult`                                                                   | Reads invoice/CN/bill lines for date range; returns output, input, net payable  |
+
+`NetGroupRow = { groupKey, label, docCount, subtotal, gstAmount, total }` (all monetary as stringified 2dp decimals)
+
+`StockValuationRow = { itemId, itemName, sku, qty (4dp), avgCost (2dp), value (2dp) }`
+
+`AgedEntityRow = { entityId, entityName, current, days1_30, days31_60, days61_90, days91Plus, total }` (all 2dp)
+
+`GstSummaryResult = { from, to, outputTaxByCategory, inputTaxByCategory, totalOutputTax, totalInputTax, netPayable }`
+
+All `reports.*` functions are **pure read-only** — no writes, no audit rows, no period locks.
 
 ---
 

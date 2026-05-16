@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 11 — Reports (read-only aggregations + CSV export):**
+  - `api/src/modules/reports/repository.ts` — all DB aggregation queries: sales invoices/credit-notes by customer, item, day; purchases bills by supplier, item, day; `stockMovementsWithCost` (joins `stock_movements` → `grn_lines` for unit cost); `agedReceivablesRaw` / `agedPayablesRaw` (per-invoice/bill outstanding rows); `gstSummaryInvoiceLines`, `gstSummaryCNLines`, `gstSummaryBillLines` for arbitrary date ranges. All functions are pure reads — no writes anywhere (ARCHITECTURE.md §3).
+  - `api/src/modules/reports/service.ts` — `salesReport(businessId, from, to, groupBy)` nets invoice aggregates minus credit notes per group key; `purchasesReport` aggregates confirmed bills; `stockValuationReport` implements weighted-average-cost (default) and FIFO lot-consumption (application layer) with `asOf` date filtering; `agedReceivablesReport` / `agedPayablesReport` bucket outstanding balances into current / 1-30 / 31-60 / 61-90 / 91+ days overdue per entity; `gstSummaryReport` produces live output vs input tax preview for an arbitrary date range without storing anything. CSV helpers for every report type (FUNCTIONS.md §reports).
+  - `api/src/modules/reports/routes.ts` — `GET /reports/sales`, `GET /reports/purchases`, `GET /reports/stock-valuation`, `GET /reports/aged-receivables`, `GET /reports/aged-payables`, `GET /reports/gst-summary`; all require auth; `format=csv` returns `text/csv` with `Content-Disposition: attachment` (FUNCTIONS.md §reports).
+  - `api/src/server.ts` — registers `reportRoutes` at `/reports`.
+  - 16 new tests: sales groupBy=customer netting, groupBy=item, groupBy=day; purchases groupBy=supplier, groupBy=item; stock valuation avg cost math (2-lot weighted avg), FIFO lot consumption, `asOf` date filter excludes future movements; aged receivables 4-bucket assertion with partial payment; aged payables bucket check; GST summary output vs input totals; CSV header assertions for every report type; HTTP auth guard (401 without cookie); HTTP CSV format and JSON format route responses.
+  - **FUNCTIONS.md §reports** — updated from stub to full signatures for all 6 routes and 6 service functions, with result type definitions.
+
 - **Phase 10 — GST return building (MIRA 205 / 206 + Input Tax Statement):**
   - `gst.buildReturn(businessId, periodId, ctx)` — aggregates issued invoices, credit notes, and confirmed bills for a period by GST category; produces MIRA 205 (general sector) and MIRA 206 (tourism sector) JSON summaries + an Input Tax Statement CSV; uploads CSV via the `files` module; stores snapshot in `gst_returns` (append-only per SECURITY.md §13.4); marks period `built` (FUNCTIONS.md §gst).
   - `gst.getLatestReturn(businessId, periodId)` — retrieves the most recently built return snapshot for a period (FUNCTIONS.md §gst).

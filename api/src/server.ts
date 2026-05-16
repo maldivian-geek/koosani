@@ -16,6 +16,7 @@ import { invoiceRoutes, creditNoteRoutes } from './modules/invoicing/routes.js'
 import { billRoutes } from './modules/purchases/routes.js'
 import { fileRoutes } from './modules/files/routes.js'
 import { poRoutes, grnRoutes } from './modules/po/routes.js'
+import { reportRoutes } from './modules/reports/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ app.route('/bills', billRoutes)
 app.route('/files', fileRoutes)
 app.route('/pos', poRoutes)
 app.route('/grns', grnRoutes)
+app.route('/reports', reportRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 
