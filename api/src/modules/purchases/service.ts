@@ -498,6 +498,16 @@ export async function buildSupplierSoa(
   return { entries: result, closingBalance: balance.toFixed(2) }
 }
 
+// ─── linkBillToPo ─────────────────────────────────────────────────────────────
+
+export async function linkBillToPo(
+  businessId: string,
+  billId: string,
+  poId: string,
+): Promise<void> {
+  await repo.updateBill(businessId, billId, { poId }, undefined)
+}
+
 // ─── matchSoaLine ─────────────────────────────────────────────────────────────
 
 export async function matchSoaLine(

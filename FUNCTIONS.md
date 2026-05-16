@@ -174,18 +174,25 @@
 
 ## Module: `po`
 
-| Kind  | Name                      | Signature                                  | Purpose                               |
-| ----- | ------------------------- | ------------------------------------------ | ------------------------------------- |
-| route | `GET    /pos`             | `?status&supplierId&from&to&page` → `Po[]` | —                                     |
-| route | `GET    /pos/:id`         | → `Po & { lines, grns, billStatus }`       | —                                     |
-| route | `POST   /pos`             | `PoCreate` → `Po`                          | Draft                                 |
-| route | `PATCH  /pos/:id`         | `PoPatch` → `Po`                           | Drafts only                           |
-| route | `POST   /pos/:id/approve` | `{}` → `Po`                                | Allocates number, freezes lines       |
-| route | `POST   /pos/:id/cancel`  | `{ reason }` → `Po`                        | Only if no GRN yet                    |
-| route | `GET    /pos/:id/pdf`     | → `PDF` (signed URL)                       | —                                     |
-| route | `POST   /pos/:id/grns`    | `GrnCreate (qty per line)` → `Grn`         | Receive goods; commits stock          |
-| route | `GET    /grns/:id`        | → `Grn`                                    | —                                     |
-| svc   | `po.canReceive`           | `(poId, line, qty) → bool`                 | Prevents over-receipt unless flag set |
+| Kind  | Name                      | Signature                                                                    | Purpose                                                           |
+| ----- | ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| route | `GET    /pos`             | `?status&supplierId&from&to&page` → `{ items: Po[], total, page, pageSize }` | —                                                                 |
+| route | `GET    /pos/:id`         | → `Po & { lines, grns }`                                                     | —                                                                 |
+| route | `POST   /pos`             | `PoDraftCreate` → `Po & { lines }`                                           | Draft                                                             |
+| route | `PATCH  /pos/:id`         | `PoDraftPatch` → `Po & { lines }`                                            | Drafts only; replaces lines if provided                           |
+| route | `POST   /pos/:id/approve` | `{}` → `Po`                                                                  | Allocates number, enqueues PDF job                                |
+| route | `POST   /pos/:id/cancel`  | `{ reason }` → `Po`                                                          | Blocked if any GRN exists                                         |
+| route | `GET    /pos/:id/pdf`     | → `501` (stub — Phase 12)                                                    | —                                                                 |
+| route | `POST   /pos/:id/grns`    | `GrnCreate` → `Grn & { lines }`                                              | Receive goods; commits stock via `inventory.applyMovement`        |
+| route | `POST   /pos/:id/bill`    | `{}` → `Bill & { lines, poId }`                                              | Create draft bill pre-filled from GRN-received quantities         |
+| route | `GET    /grns/:id`        | → `Grn & { lines }`                                                          | —                                                                 |
+| svc   | `po.createDraft`          | `(businessId, data, ctx) → Po & { lines }`                                   | Subtotal = Σ qty×cost (no GST on POs)                             |
+| svc   | `po.patchDraft`           | `(businessId, id, data, ctx) → Po & { lines }`                               | Drafts only; replaces lines if provided                           |
+| svc   | `po.approvePo`            | `(businessId, poId, ctx) → Po`                                               | Advisory-locked number, enqueues `pdf` job                        |
+| svc   | `po.cancelPo`             | `(businessId, poId, reason, ctx) → Po`                                       | Blocked if GRNs exist                                             |
+| svc   | `po.canReceive`           | `(businessId, poLineId, qty, tx?) → bool`                                    | Checks qtyReceived + qty ≤ qtyOrdered, respects `allowBackorders` |
+| svc   | `po.createGrn`            | `(businessId, poId, data, ctx) → Grn & { lines }`                            | Commits stock, increments `po_line.qty_received`, derives status  |
+| svc   | `po.createBillFromPo`     | `(businessId, poId, ctx) → Bill & { poId }`                                  | Aggregates GRN qty per PO line, calls `purchases.createDraft`     |
 
 ---
 

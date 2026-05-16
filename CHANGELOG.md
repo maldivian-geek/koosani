@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 9 — Purchase Orders (PO lifecycle, GRN, PO→Bill):**
+  - `shared/src/po.ts` — Zod schemas: `PoLineCreate`, `PoDraftCreate`, `PoDraftPatch`, `PoCancelBody`, `GrnLineCreate`, `GrnCreate` — exported from `@koosani/shared` (FUNCTIONS.md §po).
+  - `api/src/lib/queues.ts` — added `pdfQueue` (BullMQ, `pdf` queue name; handles invoice, credit note, PO, SOA PDF generation per ARCHITECTURE.md §8).
+  - `api/src/modules/po/repository.ts` — full repository: PO CRUD + lines, per-business advisory-locked number allocation (`PO-NNNNNN`), GRN CRUD + lines, `incrementPoLineReceived` (atomic SQL), `getAggregatedGrnLinesByPo` (joins grn_lines + po_lines + items to aggregate received quantities with GST category).
+  - `api/src/modules/po/service.ts` — `createDraft` (PO + lines, subtotal = Σ qty×cost), `patchDraft` (drafts only; replaces lines), `approvePo` (advisory-locked number allocation, enqueues PDF job), `cancelPo` (blocked if GRNs exist), `canReceive` (qty check against `qtyOrdered`, respects `allowBackorders` flag), `createGrn` (validates all lines then commits stock via `inventory.applyMovement` with `grn` source, increments `po_line.qty_received`, derives PO status: `partially_received` → `received`), `getPo`, `listPos`, `getGrn`, `createBillFromPo` (aggregates GRN quantities per PO line, calls `purchases.createDraft`, links `bill.po_id`) (FUNCTIONS.md §po).
+  - `api/src/modules/po/routes.ts` — `GET /pos`, `GET /pos/:id`, `POST /pos`, `PATCH /pos/:id`, `POST /pos/:id/approve`, `POST /pos/:id/cancel`, `GET /pos/:id/pdf` (501 stub — Phase 12), `POST /pos/:id/grns`, `POST /pos/:id/bill`, `GET /grns/:id` (FUNCTIONS.md §po).
+  - `api/src/server.ts` — registers `poRoutes` at `/pos` and `grnRoutes` at `/grns`.
+  - 10 new tests: GRN stock commitment (partial receive, stock-on-hand verified via DB), full-receive → `received` status, sequential `PO-000001` allocation, over-receipt rejection (`allowBackorders = false`), over-receipt allowed (`allowBackorders = true`), GRN on draft PO rejected, bill prefill (qty = GRN received, GST applied, `poId` linked), bill rejected without GRN lines, bill rejected from draft PO, cancel with/without GRNs.
+
 - **Phase 8 — Purchases (bills), files module, and SOA extraction:**
   - `shared/src/purchases.ts` — Zod schemas: `BillLineCreate`, `BillDraftCreate`, `BillDraftPatch`, `BillPaymentCreate`, `SoaExtractLine` — all exported from `@koosani/shared` (FUNCTIONS.md §purchases).
   - `api/src/lib/storage.ts` — dual-backend storage abstraction (`local` for dev/test, `s3` for prod, controlled by `FILES_STORAGE` env var); `sha256Hex` and `isAllowedMime` helpers; MIME allow-list: PDF, PNG, JPEG, WebP, CSV, XLS, XLSX (SECURITY.md §13.5).
