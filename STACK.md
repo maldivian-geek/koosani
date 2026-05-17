@@ -73,7 +73,8 @@
 | `primevue`                 | UI                                             |                                                                        |
 | `@primeuix/themes`         | Aura preset (noir palette) for PrimeVue 4.5+   | `@primevue/themes` was deprecated; presets moved to `@primeuix/themes` |
 | `primeicons`               | Icon set bundled with PrimeVue                 |
-| `tailwindcss`              | Layout / spacing                               |
+| `tailwindcss` v4           | Layout / spacing                               |
+| `@tailwindcss/vite`        | Tailwind v4 Vite plugin (replaces PostCSS)     |
 | `chart.js` + `vue-chartjs` | Charts                                         |
 | `zod`                      | Shared schemas                                 |
 | `date-fns`                 | —                                              |

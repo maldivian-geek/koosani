@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded Tailwind CSS from v3 to v4: replaced `tailwind.config.js` + `postcss.config.js` with `@tailwindcss/vite` Vite plugin; updated `main.css` to `@import "tailwindcss"` + `@custom-variant dark` for `.app-dark` selector; removed `autoprefixer` and `postcss` dev dependencies (STACK.md §Frontend).
+
 ### Added
 
 - **Phase 12 — Frontend foundation:**
