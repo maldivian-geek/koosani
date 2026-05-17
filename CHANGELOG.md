@@ -14,6 +14,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 13 — Master-data UI (Customers, Suppliers, Items):**
+  - `web/src/shared/ui/EntityList.vue` — generic `DataTable` wrapper; server-side pagination, lazy loading, debounced search input, configurable empty state; accepts column slots; emits `page`, `search`, `create`, `row-click`.
+  - `web/src/modules/customers/views/CustomersView.vue` — paginated customers list (name, TIN, email, phone, terms); server-side `page` / `pageSize` / `q` params; `Customer` interface exported (FUNCTIONS.md §customers).
+  - `web/src/modules/customers/CustomerDrawer.vue` — create / edit / soft-delete drawer; validates with `CustomerCreate` / `CustomerCreate.partial()` from `@koosani/shared`; delete guarded by `useConfirm`; 409 error surfaced as human message.
+  - `web/src/modules/suppliers/views/SuppliersView.vue` — suppliers list (name, TIN, email, phone, terms); `Supplier` interface exported (FUNCTIONS.md §suppliers).
+  - `web/src/modules/suppliers/SupplierDrawer.vue` — create / edit / soft-delete drawer; validates with `SupplierCreate` / `SupplierCreate.partial()`.
+  - `web/src/modules/items/views/ItemsView.vue` — items list (SKU, name, unit, category, GST category, price); loads categories from `GET /item-categories` for name resolution; `Item` and `Category` interfaces exported (FUNCTIONS.md §items).
+  - `web/src/modules/items/ItemDrawer.vue` — create / edit / soft-delete drawer; validates with `ItemCreate` / `ItemPatch`; conditionally renders `gstCategoryChangeReason` field when GST category changes on an existing item (audit-required per FUNCTIONS.md §items).
+  - `web/src/router/index.ts` — added `/customers`, `/suppliers`, `/items` as protected children of `AppLayout`.
+  - `web/src/App.vue` — added `<ConfirmDialog />` for delete confirmations.
+
 - **Phase 12 — Frontend foundation:**
   - `web/index.html` — Vite SPA entry point.
   - `web/tailwind.config.js` — Tailwind v3 config; `darkMode: ['class', '.app-dark']` aligned with PrimeVue dark selector; content scoped to `src/**/*.{vue,ts,tsx}`.
