@@ -38,3 +38,22 @@ export async function apiFetch<T = unknown>(
   const text = await res.text()
   return (text ? JSON.parse(text) : undefined) as T
 }
+
+export async function apiFetchDownload(path: string, filename: string): Promise<void> {
+  const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000'
+  const url = `${base}${path.startsWith('/') ? path : '/' + path}`
+  const res = await fetch(url, { credentials: 'include' })
+  if (res.status === 401) {
+    window.location.replace('/login')
+    throw new ApiError(401, 'Unauthorized')
+  }
+  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  const blob = await res.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(a.href)
+}
