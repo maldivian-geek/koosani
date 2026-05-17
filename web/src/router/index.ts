@@ -86,6 +86,59 @@ export const router = createRouter({
           component: () => import('../modules/invoicing/views/InvoiceEditorView.vue'),
           meta: { requiresAuth: true, title: 'Edit Invoice' },
         },
+        // Bills
+        {
+          path: 'bills',
+          component: () => import('../modules/purchases/views/BillListView.vue'),
+          meta: { requiresAuth: true, title: 'Bills' },
+        },
+        {
+          path: 'bills/soa-extract',
+          component: () => import('../modules/purchases/views/SoaExtractView.vue'),
+          meta: { requiresAuth: true, title: 'SOA Extraction' },
+        },
+        {
+          path: 'bills/new',
+          component: () => import('../modules/purchases/views/BillEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Bill' },
+        },
+        {
+          path: 'bills/:id',
+          component: () => import('../modules/purchases/views/BillDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Bill' },
+        },
+        {
+          path: 'bills/:id/edit',
+          component: () => import('../modules/purchases/views/BillEditorView.vue'),
+          meta: { requiresAuth: true, title: 'Edit Bill' },
+        },
+        // Purchase Orders
+        {
+          path: 'pos',
+          component: () => import('../modules/po/views/PoListView.vue'),
+          meta: { requiresAuth: true, title: 'Purchase Orders' },
+        },
+        {
+          path: 'pos/new',
+          component: () => import('../modules/po/views/PoEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Purchase Order' },
+        },
+        {
+          path: 'pos/:id',
+          component: () => import('../modules/po/views/PoDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Purchase Order' },
+        },
+        {
+          path: 'pos/:id/edit',
+          component: () => import('../modules/po/views/PoEditorView.vue'),
+          meta: { requiresAuth: true, title: 'Edit Purchase Order' },
+        },
+        // Supplier SOA
+        {
+          path: 'suppliers/:id/soa',
+          component: () => import('../modules/suppliers/views/SupplierSoaView.vue'),
+          meta: { requiresAuth: true, title: 'Supplier Statement' },
+        },
       ],
     },
     {
