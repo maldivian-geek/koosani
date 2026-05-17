@@ -10,6 +10,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 12 — Frontend foundation:**
+  - `web/index.html` — Vite SPA entry point.
+  - `web/tailwind.config.js` — Tailwind v3 config; `darkMode: ['class', '.app-dark']` aligned with PrimeVue dark selector; content scoped to `src/**/*.{vue,ts,tsx}`.
+  - `web/postcss.config.js` — PostCSS with Tailwind + Autoprefixer.
+  - `web/vite.config.ts` — proxy `/api/*` → `localhost:3000/*` with path rewrite (strips `/api` prefix); `@` alias → `src/`.
+  - `web/src/assets/main.css` — Tailwind directives (`@tailwind base/components/utilities`).
+  - `web/src/main.ts` — creates Vue app; registers Pinia, Vue Router, PrimeVue (Aura preset with noir palette override, `darkModeSelector: '.app-dark'`), ConfirmationService, ToastService; imports PrimeIcons CSS.
+  - `web/src/App.vue` — root component; renders `<Toast />` + `<RouterView />`.
+  - `web/src/router/index.ts` — history router; public routes (`/login`, `/forgot-password`, `/reset-password`, `/accept-invite`); protected shell route (`/`) with `AppLayout` wrapping `DashboardView`; catch-all 404; `beforeEach` guard calls `authStore.bootstrap()` once then enforces auth/public redirect.
+  - `web/src/stores/auth.ts` — Pinia store; `user`, `bootstrapped`, `isAuthenticated`; `bootstrap()` calls `GET /me` idempotently; `logout()` calls `POST /auth/logout` then redirects to `/login`.
+  - `web/src/stores/ui.ts` — Pinia store; `theme` (`light`/`dark`/`system`), `isDark` computed; `setTheme()` persists to `localStorage` and toggles `.app-dark` on `<html>`; listens to `prefers-color-scheme` change for system mode.
+  - `web/src/lib/apiFetch.ts` — typed fetch wrapper; prepends `/api`; `credentials: 'include'`; 401 → `window.location.replace('/login')`; non-ok throws `ApiError(status, message)`.
+  - `web/src/modules/auth/views/LoginView.vue` — email + password form; Zod-validated via `LoginSchema` from `@koosani/shared`; fixed error string on any failure ("Invalid email or password."); supports `?redirect` query.
+  - `web/src/modules/auth/views/MagicLinkView.vue` — email-only form; always shows "If an account exists…" on submit regardless of API response (no email enumeration).
+  - `web/src/modules/auth/views/ResetPasswordView.vue` — password + confirm form; validates via `ResetPasswordSchema` + local `confirmPassword` refinement; reads `?token` from query.
+  - `web/src/modules/auth/views/AcceptInviteView.vue` — name + password + confirm form; validates via `AcceptInviteSchema`; reads `?token` from query.
+  - `web/src/modules/auth/views/NotFoundView.vue` — 404 view with back link.
+  - `web/src/modules/dashboard/views/DashboardView.vue` — placeholder dashboard.
+  - `web/src/shared/ui/AppLayout.vue` — app shell: fixed sidebar + flex column of topbar / breadcrumbs / `<main>` with `<RouterView />`.
+  - `web/src/shared/ui/SidebarNav.vue` — vertical nav with groups (Dashboard, Customers/Suppliers/Items, Invoices/Credit Notes, Bills/POs, GST, Reports); active-route highlighting via `useRoute`.
+  - `web/src/shared/ui/TopBar.vue` — right-aligned user menu (PrimeVue `Menu` popup); theme picker (light / dark / system); sign-out.
+  - `web/src/shared/ui/BreadcrumbBar.vue` — PrimeVue `Breadcrumb` driven by `route.matched[].meta.title`.
+  - `web/src/shared/ui/StatusTag.vue` — PrimeVue `Tag` wrapper; maps snake_case status strings to severity and human label.
+  - `web/src/shared/ui/DateCell.vue` — formats ISO date string to "DD MMM YYYY" via date-fns; shows "—" for null/undefined.
+  - `web/src/shared/ui/MoneyCell.vue` — right-aligned tabular-numeral money display; locale formatter; shows "—" for null.
+  - `web/src/shared/ui/MoneyInput.vue` — string-valued money input; normalises to 2 d.p. on blur; emits string; never uses `Number`.
+  - `web/src/shared/ui/EmptyState.vue` — three variants: first-time / filtered / restricted; slot for action button.
+  - `shared/src/auth.ts` — `LoginSchema`, `ForgotPasswordSchema`, `ResetPasswordSchema`, `AcceptInviteSchema` Zod schemas shared with the backend (FUNCTIONS.md §auth).
+  - `shared/src/index.ts` — exports `auth.ts`.
+  - New dependency `@primeuix/themes@2.0.3` (Aura preset) added to `@koosani/web` (STACK.md §Frontend).
+
 - **Phase 11 — Reports (read-only aggregations + CSV export):**
   - `api/src/modules/reports/repository.ts` — all DB aggregation queries: sales invoices/credit-notes by customer, item, day; purchases bills by supplier, item, day; `stockMovementsWithCost` (joins `stock_movements` → `grn_lines` for unit cost); `agedReceivablesRaw` / `agedPayablesRaw` (per-invoice/bill outstanding rows); `gstSummaryInvoiceLines`, `gstSummaryCNLines`, `gstSummaryBillLines` for arbitrary date ranges. All functions are pure reads — no writes anywhere (ARCHITECTURE.md §3).
   - `api/src/modules/reports/service.ts` — `salesReport(businessId, from, to, groupBy)` nets invoice aggregates minus credit notes per group key; `purchasesReport` aggregates confirmed bills; `stockValuationReport` implements weighted-average-cost (default) and FIFO lot-consumption (application layer) with `asOf` date filtering; `agedReceivablesReport` / `agedPayablesReport` bucket outstanding balances into current / 1-30 / 31-60 / 61-90 / 91+ days overdue per entity; `gstSummaryReport` produces live output vs input tax preview for an arbitrary date range without storing anything. CSV helpers for every report type (FUNCTIONS.md §reports).

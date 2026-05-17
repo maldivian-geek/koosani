@@ -66,11 +66,12 @@
 ## Frontend (web)
 
 | Package                    | Purpose                                        |
-| -------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| -------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
 | `vue`                      | —                                              |
 | `vue-router`               | —                                              |
 | `pinia`                    | —                                              |
-| `primevue`                 | UI                                             | Themes are now bundled inside `primevue` itself (`@primevue/themes` deprecated) |
+| `primevue`                 | UI                                             |                                                                        |
+| `@primeuix/themes`         | Aura preset (noir palette) for PrimeVue 4.5+   | `@primevue/themes` was deprecated; presets moved to `@primeuix/themes` |
 | `primeicons`               | Icon set bundled with PrimeVue                 |
 | `tailwindcss`              | Layout / spacing                               |
 | `chart.js` + `vue-chartjs` | Charts                                         |

@@ -1,3 +1,4 @@
+export * from './auth.js'
 export * from './primitives.js'
 export * from './money.js'
 export * from './gst.js'
