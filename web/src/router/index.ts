@@ -139,6 +139,53 @@ export const router = createRouter({
           component: () => import('../modules/suppliers/views/SupplierSoaView.vue'),
           meta: { requiresAuth: true, title: 'Supplier Statement' },
         },
+        // GST
+        {
+          path: 'gst',
+          component: () => import('../modules/gst/views/GstView.vue'),
+          meta: { requiresAuth: true, title: 'GST' },
+        },
+        {
+          path: 'gst/periods/:id',
+          component: () => import('../modules/gst/views/GstReturnView.vue'),
+          meta: { requiresAuth: true, title: 'GST Period' },
+        },
+        // Reports
+        {
+          path: 'reports',
+          component: () => import('../modules/reports/views/ReportsHubView.vue'),
+          meta: { requiresAuth: true, title: 'Reports' },
+        },
+        {
+          path: 'reports/sales',
+          component: () => import('../modules/reports/views/SalesReportView.vue'),
+          meta: { requiresAuth: true, title: 'Sales Report' },
+        },
+        {
+          path: 'reports/purchases',
+          component: () => import('../modules/reports/views/PurchasesReportView.vue'),
+          meta: { requiresAuth: true, title: 'Purchases Report' },
+        },
+        {
+          path: 'reports/stock-valuation',
+          component: () => import('../modules/reports/views/StockValuationReportView.vue'),
+          meta: { requiresAuth: true, title: 'Stock Valuation' },
+        },
+        {
+          path: 'reports/aged-receivables',
+          component: () => import('../modules/reports/views/AgedReceivablesView.vue'),
+          meta: { requiresAuth: true, title: 'Aged Receivables' },
+        },
+        {
+          path: 'reports/aged-payables',
+          component: () => import('../modules/reports/views/AgedPayablesView.vue'),
+          meta: { requiresAuth: true, title: 'Aged Payables' },
+        },
+        {
+          path: 'reports/gst-summary',
+          component: () => import('../modules/reports/views/GstSummaryReportView.vue'),
+          meta: { requiresAuth: true, title: 'GST Summary' },
+        },
       ],
     },
     {

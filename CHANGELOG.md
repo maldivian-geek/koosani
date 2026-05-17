@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 17 — Reports & Dashboard:**
+  - `web/src/modules/dashboard/views/DashboardView.vue` — rewritten with real data: this-month sales + purchases KPI cards; daily sales `BarChart` (Chart.js via `vue-chartjs`); top-5 outstanding AR DataTable with link to customer SOA; low-stock items DataTable; GST preview card (output tax, input tax, net payable). All data fetched in parallel via `Promise.allSettled` — partial failures show a warning toast without blocking the page (FUNCTIONS.md §reports, §inventory).
+  - `web/src/modules/reports/views/ReportsHubView.vue` — landing page with card grid linking to each report.
+  - `web/src/modules/reports/views/SalesReportView.vue` — from/to date range + groupBy (customer/item/day) filter bar; `NetGroupRow` DataTable (group, docs, subtotal, GST, total); CSV export via `apiFetchDownload` (FUNCTIONS.md §reports).
+  - `web/src/modules/reports/views/PurchasesReportView.vue` — same pattern as sales; groupBy options are supplier/item/day (FUNCTIONS.md §reports).
+  - `web/src/modules/reports/views/StockValuationReportView.vue` — asOf date + valuation method (avg/fifo) filter; `StockValuationRow` DataTable (item, SKU, qty, avg cost, value); total value footer row; CSV export (FUNCTIONS.md §reports).
+  - `web/src/modules/reports/views/AgedReceivablesView.vue` — asOf date filter; `AgedEntityRow` DataTable with current / 1–30 / 31–60 / 61–90 / 91+ age buckets; 91+ days highlighted red; ExternalLink to customer SOA; CSV export (FUNCTIONS.md §reports).
+  - `web/src/modules/reports/views/AgedPayablesView.vue` — same structure as receivables; ExternalLink navigates to supplier SOA (FUNCTIONS.md §reports).
+  - `web/src/modules/reports/views/GstSummaryReportView.vue` — from/to date range; summary cards (output tax, input tax, net payable); output tax by category DataTable; input tax by category DataTable; CSV export. Live preview — no period lock required (FUNCTIONS.md §reports).
+  - `web/src/router/index.ts` — added protected routes: `/reports`, `/reports/sales`, `/reports/purchases`, `/reports/stock-valuation`, `/reports/aged-receivables`, `/reports/aged-payables`, `/reports/gst-summary`.
+
+- **Phase 16 — GST UI:**
+  - `web/src/modules/gst/views/GstView.vue` — two-tab layout (PrimeVue Tabs): **Periods** tab shows all GST periods sorted newest-first with StatusTag, period date range, MIRAconnect ref, and View button navigating to the period detail; **Rates** tab shows historical rates DataTable (category label, percentage, valid from/to) and an "Add Rate Override" form (category Select, decimal fraction InputText, validFrom DatePicker) calling `POST /gst/rates` — 403 handled with a specific message (FUNCTIONS.md §gst, DESIGN.md §5).
+  - `web/src/modules/gst/views/GstReturnView.vue` — period detail page; loads period from list then return data; **Build Return** button calls `POST /gst/periods/:id/build` then polls `GET /gst/periods/:id/return` every 3 s until `status === 'built'` or error; 429 rate-limit surfaced as `warn` toast; MIRA 205 summary card (taxable supplies, output tax, input tax, net payable); MIRA 206 summary card (taxable supplies, output tax, net payable); file download buttons open signed URLs in new tab (no auth needed); **Lock Period** button (built status) opens Dialog asking for MIRAconnect reference → `POST /gst/periods/:id/lock`; **Unlock** button (locked status, admin only) opens Dialog asking for reason → `POST /gst/periods/:id/unlock`; poll timer cleared `onBeforeUnmount` (FUNCTIONS.md §gst).
+  - `web/src/shared/ui/BarChart.vue` — Chart.js bar chart wrapper via `vue-chartjs`; accepts `labels`, `datasets`, `height` (default 220), `showLegend` (default false); MVR formatter on y-axis ticks and tooltip; uses `CHART_COLORS_MUTED` palette (DESIGN.md §9).
+  - `web/src/shared/ui/chartColors.ts` — fixed palette: 5 solid colours (`CHART_COLORS`) and 5 muted rgba variants (`CHART_COLORS_MUTED`) per DESIGN.md §9.
+  - `web/src/lib/apiFetch.ts` — added `apiFetchDownload(path, filename)`: authenticated blob fetch (includes session cookie), creates an `<a>` element with an object URL, triggers download, cleans up.
+  - `web/src/router/index.ts` — added protected routes: `/gst`, `/gst/periods/:id`.
+
 - **Phase 15 — Purchases & PO UI:**
   - `web/src/modules/purchases/views/BillListView.vue` — paginated bill list; status filter (draft/confirmed/partially_paid/paid) and search; row click navigates to detail; "New Bill" navigates to editor (FUNCTIONS.md §purchases).
   - `web/src/modules/purchases/views/BillEditorView.vue` — full-page draft bill create/edit; supplier AutoComplete; supplier ref, bill date, due date, notes; line editor identical in shape to invoice editor but uses `unitCost`; live GST totals via `gstFor` + `sumGstLines` from `@koosani/shared`; file-attach via `POST /bills/:id/attach` (FUNCTIONS.md §purchases, DESIGN.md §6).
