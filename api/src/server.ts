@@ -23,8 +23,30 @@ import type { AppEnv } from './types.js'
 
 const app = new Hono<AppEnv>()
 
-// Security headers (per SECURITY.md §13.8 CSP pinned in Phase 18 hardening)
-app.use('*', secureHeaders())
+// Explicit CSP per SECURITY.md §13.8 — no unsafe-inline on scripts, no unsafe-eval.
+// style-src keeps 'unsafe-inline' because PrimeVue injects inline styles for theming.
+// STORAGE_HOSTNAME is the object-storage CDN host for signed download URLs.
+const storageHosts = config.STORAGE_HOSTNAME ? [config.STORAGE_HOSTNAME] : []
+
+app.use(
+  '*',
+  secureHeaders({
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', ...storageHosts],
+      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", ...storageHosts],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+    xFrameOptions: 'DENY',
+  }),
+)
 
 // CORS — credentials required for httpOnly cookie transport
 app.use(

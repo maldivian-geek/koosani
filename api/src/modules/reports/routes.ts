@@ -3,8 +3,12 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { IsoDate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { createRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-user: 20 CSV exports per minute (SECURITY.md §13.7)
+const csvLimiter = createRateLimiter(60_000, 20)
 
 const DateRange = z.object({
   from: IsoDate,
@@ -42,6 +46,7 @@ reportRoutes.get(
     const businessId = c.get('businessId')
     const rows = await svc.salesReport(businessId, from, to, groupBy)
     if (format === 'csv') {
+      if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
       return csvResponse(svc.salesReportCsv(rows, groupBy), `sales-${from}-${to}.csv`)
     }
     return c.json({ from, to, groupBy, rows })
@@ -60,6 +65,7 @@ reportRoutes.get(
     const businessId = c.get('businessId')
     const rows = await svc.purchasesReport(businessId, from, to, groupBy)
     if (format === 'csv') {
+      if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
       return csvResponse(svc.purchasesReportCsv(rows, groupBy), `purchases-${from}-${to}.csv`)
     }
     return c.json({ from, to, groupBy, rows })
@@ -82,6 +88,7 @@ reportRoutes.get(
     const businessId = c.get('businessId')
     const rows = await svc.stockValuationReport(businessId, asOf, method)
     if (format === 'csv') {
+      if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
       return csvResponse(svc.stockValuationCsv(rows, method), `stock-valuation-${asOf}.csv`)
     }
     return c.json({ asOf, method, rows })
@@ -94,6 +101,7 @@ reportRoutes.get('/aged-receivables', zValidator('query', AsOfQuery), async (c) 
   const businessId = c.get('businessId')
   const rows = await svc.agedReceivablesReport(businessId, asOf)
   if (format === 'csv') {
+    if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
     return csvResponse(svc.agedCsv(rows, 'Customer'), `aged-receivables-${asOf}.csv`)
   }
   return c.json({ asOf, rows })
@@ -105,6 +113,7 @@ reportRoutes.get('/aged-payables', zValidator('query', AsOfQuery), async (c) => 
   const businessId = c.get('businessId')
   const rows = await svc.agedPayablesReport(businessId, asOf)
   if (format === 'csv') {
+    if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
     return csvResponse(svc.agedCsv(rows, 'Supplier'), `aged-payables-${asOf}.csv`)
   }
   return c.json({ asOf, rows })
@@ -122,6 +131,7 @@ reportRoutes.get(
     const businessId = c.get('businessId')
     const result = await svc.gstSummaryReport(businessId, from, to)
     if (format === 'csv') {
+      if (!csvLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
       return csvResponse(svc.gstSummaryCsv(result), `gst-summary-${from}-${to}.csv`)
     }
     return c.json(result)

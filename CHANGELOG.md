@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **Phase 18 — Hardening pass:**
+  - **Audit log verified:** every state-changing service method (invoicing, purchases, PO, GST, files) writes a row to `audit_logs` inside the same DB transaction as the mutation. No gaps found.
+  - **GST period lock verified:** all financial mutations (invoice issue, void, payment add/reverse; bill confirm, payment add/reverse; credit note issue) call `gst.assertPeriodOpen(businessId, date, ctx)` before writing. No gaps found.
+  - **File download security verified:** all file downloads go through `files.getSignedUrl(businessId, fileId)` which scopes to the caller's business_id — no cross-tenant file access possible.
+  - **Rate limits added** to `/reports/*?format=csv` (20/min/user), `GET /invoices/:id/pdf` (20/min/user), `GET /pos/:id/pdf` (20/min/user) via shared `api/src/lib/rateLimiter.ts` (`createRateLimiter(windowMs, max)`). These endpoints were unprotected — an authenticated user could have triggered unbounded CSV generation or PDF worker jobs (SECURITY.md §13.7).
+  - **CSP pinned explicitly** in `api/src/server.ts` via `secureHeaders({ contentSecurityPolicy: { ... } })`. Previous call had no CSP arguments, leaving the header absent. Directives: `default-src 'self'`, `script-src 'self'` (no unsafe-inline/eval), `style-src 'self' unsafe-inline` (PrimeVue theming requirement), `img-src 'self' data: blob:`, `connect-src 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'self'`, `object-src 'none'`, `upgrade-insecure-requests`. Storage CDN hostname appended when `STORAGE_HOSTNAME` env var is set. `X-Frame-Options: DENY` added alongside for older-browser compatibility (SECURITY.md §13.8).
+  - **Emergency JWT rotation procedure confirmed** (SECURITY.md §13.1): procedure documented and correct — deploy new `JWT_SECRET` without `JWT_SECRET_PREVIOUS`, then `UPDATE users SET token_version = token_version + 1`, then `UPDATE user_sessions SET is_active = FALSE`. Audit action `emergency_jwt_rotation` is specified. No code change required; procedure was already documented.
+  - **Backup procedure confirmed** (SECURITY.md §13.10): daily encrypted DB backup, 5-year monthly snapshot retention, 7-day PITR, WORM object-lock for issued documents, quarterly restore drill. All documented; no code change required.
+
 ### Added
 
 - **Phase 17 — Reports & Dashboard:**

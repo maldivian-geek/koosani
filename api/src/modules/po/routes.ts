@@ -4,8 +4,12 @@ import { z } from 'zod'
 import { PoDraftCreate, PoDraftPatch, PoCancelBody, GrnCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { getRealIp } from '../../lib/ip.js'
+import { createRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-user: 20 PDF requests per minute (SECURITY.md §13.7)
+const pdfLimiter = createRateLimiter(60_000, 20)
 
 const ListPosQuery = z.object({
   status: z.string().optional(),
@@ -122,6 +126,7 @@ poRoutes.post('/:id/cancel', zValidator('json', PoCancelBody), async (c) => {
 
 // GET /pos/:id/pdf — PDF enqueued on approve; return job status
 poRoutes.get('/:id/pdf', async (c) => {
+  if (!pdfLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
   try {
     await svc.getPo(c.get('businessId'), c.req.param('id'))
     // PDF generation handled by the worker; return 501 until Phase 12 renders PDFs

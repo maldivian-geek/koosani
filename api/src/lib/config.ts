@@ -12,6 +12,8 @@ const configSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().default('noreply@example.com'),
   GEO_PROVIDER: z.enum(['disabled', 'ip-api', 'maxmind']).default('disabled'),
+  // Object-storage CDN hostname for CSP img-src / connect-src (SECURITY.md §13.8)
+  STORAGE_HOSTNAME: z.string().default(''),
 })
 
 const result = configSchema.safeParse(process.env)

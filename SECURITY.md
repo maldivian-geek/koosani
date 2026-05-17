@@ -382,27 +382,29 @@ Bulk exports (full customer list CSV, GST return ZIPs, GL exports) carry concent
 
 PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. Without limits a logged-in user can drive the box to 100% CPU.
 
-Add to the rate-limit table:
+| Endpoint                            | Limiter      | Window | Max | Status      |
+| ----------------------------------- | ------------ | ------ | --- | ----------- |
+| `GET /invoices/:id/pdf`             | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /pos/:id/pdf`                  | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | pending     |
+| `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | pending     |
+| `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   | ✅ Phase 16 |
+| `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  | ✅ Phase 18 |
 
-| Endpoint                            | Limiter      | Window | Max |
-| ----------------------------------- | ------------ | ------ | --- |
-| `GET /invoices/:id/pdf`             | per-user     | 1 min  | 20  |
-| `GET /pos/:id/pdf`                  | per-user     | 1 min  | 20  |
-| `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  |
-| `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  |
-| `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   |
-| `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  |
+**Implementation:** `api/src/lib/rateLimiter.ts` provides `createRateLimiter(windowMs, max)` — an in-process sliding-window counter keyed by user or business ID. Each module instantiates its own limiter at module load time.
 
 PDF jobs go through the BullMQ `pdf` queue with concurrency limited at the worker level, so even if rate limits are bypassed (internal call) the queue absorbs the spike.
 
+**Pending:** SOA PDF endpoints (`/customers/:id/soa?format=pdf`, `/suppliers/:id/soa?format=pdf`) will gain rate limiting when the PDF worker renders them.
+
 ### 13.8 CSP — explicit directives
 
-Helmet defaults are too permissive for a SPA holding tax data. Pin these:
+Helmet defaults are too permissive for a SPA holding tax data. Pinned in Phase 18 via Hono `secureHeaders({ contentSecurityPolicy: { ... } })` in `api/src/server.ts`:
 
 ```
 default-src 'self'
 script-src 'self'                                    # no unsafe-inline, no unsafe-eval
-style-src  'self' 'unsafe-inline'                    # PrimeVue needs inline styles for theming; revisit if reduceable
+style-src  'self' 'unsafe-inline'                    # PrimeVue injects inline styles for theming
 img-src    'self' data: blob: <STORAGE_HOSTNAME>
 font-src   'self' data:
 connect-src 'self' <STORAGE_HOSTNAME>
@@ -413,7 +415,9 @@ object-src 'none'
 upgrade-insecure-requests
 ```
 
-`<STORAGE_HOSTNAME>` is the object-storage CDN host used for signed download URLs. No wildcards.
+`<STORAGE_HOSTNAME>` is set via the `STORAGE_HOSTNAME` environment variable (see `api/src/lib/config.ts`). If not set, omitted from the CSP (acceptable in development; required in production). No wildcards.
+
+`X-Frame-Options: DENY` is also set (via `xFrameOptions: 'DENY'` in secureHeaders) for compatibility with older browsers that do not honour `frame-ancestors`.
 
 ### 13.9 Email normalisation
 

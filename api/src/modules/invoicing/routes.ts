@@ -10,8 +10,12 @@ import {
 } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { getRealIp } from '../../lib/ip.js'
+import { createRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-user: 20 PDF requests per minute (SECURITY.md §13.7)
+const pdfLimiter = createRateLimiter(60_000, 20)
 
 const ListInvoicesQuery = z.object({
   status: z.string().optional(),
@@ -137,6 +141,7 @@ invoiceRoutes.post('/:id/void', zValidator('json', InvoiceVoidBody), async (c) =
 
 // GET /invoices/:id/pdf — stub (PDF worker is a later phase)
 invoiceRoutes.get('/:id/pdf', async (c) => {
+  if (!pdfLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
   try {
     await svc.getInvoice(c.get('businessId'), c.req.param('id'))
   } catch (err) {
