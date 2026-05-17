@@ -61,6 +61,31 @@ export const router = createRouter({
           component: () => import('../modules/items/views/ItemsView.vue'),
           meta: { requiresAuth: true, title: 'Items' },
         },
+        {
+          path: 'customers/:id/soa',
+          component: () => import('../modules/customers/views/CustomerSoaView.vue'),
+          meta: { requiresAuth: true, title: 'Statement of Account' },
+        },
+        {
+          path: 'invoices',
+          component: () => import('../modules/invoicing/views/InvoiceListView.vue'),
+          meta: { requiresAuth: true, title: 'Invoices' },
+        },
+        {
+          path: 'invoices/new',
+          component: () => import('../modules/invoicing/views/InvoiceEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Invoice' },
+        },
+        {
+          path: 'invoices/:id',
+          component: () => import('../modules/invoicing/views/InvoiceDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Invoice' },
+        },
+        {
+          path: 'invoices/:id/edit',
+          component: () => import('../modules/invoicing/views/InvoiceEditorView.vue'),
+          meta: { requiresAuth: true, title: 'Edit Invoice' },
+        },
       ],
     },
     {
