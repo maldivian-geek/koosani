@@ -86,8 +86,13 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <div>
-    <h1 class="text-2xl font-semibold mb-6">Suppliers</h1>
+  <div class="space-y-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-semibold text-surface-900">Suppliers</h2>
+        <p class="text-surface-500 mt-0.5">Manage your suppliers and vendors.</p>
+      </div>
+    </div>
 
     <EntityList
       :rows="rows"

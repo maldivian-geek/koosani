@@ -21,7 +21,7 @@ const items = computed<MenuItem[]>(() =>
 <template>
   <div
     v-if="items.length > 0"
-    class="px-6 py-2 border-b border-surface-100 dark:border-surface-800"
+    class="px-6 py-2 bg-surface-0 dark:bg-surface-900 border-b border-surface-100 dark:border-surface-800"
   >
     <Breadcrumb :home="home" :model="items">
       <template #item="{ item }">

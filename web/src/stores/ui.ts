@@ -20,7 +20,7 @@ export const useUiStore = defineStore('ui', () => {
   })
 
   function apply() {
-    document.documentElement.classList.toggle('app-dark', isDark.value)
+    document.documentElement.classList.toggle('dark', isDark.value)
   }
 
   function setTheme(t: ThemeChoice) {

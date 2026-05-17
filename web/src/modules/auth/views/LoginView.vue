@@ -36,11 +36,14 @@ async function onSubmit() {
 
   loading.value = true
   try {
-    await apiFetch('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(result.data),
-    })
-    await authStore.bootstrap()
+    const res = await apiFetch<{ user: import('../../../stores/auth.js').AuthUser }>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify(result.data),
+      },
+    )
+    authStore.setUser(res.user)
     const redirect = route.query['redirect'] as string | undefined
     await router.push(redirect && redirect.startsWith('/') ? redirect : '/dashboard')
   } catch (err) {

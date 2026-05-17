@@ -10,11 +10,12 @@
 - **Spacing scale:** Tailwind defaults (`gap-2 / gap-4 / gap-6` etc.). No custom magic numbers.
 - **Type scale:** PrimeVue defaults; no global font overrides unless documented here.
 - **Theme:** PrimeVue **Aura** preset, **noir** color (`@primevue/themes/aura` with the noir/neutral primary). This is the only theme; no per-component color overrides outside the theme config.
-- **Dark mode:** required. A theme selector (light / dark / system) lives in the topbar user menu. Implementation:
-  - PrimeVue dark mode via the `.app-dark` class selector (`darkModeSelector: '.app-dark'` in the theme options), toggled on `<html>`.
-  - Tailwind `darkMode: 'selector'` using the same `.app-dark` class so layout utilities stay in sync.
-  - Choice persisted in the Pinia `ui` store and synced to `prefers-color-scheme` when set to "system". **Not** `localStorage` directly — the `ui` store owns it (auth state rule from SECURITY.md doesn't apply here, but keep persistence in the store layer for consistency; the store may use `localStorage` for _non-auth_ UI prefs only).
-  - Default on first visit: system.
+- **Dark mode:** required. A single toggle button (sun/moon icon) in the top bar cycles between light and dark. Implementation:
+  - PrimeVue dark mode via the `.dark` class selector (`darkModeSelector: '.dark'` in the theme options), toggled on `<html>` by `document.documentElement.classList.toggle('dark', isDark)`.
+  - Tailwind v4 `@custom-variant dark (&:where(.dark, .dark *))` in `main.css` so `dark:` utility prefix maps to the same `.dark` selector.
+  - Layout elements (sidebar, topbar, breadcrumb, page background, cards) require explicit `dark:bg-surface-*` / `dark:text-surface-*` / `dark:border-surface-*` classes — PrimeVue's raw surface palette (`--p-surface-*`) is a fixed scale and does not invert automatically. PrimeVue component internals handle their own dark mode via the theme system.
+  - `.dark .card` override in `main.css` sets card background to `--p-surface-800` and border to `--p-surface-700`.
+  - Choice persisted in the Pinia `ui` store (`localStorage` key `koosani-theme`) and synced to `prefers-color-scheme` when set to "system". Default on first visit: system.
 - **Density:** PrimeVue `p-component-sm` density preset for DataTables, forms, and dialogs. Compact UI is correct for this audience.
 
 ---

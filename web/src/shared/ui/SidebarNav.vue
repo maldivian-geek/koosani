@@ -1,10 +1,25 @@
 <script setup lang="ts">
+import { markRaw, type Component } from 'vue'
 import { useRoute } from 'vue-router'
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  Package,
+  FileText,
+  FileMinus,
+  Receipt,
+  ShoppingCart,
+  Percent,
+  BarChart2,
+  LogOut,
+} from 'lucide-vue-next'
+import { useAuthStore } from '../../stores/auth.js'
 
 interface NavItem {
   label: string
   to: string
-  icon: string
+  icon: Component
 }
 
 interface NavGroup {
@@ -13,68 +28,109 @@ interface NavGroup {
 
 const groups: NavGroup[] = [
   {
-    items: [{ label: 'Dashboard', to: '/dashboard', icon: 'pi-home' }],
+    items: [{ label: 'Dashboard', to: '/dashboard', icon: markRaw(LayoutDashboard) }],
   },
   {
     items: [
-      { label: 'Customers', to: '/customers', icon: 'pi-users' },
-      { label: 'Suppliers', to: '/suppliers', icon: 'pi-building' },
-      { label: 'Items', to: '/items', icon: 'pi-box' },
+      { label: 'Customers', to: '/customers', icon: markRaw(Users) },
+      { label: 'Suppliers', to: '/suppliers', icon: markRaw(Building2) },
+      { label: 'Items', to: '/items', icon: markRaw(Package) },
     ],
   },
   {
     items: [
-      { label: 'Invoices', to: '/invoices', icon: 'pi-file-edit' },
-      { label: 'Credit Notes', to: '/credit-notes', icon: 'pi-file-minus' },
+      { label: 'Invoices', to: '/invoices', icon: markRaw(FileText) },
+      { label: 'Credit Notes', to: '/credit-notes', icon: markRaw(FileMinus) },
     ],
   },
   {
     items: [
-      { label: 'Bills', to: '/bills', icon: 'pi-receipt' },
-      { label: 'Purchase Orders', to: '/pos', icon: 'pi-shopping-cart' },
+      { label: 'Bills', to: '/bills', icon: markRaw(Receipt) },
+      { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart) },
     ],
   },
   {
-    items: [{ label: 'GST', to: '/gst', icon: 'pi-percentage' }],
+    items: [{ label: 'GST', to: '/gst', icon: markRaw(Percent) }],
   },
   {
-    items: [{ label: 'Reports', to: '/reports', icon: 'pi-chart-bar' }],
+    items: [{ label: 'Reports', to: '/reports', icon: markRaw(BarChart2) }],
   },
 ]
 
 const route = useRoute()
+const authStore = useAuthStore()
 
 function isActive(to: string): boolean {
   return route.path === to || route.path.startsWith(to + '/')
 }
+
+const userInitial = () => authStore.user?.name?.charAt(0).toUpperCase() ?? '?'
 </script>
 
 <template>
-  <nav
-    class="w-56 flex-none flex flex-col border-r border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 overflow-y-auto"
+  <aside
+    class="hidden md:flex flex-col fixed inset-y-0 left-0 z-30 w-64 bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-800"
   >
-    <div class="px-4 py-5 border-b border-surface-200 dark:border-surface-700">
-      <span class="font-bold text-lg tracking-tight">Koosani</span>
+    <!-- brand -->
+    <div
+      class="flex items-center gap-3 px-4 h-16 border-b border-surface-100 dark:border-surface-800 shrink-0"
+    >
+      <div class="w-5 h-5 grid grid-cols-2 gap-0.5 flex-none">
+        <span class="rounded-xs bg-surface-900 dark:bg-surface-100" />
+        <span class="rounded-xs bg-surface-900 dark:bg-surface-100" />
+        <span class="rounded-xs bg-surface-900 dark:bg-surface-100" />
+        <span class="rounded-xs bg-surface-900 dark:bg-surface-100" />
+      </div>
+      <span class="font-semibold text-surface-900 dark:text-surface-50 text-sm truncate"
+        >Koosani</span
+      >
     </div>
 
-    <div class="flex-1 py-3">
+    <!-- nav -->
+    <nav class="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
       <template v-for="(group, gi) in groups" :key="gi">
-        <div v-if="gi > 0" class="my-1 mx-3 border-t border-surface-200 dark:border-surface-700" />
+        <div v-if="gi > 0" class="my-1" />
         <RouterLink
           v-for="item in group.items"
           :key="item.to"
           :to="item.to"
-          class="flex items-center gap-3 px-4 py-2 mx-2 rounded-md text-sm font-medium transition-colors"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
           :class="
             isActive(item.to)
-              ? 'bg-surface-100 dark:bg-surface-800 text-surface-900 dark:text-surface-50'
-              : 'text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-50'
+              ? 'bg-surface-900! text-surface-0! hover:bg-surface-800! dark:bg-surface-700! dark:text-surface-50! dark:hover:bg-surface-600!'
+              : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-50'
           "
         >
-          <i :class="['pi', item.icon, 'text-base']" />
+          <component :is="item.icon" class="w-4 h-4 flex-none" />
           {{ item.label }}
         </RouterLink>
       </template>
+    </nav>
+
+    <!-- user -->
+    <div class="border-t border-surface-100 dark:border-surface-800 p-3 shrink-0 space-y-1">
+      <div class="flex items-center gap-3 px-2 py-2">
+        <div
+          class="w-8 h-8 rounded-full bg-surface-900 dark:bg-surface-100 text-surface-0 dark:text-surface-900 flex items-center justify-center text-xs font-semibold shrink-0"
+        >
+          {{ userInitial() }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-surface-900 dark:text-surface-50 truncate">
+            {{ authStore.user?.name ?? '' }}
+          </p>
+          <p class="text-xs text-surface-500 dark:text-surface-400 truncate capitalize">
+            {{ authStore.user?.role ?? '' }}
+          </p>
+        </div>
+      </div>
+      <button
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-surface-500 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-50 transition-colors"
+        @click="() => void authStore.logout()"
+      >
+        <LogOut class="w-4 h-4" />
+        Sign out
+      </button>
     </div>
-  </nav>
+  </aside>
 </template>

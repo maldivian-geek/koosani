@@ -172,6 +172,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      lucide-vue-next:
+        specifier: ^1.0.0
+        version: 1.0.0(vue@3.5.34(typescript@5.9.3))
       pinia:
         specifier: ^2.3.0
         version: 2.3.1(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3))
@@ -181,6 +184,9 @@ importers:
       primevue:
         specifier: ^4.3.1
         version: 4.5.5(vue@3.5.34(typescript@5.9.3))
+      tailwindcss-primeui:
+        specifier: ^0.6.1
+        version: 0.6.1(tailwindcss@4.3.0)
       vue:
         specifier: ^3.5.13
         version: 3.5.34(typescript@5.9.3)
@@ -2910,6 +2916,12 @@ packages:
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
+  lucide-vue-next@1.0.0:
+    resolution: {integrity: sha512-V6SPvx1IHTj/UY+FrIYWV5faISsPSb8BnWSFDxAtezWKvWc9ZZ40PDrdu1/Qb5vg4lHWr1hs1BAMGVGm6V1Xdg==}
+    deprecated: Package deprecated. Please use @lucide/vue instead.
+    peerDependencies:
+      vue: '>=3.0.1'
+
   luxon@3.7.2:
     resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
     engines: {node: '>=12'}
@@ -3431,6 +3443,11 @@ packages:
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
+
+  tailwindcss-primeui@0.6.1:
+    resolution: {integrity: sha512-T69Rylcrmnt8zy9ik+qZvsLuRIrS9/k6rYJSIgZ1trnbEzGDDQSCIdmfyZknevqiHwpSJHSmQ9XT2C+S/hJY4A==}
+    peerDependencies:
+      tailwindcss: '>=3.1.0'
 
   tailwindcss@4.3.0:
     resolution: {integrity: sha512-y6nxMGB1nMW9R6k96e5gdIFzcfL/gTJRNaqGes1YvkLnPVXzWgbqFF2yLC0T8G774n24cx3Pe8XrKoniCOAH+Q==}
@@ -6310,6 +6327,10 @@ snapshots:
 
   lru-cache@10.4.3: {}
 
+  lucide-vue-next@1.0.0(vue@3.5.34(typescript@5.9.3)):
+    dependencies:
+      vue: 3.5.34(typescript@5.9.3)
+
   luxon@3.7.2: {}
 
   magic-string@0.30.21:
@@ -6854,6 +6875,10 @@ snapshots:
   supports-color@7.2.0:
     dependencies:
       has-flag: 4.0.0
+
+  tailwindcss-primeui@0.6.1(tailwindcss@4.3.0):
+    dependencies:
+      tailwindcss: 4.3.0
 
   tailwindcss@4.3.0: {}
 

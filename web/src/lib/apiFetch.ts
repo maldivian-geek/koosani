@@ -8,20 +8,25 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
-  const url = `/api${path.startsWith('/') ? path : '/' + path}`
+export async function apiFetch<T = unknown>(
+  path: string,
+  init: RequestInit & { noRedirect?: boolean } = {},
+): Promise<T> {
+  const base = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000'
+  const url = `${base}${path.startsWith('/') ? path : '/' + path}`
+  const { noRedirect, ...fetchInit } = init
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...(init.headers as Record<string, string> | undefined),
+    ...(fetchInit.headers as Record<string, string> | undefined),
   }
-  if (!(init.body instanceof FormData)) {
+  if (!(fetchInit.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  const res = await fetch(url, { ...init, credentials: 'include', headers })
+  const res = await fetch(url, { ...fetchInit, credentials: 'include', headers })
 
   if (res.status === 401) {
-    window.location.replace('/login')
+    if (!noRedirect) window.location.replace('/login')
     throw new ApiError(401, 'Unauthorized')
   }
 

@@ -1,4 +1,4 @@
-import { and, eq, lt, count, sql, desc } from 'drizzle-orm'
+import { and, eq, lt, gte, count, sql, desc } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import {
   users,
@@ -205,7 +205,7 @@ export async function countRecentAttempts(
   const [row] = await db
     .select({ n: count() })
     .from(loginAttempts)
-    .where(and(eq(column, value), sql`${loginAttempts.attemptedAt} >= ${since}`))
+    .where(and(eq(column, value), gte(loginAttempts.attemptedAt, since)))
   return row?.n ?? 0
 }
 
@@ -260,7 +260,7 @@ export async function hasRecentResetToken(userId: string, cooldownMs: number): P
       and(
         eq(authTokens.userId, userId),
         eq(authTokens.type, 'password_reset'),
-        sql`${authTokens.createdAt} >= ${since}`,
+        gte(authTokens.createdAt, since),
       ),
     )
   return (row?.n ?? 0) > 0

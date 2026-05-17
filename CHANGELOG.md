@@ -8,9 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Dark mode** — full light/dark toggle in the top bar (sun/moon icon button). Layout surfaces (`SidebarNav`, `TopBar`, `BreadcrumbBar`, `AppLayout` page background, `.card`) now carry explicit `dark:bg-surface-*` / `dark:text-surface-*` / `dark:border-surface-*` Tailwind classes. PrimeVue component internals auto-respond via the theme's `darkModeSelector: '.dark'`. Dark mode choice persisted in `ui` store (`koosani-theme` localStorage key); defaults to system preference (DESIGN.md §1).
+
 ### Changed
 
-- Upgraded Tailwind CSS from v3 to v4: replaced `tailwind.config.js` + `postcss.config.js` with `@tailwindcss/vite` Vite plugin; updated `main.css` to `@import "tailwindcss"` + `@custom-variant dark` for `.app-dark` selector; removed `autoprefixer` and `postcss` dev dependencies (STACK.md §Frontend).
+- Upgraded Tailwind CSS from v3 to v4: replaced `tailwind.config.js` + `postcss.config.js` with `@tailwindcss/vite` Vite plugin; updated `main.css` to `@import "tailwindcss"` + `@custom-variant dark` for `.dark` selector; removed `autoprefixer` and `postcss` dev dependencies (STACK.md §Frontend).
 
 ### Added
 

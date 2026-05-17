@@ -4,13 +4,13 @@ import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
 import ToastService from 'primevue/toastservice'
 import Aura from '@primeuix/themes/aura'
-import { definePreset } from '@primeuix/styled'
+import { definePreset } from '@primeuix/themes'
 import 'primeicons/primeicons.css'
 import App from './App.vue'
 import { router } from './router/index.js'
 import './assets/main.css'
 
-const NoirAura = definePreset(Aura, {
+const Roanuedhuru = definePreset(Aura, {
   semantic: {
     primary: {
       50: '{surface.50}',
@@ -28,24 +28,24 @@ const NoirAura = definePreset(Aura, {
     colorScheme: {
       light: {
         primary: {
-          color: '{primary.950}',
+          color: '{surface.950}',
           inverseColor: '#ffffff',
-          hoverColor: '{primary.900}',
-          activeColor: '{primary.800}',
+          hoverColor: '{surface.900}',
+          activeColor: '{surface.800}',
         },
         highlight: {
-          background: '{primary.950}',
-          focusBackground: '{primary.700}',
-          color: '#ffffff',
-          focusColor: '#ffffff',
+          background: '{surface.200}',
+          focusBackground: '{surface.300}',
+          color: '{surface.800}',
+          focusColor: '{surface.900}',
         },
       },
       dark: {
         primary: {
-          color: '{primary.50}',
-          inverseColor: '{primary.950}',
-          hoverColor: '{primary.100}',
-          activeColor: '{primary.200}',
+          color: '{surface.50}',
+          inverseColor: '{surface.950}',
+          hoverColor: '{surface.100}',
+          activeColor: '{surface.200}',
         },
         highlight: {
           background: 'rgba(250,250,250,.16)',
@@ -64,10 +64,8 @@ app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
   theme: {
-    preset: NoirAura,
-    options: {
-      darkModeSelector: '.app-dark',
-    },
+    preset: Roanuedhuru,
+    options: { darkModeSelector: '.dark' },
   },
 })
 app.use(ConfirmationService)

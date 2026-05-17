@@ -5,10 +5,12 @@ const authStore = useAuthStore()
 </script>
 
 <template>
-  <div>
-    <h1 class="text-2xl font-semibold mb-1">Dashboard</h1>
-    <p class="text-surface-500">
-      Welcome back{{ authStore.user ? `, ${authStore.user.name}` : '' }}.
-    </p>
+  <div class="space-y-6">
+    <div>
+      <h2 class="text-2xl font-semibold text-surface-900">Dashboard</h2>
+      <p class="text-surface-500 mt-0.5">
+        Welcome back{{ authStore.user ? `, ${authStore.user.name}` : '' }}.
+      </p>
+    </div>
   </div>
 </template>

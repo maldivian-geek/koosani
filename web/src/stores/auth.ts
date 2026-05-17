@@ -21,11 +21,15 @@ export const useAuthStore = defineStore('auth', () => {
     if (bootstrapped.value) return
     bootstrapped.value = true
     try {
-      const data = await apiFetch<AuthUser>('/me')
-      user.value = data
+      user.value = await apiFetch<AuthUser>('/me', { noRedirect: true })
     } catch {
       user.value = null
     }
+  }
+
+  function setUser(u: AuthUser): void {
+    user.value = u
+    bootstrapped.value = true
   }
 
   async function logout(): Promise<void> {
@@ -38,5 +42,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, bootstrapped, isAuthenticated, bootstrap, logout }
+  return { user, bootstrapped, isAuthenticated, bootstrap, setUser, logout }
 })
