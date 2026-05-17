@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@koosani/shared": "workspace:*",
+    "@primeuix/styled": "^0.7.4",
     "@primeuix/themes": "^2.0.3",
     "@vueuse/core": "^11.3.0",
     "chart.js": "^4.4.7",
