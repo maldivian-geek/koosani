@@ -35,11 +35,20 @@ const drawerOpen = ref(false)
 async function load() {
   loading.value = true
   try {
-    const params = new URLSearchParams({ active: 'true' })
+    const params = new URLSearchParams({
+      active: 'true',
+      page: String(page.value),
+      pageSize: String(pageSize.value),
+    })
     if (q.value) params.set('q', q.value)
-    const data = await apiFetch<Supplier[]>(`/suppliers?${params}`)
-    rows.value = data
-    total.value = data.length
+    const data = await apiFetch<{
+      items: Supplier[]
+      total: number
+      page: number
+      pageSize: number
+    }>(`/suppliers?${params}`)
+    rows.value = data.items
+    total.value = data.total
   } catch (err) {
     const msg =
       err instanceof ApiError && err.status === 403
@@ -54,6 +63,7 @@ async function load() {
 function onPage(e: { page: number; pageSize: number }) {
   page.value = e.page
   pageSize.value = e.pageSize
+  void load()
 }
 
 function onSearch(query: string) {
