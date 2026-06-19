@@ -8,6 +8,7 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
+    "dev": "pnpm -r --parallel run dev",
     "dev:api": "pnpm --filter @koosani/api dev",
     "dev:web": "pnpm --filter @koosani/web dev",
     "build": "pnpm -r build",

@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Root `pnpm dev` script that runs the api and web dev servers concurrently via pnpm's built-in `--parallel` (no new dependency; `dev:api` / `dev:web` retained for running either alone).
+
+### Changed
+
+- Folded the standalone `koosani_design.md` frontend reference into `DESIGN.md` and deleted it — single source of truth for UI/UX. Priority went to `koosani_design.md` for visual/style collisions (DESIGN.md §1, §11–§13). Specifically:
+  - Corrected the theme: DESIGN.md said "Aura **noir**"; the codebase actually uses the custom **`Roanuedhuru`** preset (Aura + all primary colours mapped to surface greys). DESIGN.md §1 now carries the real `web/src/main.ts` preset and `main.css`/`.card` definition.
+  - Added the concrete visual system: app shell (`AppLayout`/`AppSidebar`/`AppTopBar`) and view-layout markup (DESIGN.md §11), Tailwind v4 `!important` **suffix** syntax (DESIGN.md §2), full DataTable/Dialog markup (DESIGN.md §5–§6), SFC import order (DESIGN.md §3), and reference tables for colour tokens, spacing, control widths, icon sizes, and status maps (DESIGN.md §13).
+
+### Removed
+
+- `koosani_design.md` (content merged into `DESIGN.md`).
+
+### Fixed
+
+- Resolved collisions where `koosani_design.md` contradicted CLAUDE.md hard rules — the architecture rules were kept over the imported reference: money/quantity use `<MoneyInput>` + `Decimal` (not `InputNumber` bound to a number, CLAUDE.md §4); HTTP goes through `apiFetch` (not raw `axios`, DESIGN.md §8, §12); destructive confirms use PrimeVue `ConfirmDialog` (not `window.confirm()`/`alert()`, DESIGN.md §6); types/schemas come from `@koosani/shared` (not a single `src/types.ts`); structure stays `web/src/modules/<module>/views/` + `web/src/shared/ui/` (not flat `src/views`). Resort/guest/booking example code was genericized to this app's domain (invoices, customers, bills).
+
 ## [1.0.0] - 2026-05-17
 
 ### Security

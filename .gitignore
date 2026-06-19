@@ -1,5 +1,9 @@
 node_modules/
 dist/
+
+# This is a pnpm workspace — npm/yarn lockfiles are not used
+package-lock.json
+yarn.lock
 .env
 .env.*
 !.env.example
