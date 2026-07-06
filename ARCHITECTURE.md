@@ -80,6 +80,7 @@ Each module is a folder under `api/src/modules/` and `web/src/modules/`. A modul
 | `reports`     | Cross-module reports (sales, purchases, stock valuation, P&L summary)                                    |
 | `files`       | Upload, virus-scan handoff, signed-URL download for PDFs and uploaded docs                               |
 | `audit`       | Append-only audit log for all financial mutations                                                        |
+| `settings`    | Business profile, logo, numbering prefixes, defaults — reads/writes the `businesses` row (Phase 22)      |
 
 **Forbidden cross-module patterns:**
 
@@ -112,7 +113,7 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
   - DB trigger that raises on UPDATE of frozen columns when status ≠ `draft` — on the header row **and**, since Phase 20 (UPGRADE.md F-12), on `invoice_lines`/`bill_lines`/`credit_note_lines` (previously only the header was guarded; lines of an issued document could be UPDATEd/DELETEd directly at the DB level).
   - `REVOKE DELETE` on `invoices`/`bills`/`credit_notes`/`purchase_orders` (Phase 20) — no route ever deletes these rows; the grant gap is closed regardless.
 - Corrections to an issued invoice happen via a **credit note** (separate row, references original `invoice_id`).
-- Invoice numbers come from a per-business sequence with no gaps. Allocated only on issue, never on draft create.
+- Invoice numbers come from a per-business sequence with no gaps. Allocated only on issue, never on draft create. The prefix (`INV-` by default) is configurable per business via `settings` (Phase 22, UPGRADE.md G-15) — `api/src/db/numbering.ts`'s `allocateDocumentNumber` computes the MAX only over rows already starting with the _current_ prefix, so changing the prefix restarts that document type's sequence at 1 rather than risking a SUBSTRING offset mismatch against differently-prefixed rows. Same mechanism backs credit note, bill, and PO numbering.
 - Voiding an invoice with active (non-reversed) payments is rejected — payments must be reversed first (UPGRADE.md F-14, interim policy; proper credit/refund handling is UPGRADE.md Phase 27).
 
 ### 4.3 Stock movement ledger

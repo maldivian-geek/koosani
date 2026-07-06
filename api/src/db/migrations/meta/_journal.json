@@ -15,6 +15,13 @@
       "when": 1783313471666,
       "tag": "0001_phase20_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783320329582,
+      "tag": "0002_phase22_business_settings",
+      "breakpoints": true
     }
   ]
 }

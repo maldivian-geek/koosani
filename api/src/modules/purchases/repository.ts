@@ -1,5 +1,6 @@
 import { and, count, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
+import { allocateDocumentNumber } from '../../db/numbering.js'
 import type { DbTx } from '../../db/client.js'
 import { bills, billLines, paymentsMade } from '../../db/schema/index.js'
 import type { Bill, BillLine, PaymentMade } from '../../db/schema/index.js'
@@ -116,22 +117,18 @@ export async function updateBillLine(
 }
 
 // ─── Bill number allocation (advisory lock) ───────────────────────────────────
+// Format: {businesses.bill_number_prefix}000001 (default BILL-000001, Phase 22
+// — UPGRADE.md G-15).
 
 export async function allocateBillNumber(businessId: string, tx: DbTx): Promise<string> {
-  // Serialize per-business with an advisory lock so concurrent confirms don't collide
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'bill_number:' + businessId}))`)
-  const [row] = await tx.execute<{ next: number }>(
-    sql`
-      SELECT COALESCE(
-        MAX(CAST(SUBSTRING(bill_number FROM 6) AS INT)), 0
-      ) + 1 AS next
-      FROM bills
-      WHERE business_id = ${businessId}
-        AND bill_number IS NOT NULL
-    `,
+  return allocateDocumentNumber(
+    tx,
+    businessId,
+    ':bill',
+    'bills',
+    'bill_number',
+    'bill_number_prefix',
   )
-  const next = (row as { next: number }).next
-  return `BILL-${String(next).padStart(6, '0')}`
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

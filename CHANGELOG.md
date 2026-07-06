@@ -10,6 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 22 — Business settings & branding (UPGRADE.md G-2/G-15):**
+  - **`settings` module** (`api/src/modules/settings/{repository,service,routes}.ts`) — `GET /settings` (any authenticated role), `PATCH /settings` (admin only), `POST /settings/logo` (admin only, multipart — routes through `files.uploadFile` for the same magic-byte sniff / EXIF strip / virus scan as any other upload, SECURITY.md §13.5).
+  - **`businesses` gains**: `logoFileId`, `defaultCreditTermsDays` (30), `defaultInvoiceNotes`, and per-document-type numbering prefixes `invoiceNumberPrefix` ('INV-'), `creditNoteNumberPrefix` ('CN-'), `billNumberPrefix` ('BILL-'), `poNumberPrefix` ('PO-') — all defaulted to match the previously hard-coded values, so existing installs see no behavior change until an admin edits them (migration `0002_phase22_business_settings.sql`).
+  - **Configurable document numbering prefixes** — `api/src/db/numbering.ts`'s `allocateDocumentNumber` replaces four near-duplicate hand-rolled implementations in `invoicing`/`purchases`/`po` repositories. Changing a business's prefix restarts that document type's sequence at 1 for the new prefix (the MAX is computed only over rows already starting with it) rather than risking a SUBSTRING offset mismatch against rows written under a different-length prefix.
+  - `customers.create` now falls back to `settings.defaultCreditTermsDays` instead of a hard-coded `30` when `creditTermsDays` isn't supplied on the request.
+  - Web: `web/src/modules/settings/views/SettingsView.vue` — business profile, logo upload, backorder/GST-period defaults, default credit terms/invoice notes, and the four numbering prefixes. Admin-only, gated by `requiresAdmin` and added to the sidebar.
+  - Tests: `api/src/modules/settings/__tests__/settings.test.ts`.
+
+### Fixed
+
+- **Concurrent document-number allocation could issue duplicate numbers.** While rewriting the four allocators to share `allocateDocumentNumber`, an intermediate version that fetched the business's prefix and computed the MAX in two separate round trips let two concurrent `issue()`/`confirm()`/`approve()` calls both compute the same "next" number even though the `pg_advisory_xact_lock` should have serialized them — the second transaction's MAX query didn't see the first's already-committed row, causing a unique-constraint violation. Caught by the existing "sequential invoice/PO/bill numbers" concurrency tests, which had passed reliably before this rewrite (verified against unmodified code) and failed consistently after. Fixed by combining the prefix lookup and MAX computation into one query; verified stable across repeated runs of the invoice/PO/bill concurrency tests.
+
 - **Phase 21 — Users, admin & account security (UPGRADE.md F-6):**
   - **`users` module** — did not previously exist despite being documented: `api/src/modules/users/{repository,service,routes}.ts`. `GET /users` (list, paginated), `GET /users/:id` (detail + permission grants), `POST /users` (invite — no password until accepted, 7-day token via the previously-dead `inviteEmail` helper, rejects duplicate email), `PATCH /users/:id` (name/role + full-replace permission grants), `DELETE /users/:id` (soft delete + revoke all sessions, rejects self-delete). Every route is `requireRole('admin')`.
   - **`permissions` module** (`api/src/modules/permissions/{repository,service}.ts`) — `listForUser`/`replaceForUser` backing `user_permissions`, consumed by `users`, `auth` (`/me`, login responses), and `middleware/authorize.ts`.

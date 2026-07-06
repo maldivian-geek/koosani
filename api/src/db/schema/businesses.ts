@@ -1,4 +1,4 @@
-﻿import { boolean, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+﻿import { boolean, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { timestamps } from './helpers'
 import { gstPeriodTypeEnum } from './enums'
 
@@ -11,6 +11,21 @@ export const businesses = pgTable('businesses', {
   email: text('email'),
   allowBackorders: boolean('allow_backorders').default(false).notNull(),
   gstPeriodType: gstPeriodTypeEnum('gst_period_type').default('monthly').notNull(),
+  // Branding + defaults (Phase 22, UPGRADE.md). logoFileId has no FK constraint
+  // (files can be deleted independently; a dangling reference just means no
+  // logo renders) — mirrors the polymorphic, FK-less pattern in files.ts.
+  logoFileId: uuid('logo_file_id'),
+  defaultCreditTermsDays: integer('default_credit_terms_days').default(30).notNull(),
+  defaultInvoiceNotes: text('default_invoice_notes'),
+  // Numbering prefixes — defaults match the previously hard-coded values, so
+  // existing installs see no behavior change until an admin edits them.
+  // Changing a prefix starts that document type's sequence over at 1 (the new
+  // prefix's MAX is computed only over rows already starting with it) rather
+  // than risk mis-parsing old-prefix rows at a different SUBSTRING offset.
+  invoiceNumberPrefix: text('invoice_number_prefix').default('INV-').notNull(),
+  creditNoteNumberPrefix: text('credit_note_number_prefix').default('CN-').notNull(),
+  billNumberPrefix: text('bill_number_prefix').default('BILL-').notNull(),
+  poNumberPrefix: text('po_number_prefix').default('PO-').notNull(),
   ...timestamps,
   // nullable: no user exists yet when the business row is first created
   createdBy: uuid('created_by'),

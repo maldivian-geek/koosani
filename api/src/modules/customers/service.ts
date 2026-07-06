@@ -2,6 +2,7 @@ import Decimal from 'decimal.js'
 import { db } from '../../db/client.js'
 import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
+import * as settings from '../settings/service.js'
 import type { AuditCtx } from '../audit/service.js'
 import type { CustomerCreate, CustomerPatch, ContactCreate } from '@koosani/shared'
 import type { CustomerRow, ContactRow } from './repository.js'
@@ -87,6 +88,9 @@ export async function create(
   data: CustomerCreate,
   ctx: AuditCtx,
 ): Promise<CustomerRow> {
+  const business = await settings.get(businessId).catch(() => null)
+  const defaultTerms = business?.defaultCreditTermsDays ?? 30
+
   return db.transaction(async (tx) => {
     const row = await repo.insertCustomer({
       businessId,
@@ -95,7 +99,7 @@ export async function create(
       email: data.email ?? null,
       phone: data.phone ?? null,
       address: data.address ?? null,
-      creditTermsDays: String(data.creditTermsDays ?? 30),
+      creditTermsDays: String(data.creditTermsDays ?? defaultTerms),
       creditLimit: data.creditLimit ?? null,
       notes: data.notes ?? null,
       createdBy: ctx.userId,

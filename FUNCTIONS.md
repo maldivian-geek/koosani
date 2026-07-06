@@ -280,6 +280,25 @@ All `reports.*` functions are **pure read-only** — no writes, no audit rows, n
 
 ---
 
+## Module: `settings`
+
+Business profile, branding, and document defaults (Phase 22, UPGRADE.md G-2/G-15). `GET /settings` is readable by any authenticated role (the profile is displayed throughout the UI); `PATCH`/logo upload are admin only.
+
+| Kind  | Name                   | Signature                                             | Purpose                                                                                                    |
+| ----- | ---------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| route | `GET  /settings`       | → `Business & { logoUrl: string \| null }`            | —                                                                                                          |
+| route | `PATCH /settings`      | `BusinessSettingsPatch` → `Business`                  | Admin only                                                                                                 |
+| route | `POST  /settings/logo` | `multipart { file }` → `Business & { logoUrl }`       | Admin only; goes through `files.uploadFile` (magic-byte sniff, EXIF strip, virus scan — SECURITY.md §13.5) |
+| svc   | `settings.get`         | `(businessId) → Business & { logoUrl }`               | Resolves `logoFileId` to a signed URL                                                                      |
+| svc   | `settings.update`      | `(businessId, BusinessSettingsPatch, ctx) → Business` | Audited as `business.settings_updated`                                                                     |
+| svc   | `settings.updateLogo`  | `(businessId, buffer, name, mime, ctx) → Business`    | Uploads via `files`, points `businesses.logo_file_id` at it; audited as `business.logo_updated`            |
+
+`BusinessSettingsPatch` (`shared/src/settings.ts`): `name?, tin?, address?, phone?, email?, allowBackorders?, gstPeriodType?, defaultCreditTermsDays?, defaultInvoiceNotes?, invoiceNumberPrefix?, creditNoteNumberPrefix?, billNumberPrefix?, poNumberPrefix?`.
+
+`customers.create` falls back to `settings.defaultCreditTermsDays` (not a hard-coded `30`) when `creditTermsDays` isn't supplied.
+
+---
+
 ## Shared types (overview)
 
 Detailed Zod schemas live in `/shared/src/*.ts`. Names you'll see in this file:

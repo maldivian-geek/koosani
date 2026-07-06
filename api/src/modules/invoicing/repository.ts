@@ -1,5 +1,6 @@
-import { and, count, desc, eq, gte, ilike, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
+import { allocateDocumentNumber } from '../../db/numbering.js'
 import type { DbTx } from '../../db/client.js'
 import {
   invoices,
@@ -155,18 +156,18 @@ export async function updateInvoiceLine(
 }
 
 // ─── Invoice number sequence (no-gap, advisory-locked) ───────────────────────
-// Format: INV-000001. Advisory lock serializes concurrent issues for the same business.
+// Format: {businesses.invoice_number_prefix}000001 (default INV-000001, Phase
+// 22 — UPGRADE.md G-15). Advisory lock serializes concurrent issues per business.
 
 export async function allocateInvoiceNumber(businessId: string, tx: DbTx): Promise<string> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${businessId} || ':invoice'))`)
-  const [row] = await tx
-    .select({
-      maxNum: sql<string>`COALESCE(MAX(CAST(SUBSTRING(invoice_number, 5) AS INTEGER)), 0)`,
-    })
-    .from(invoices)
-    .where(and(eq(invoices.businessId, businessId), isNotNull(invoices.invoiceNumber)))
-  const next = Number(row?.maxNum ?? '0') + 1
-  return `INV-${String(next).padStart(6, '0')}`
+  return allocateDocumentNumber(
+    tx,
+    businessId,
+    ':invoice',
+    'invoices',
+    'invoice_number',
+    'invoice_number_prefix',
+  )
 }
 
 // ─── Payments received ────────────────────────────────────────────────────────
@@ -418,16 +419,16 @@ export async function deleteCreditNoteLinesByCn(
 }
 
 // ─── Credit note number sequence ──────────────────────────────────────────────
-// Format: CN-000001. Same advisory-lock pattern as invoice numbers.
+// Format: {businesses.credit_note_number_prefix}000001 (default CN-000001).
+// Same advisory-lock pattern as invoice numbers.
 
 export async function allocateCreditNoteNumber(businessId: string, tx: DbTx): Promise<string> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${businessId} || ':cn'))`)
-  const [row] = await tx
-    .select({
-      maxNum: sql<string>`COALESCE(MAX(CAST(SUBSTRING(credit_note_number, 4) AS INTEGER)), 0)`,
-    })
-    .from(creditNotes)
-    .where(and(eq(creditNotes.businessId, businessId), isNotNull(creditNotes.creditNoteNumber)))
-  const next = Number(row?.maxNum ?? '0') + 1
-  return `CN-${String(next).padStart(6, '0')}`
+  return allocateDocumentNumber(
+    tx,
+    businessId,
+    ':cn',
+    'credit_notes',
+    'credit_note_number',
+    'credit_note_number_prefix',
+  )
 }

@@ -198,6 +198,12 @@ export const router = createRouter({
           component: () => import('../modules/audit/views/AuditLogView.vue'),
           meta: { requiresAuth: true, requiresAdmin: true, title: 'Audit Log' },
         },
+        // Settings (Phase 22)
+        {
+          path: 'settings',
+          component: () => import('../modules/settings/views/SettingsView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Settings' },
+        },
       ],
     },
     {

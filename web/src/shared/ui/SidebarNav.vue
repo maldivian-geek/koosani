@@ -14,6 +14,7 @@ import {
   BarChart2,
   ShieldCheck,
   ScrollText,
+  Settings,
   LogOut,
 } from 'lucide-vue-next'
 import { useAuthStore } from '../../stores/auth.js'
@@ -63,6 +64,7 @@ const ADMIN_GROUP: NavGroup = {
   items: [
     { label: 'Users', to: '/users', icon: markRaw(ShieldCheck) },
     { label: 'Audit Log', to: '/audit', icon: markRaw(ScrollText) },
+    { label: 'Settings', to: '/settings', icon: markRaw(Settings) },
   ],
 }
 

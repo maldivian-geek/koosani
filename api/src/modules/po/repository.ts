@@ -1,5 +1,6 @@
 import { and, count, desc, eq, gte, lte, sql, sum } from 'drizzle-orm'
 import { db } from '../../db/client.js'
+import { allocateDocumentNumber } from '../../db/numbering.js'
 import type { DbTx } from '../../db/client.js'
 import {
   purchaseOrders,
@@ -165,21 +166,18 @@ export async function incrementPoLineReceived(
 }
 
 // ─── PO number allocation (advisory lock) ────────────────────────────────────
+// Format: {businesses.po_number_prefix}000001 (default PO-000001, Phase 22 —
+// UPGRADE.md G-15).
 
 export async function allocatePoNumber(businessId: string, tx: DbTx): Promise<string> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'po_number:' + businessId}))`)
-  const [row] = await tx.execute<{ next: number }>(
-    sql`
-      SELECT COALESCE(
-        MAX(CAST(SUBSTRING(po_number FROM 4) AS INT)), 0
-      ) + 1 AS next
-      FROM purchase_orders
-      WHERE business_id = ${businessId}
-        AND po_number IS NOT NULL
-    `,
+  return allocateDocumentNumber(
+    tx,
+    businessId,
+    ':po',
+    'purchase_orders',
+    'po_number',
+    'po_number_prefix',
   )
-  const next = (row as { next: number }).next
-  return `PO-${String(next).padStart(6, '0')}`
 }
 
 export async function isOverReceiptAllowed(businessId: string, tx?: DbTx): Promise<boolean> {
