@@ -16,3 +16,13 @@ export const pdfQueueEvents = new QueueEvents('pdf', { connection: redis })
 
 // GST return building: MIRA 205 / 206 + Input Tax Statement (ARCHITECTURE.md §8)
 export const gstQueue = new Queue('gst', { connection: redis })
+
+// Outbound email (invoice/receipt/statement/reminder) — fire-and-forget, no
+// waitUntilFinished; the enqueuing route doesn't need the send to finish
+// before responding (Phase 24, UPGRADE.md G-3/G-4).
+export const emailQueue = new Queue('email', { connection: redis })
+
+// Scheduled daily via remindersQueue.upsertJobScheduler() in worker/index.ts.
+// Scans every business's issued/partially-paid invoices for due reminders and
+// enqueues `email` jobs (Phase 24, UPGRADE.md G-4).
+export const remindersQueue = new Queue('reminders', { connection: redis })

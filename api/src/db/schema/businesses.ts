@@ -26,6 +26,10 @@ export const businesses = pgTable('businesses', {
   creditNoteNumberPrefix: text('credit_note_number_prefix').default('CN-').notNull(),
   billNumberPrefix: text('bill_number_prefix').default('BILL-').notNull(),
   poNumberPrefix: text('po_number_prefix').default('PO-').notNull(),
+  // Payment reminder dunning schedule, in days relative to due date (negative
+  // = before due, 0 = on due date, positive = overdue). Phase 24, UPGRADE.md
+  // G-4. Per-invoice opt-out is `invoices.remindersEnabled`.
+  reminderScheduleDays: integer('reminder_schedule_days').array().default([-3, 0, 7, 14]).notNull(),
   ...timestamps,
   // nullable: no user exists yet when the business row is first created
   createdBy: uuid('created_by'),

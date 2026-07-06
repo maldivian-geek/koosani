@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 24 — Email & payment reminders (UPGRADE.md G-3/G-4):**
+  - **`email` BullMQ queue + worker** (`registerEmailWorker`) — sends invoice emails (PDF attached, reused from Phase 23's `renderInvoicePdf`), payment "thank you" receipts, customer statement emails (PDF attached), and reminder emails. Fire-and-forget (no `waitUntilFinished` — unlike the `pdf` queue, callers don't need the send to finish before responding).
+  - **Automated payment reminders**: `businesses.reminderScheduleDays` (integer array, default `[-3, 0, 7, 14]` — days relative to due date) drives a daily 08:00-Maldives-time cron (`registerRemindersWorker`) that scans every business's issued/partially-paid invoices and fires a reminder exactly once per `(invoice, offset)` — enforced by `invoice_reminders_sent`'s unique index, not just app-level logic, so a re-run after a crash can't double-send. Per-invoice opt-out via `invoices.remindersEnabled` (new column, default `true`) and `PATCH /invoices/:id/reminders`.
+  - **Email log**: `email_logs` table (append-only, `kind: invoice|receipt|reminder|statement`, `status: sent|failed`) — the `emailLogs` module (no routes of its own) backs `GET /invoices/:id/emails`'s delivery history.
+  - New endpoints: `POST /invoices/:id/send` (manual invoice email, 20/min/user), `PATCH /invoices/:id/reminders`, `GET /invoices/:id/emails`, `POST /customers/:id/soa/send` (10/min/user).
+  - `invoicing.addPayment` now enqueues a receipt email after its transaction commits — best-effort; a failed/delayed send never rolls back a recorded payment.
+  - `lib/pdf/build.ts` (new) extracts the per-document-type render functions out of `worker/pdf.ts` so both the `pdf` queue (on-demand `GET .../pdf`) and the `email` queue (attachments) render identically without duplicating the cross-module data assembly.
+  - `lib/mailer.ts` gains `attachments` support (`SendOpts`, Buffer content) and four templates: `invoiceEmail`, `receiptEmail`, `reminderEmail`, `statementEmail`.
+  - Web: "Email" button on the invoice detail view (alongside the existing PDF button) and a reminders opt-out checkbox; "PDF" and "Email" buttons added to the customer statement view (previously had neither wired up, despite the backend supporting `format=pdf` since Phase 23).
+  - Tests: `api/src/worker/__tests__/email.test.ts` runs both new workers in-process for genuine end-to-end checks — invoice send, payment→receipt, and a reminders-scan idempotency test that runs the cron job twice and asserts exactly one reminder email results.
+
+### Fixed
+
+- **`InvoiceDetailView.vue`'s void dialog had a malformed multi-statement inline `@hide` handler** (`voidReason = ''` / `voidError = ''` on separate lines with no separator) that broke Vue's SFC template compiler for the whole file — pre-existing, unrelated to this phase's changes, but it blocked verifying this phase's own template edits via the dev server, so fixed in passing by extracting a `resetVoidDialog()` method.
+
 - **Phase 23 — PDF engine (UPGRADE.md Part 3):** Real invoice, purchase order, and customer/supplier statement-of-account PDFs, replacing the `501`/stub responses on `GET /invoices/:id/pdf`, `GET /pos/:id/pdf`, and `GET /customers|suppliers/:id/soa?format=pdf`.
   - **Stack decision resolved** (STACK.md's Phase-20-era open item): `@react-pdf/renderer`. Templates in `api/src/lib/pdf/` (`InvoiceDocument`, `PoDocument`, `SoaDocument` — the latter shared by customer and supplier statements) are built with `React.createElement` rather than JSX, so no `jsx` tsconfig option was needed in the backend package.
   - Rendering happens in the worker process via the `pdf` BullMQ queue (`registerPdfWorker`, ARCHITECTURE.md §8), preserving the CPU-isolation goal SECURITY.md §13.7 already assumed. Routes enqueue and synchronously await completion (`lib/pdfClient.ts`'s `renderAndWaitForFile`, 20s timeout) so the API still returns `{ url }` directly instead of a job id to poll.

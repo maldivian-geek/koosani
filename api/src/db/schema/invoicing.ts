@@ -1,4 +1,5 @@
 ﻿import {
+  boolean,
   date,
   integer,
   numeric,
@@ -36,6 +37,9 @@ export const invoices = pgTable(
     notes: text('notes'),
     voidReason: text('void_reason'),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
+    // Per-invoice opt-out for the reminders cron (Phase 24, UPGRADE.md G-4).
+    // Not in guard_invoice_frozen()'s frozen-column tuple — updatable post-issue.
+    remindersEnabled: boolean('reminders_enabled').default(true).notNull(),
     ...timestamps,
     ...auditedBy,
   },

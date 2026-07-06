@@ -84,3 +84,13 @@ export function addDays(isoDate: string, n: number): string {
   d.setUTCDate(d.getUTCDate() + n)
   return formatMvDate(d)
 }
+
+/**
+ * Whole calendar days from `from` to `to` (both YYYY-MM-DD). Positive when
+ * `to` is after `from` — e.g. daysBetween(dueDate, today) > 0 means overdue.
+ */
+export function daysBetween(from: string, to: string): number {
+  const a = parseMvDate(from).getTime()
+  const b = parseMvDate(to).getTime()
+  return Math.round((b - a) / 86_400_000)
+}

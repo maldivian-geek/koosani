@@ -87,3 +87,7 @@ export const permissionActionEnum = pgEnum('permission_action', [
   'delete',
   'export',
 ])
+
+// Outbound email log (Phase 24, UPGRADE.md G-3/G-4)
+export const emailKindEnum = pgEnum('email_kind', ['invoice', 'receipt', 'reminder', 'statement'])
+export const emailStatusEnum = pgEnum('email_status', ['sent', 'failed'])

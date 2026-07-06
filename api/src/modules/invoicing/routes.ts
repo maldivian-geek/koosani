@@ -7,18 +7,25 @@ import {
   InvoicePaymentCreate,
   InvoiceVoidBody,
   CreditNoteCreate,
+  InvoiceRemindersPatch,
 } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import { emailQueue } from '../../lib/queues.js'
 import * as filesService from '../files/service.js'
+import * as emailLogsService from '../emailLogs/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 
 // Per-user: 20 PDF requests per minute (SECURITY.md §13.7)
 const pdfLimiter = createRedisRateLimiter('rl:invoice-pdf', 20, 60)
+
+// Per-user: 20 send-invoice-email requests per minute — same CPU-heavy PDF
+// render as the pdf route, plus an outbound send (Phase 24, UPGRADE.md)
+const sendLimiter = createRedisRateLimiter('rl:invoice-send', 20, 60)
 
 const ListInvoicesQuery = z.object({
   status: z.string().optional(),
@@ -215,6 +222,68 @@ invoiceRoutes.delete('/:id/payments/:pid', requirePermission('invoices', 'delete
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+    throw err
+  }
+})
+
+// POST /invoices/:id/send — emails the invoice PDF to the customer on file
+// (Phase 24, UPGRADE.md G-3). Fire-and-forget: the send happens in the email
+// worker; this just enqueues and returns.
+invoiceRoutes.post('/:id/send', requirePermission('invoices', 'edit'), async (c) => {
+  if (!(await sendLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const invoiceId = c.req.param('id')
+  try {
+    await svc.getInvoice(c.get('businessId'), invoiceId)
+    await emailQueue.add('invoice', {
+      kind: 'invoice',
+      businessId: c.get('businessId'),
+      invoiceId,
+      userId: c.get('userId'),
+    })
+    return c.json({ queued: true }, 202)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
+// PATCH /invoices/:id/reminders — per-invoice opt-out (Phase 24, UPGRADE.md G-4)
+invoiceRoutes.patch(
+  '/:id/reminders',
+  requirePermission('invoices', 'edit'),
+  zValidator('json', InvoiceRemindersPatch),
+  async (c) => {
+    const { enabled } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const invoice = await svc.setRemindersEnabled(
+        c.get('businessId'),
+        c.req.param('id'),
+        enabled,
+        ctx,
+      )
+      return c.json(invoice)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
+
+// GET /invoices/:id/emails — delivery history (sends, receipts, reminders)
+invoiceRoutes.get('/:id/emails', async (c) => {
+  const invoiceId = c.req.param('id')
+  try {
+    await svc.getInvoice(c.get('businessId'), invoiceId)
+    const logs = await emailLogsService.listForEntity(c.get('businessId'), 'invoice', invoiceId)
+    return c.json(logs)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     throw err
   }
 })

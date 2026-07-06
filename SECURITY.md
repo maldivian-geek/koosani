@@ -397,6 +397,8 @@ PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. W
 | `GET /pos/:id/pdf`                  | per-user     | 1 min  | 20  | ✅ Phase 18 |
 | `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
 | `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
+| `POST /invoices/:id/send`           | per-user     | 1 min  | 20  | ✅ Phase 24 |
+| `POST /customers/:id/soa/send`      | per-user     | 1 min  | 10  | ✅ Phase 24 |
 | `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   | ✅ Phase 16 |
 | `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  | ✅ Phase 18 |
 | `GET /reports/*?format=csv` (bulk)  | per-user     | 1 hour | 10  | ✅ Phase 20 |

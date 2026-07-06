@@ -5,7 +5,7 @@ import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import DatePicker from 'primevue/datepicker'
-import { ArrowLeft } from 'lucide-vue-next'
+import { ArrowLeft, Download, Mail } from 'lucide-vue-next'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
@@ -90,6 +90,62 @@ function entryTypeLabel(type: string): string {
 function isNegativeBalance(balance: string): boolean {
   return parseFloat(balance) < 0
 }
+
+// ─── PDF download / email ──────────────────────────────────────────────────────
+const downloadingPdf = ref(false)
+const sendingEmail = ref(false)
+
+async function downloadPdf() {
+  downloadingPdf.value = true
+  try {
+    const from = formatDate(fromDate.value)
+    const to = formatDate(toDate.value)
+    const result = await apiFetch<{ url?: string } | null>(
+      `/customers/${customerId}/soa?from=${from}&to=${to}&format=pdf`,
+    )
+    if (result?.url) {
+      window.open(result.url, '_blank')
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to generate PDF.',
+        life: 4000,
+      })
+    }
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to generate PDF.',
+      life: 4000,
+    })
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
+async function sendEmail() {
+  sendingEmail.value = true
+  try {
+    const from = formatDate(fromDate.value)
+    const to = formatDate(toDate.value)
+    await apiFetch(`/customers/${customerId}/soa/send`, {
+      method: 'POST',
+      body: JSON.stringify({ from, to }),
+    })
+    toast.add({
+      severity: 'success',
+      summary: 'Queued',
+      detail: 'The statement email has been queued for sending.',
+      life: 3000,
+    })
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to send email.', life: 4000 })
+  } finally {
+    sendingEmail.value = false
+  }
+}
 </script>
 
 <template>
@@ -125,6 +181,15 @@ function isNegativeBalance(balance: string): boolean {
           <DatePicker v-model="toDate" date-format="dd M yy" show-icon show-button-bar />
         </div>
         <Button :loading="loading" @click="() => void load()">Apply</Button>
+        <div class="flex-1"></div>
+        <Button severity="secondary" :loading="downloadingPdf" @click="downloadPdf">
+          <Download class="w-4 h-4" />
+          PDF
+        </Button>
+        <Button severity="secondary" outlined :loading="sendingEmail" @click="sendEmail">
+          <Mail class="w-4 h-4" />
+          Email
+        </Button>
       </div>
     </div>
 

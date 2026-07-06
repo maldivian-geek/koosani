@@ -61,3 +61,10 @@ export const CreditNoteCreate = z.object({
   lines: z.array(InvoiceLineCreate).min(1),
 })
 export type CreditNoteCreate = z.infer<typeof CreditNoteCreate>
+
+// ─── Reminders opt-out (Phase 24, UPGRADE.md G-4) ────────────────────────────
+
+export const InvoiceRemindersPatch = z.object({
+  enabled: z.boolean(),
+})
+export type InvoiceRemindersPatch = z.infer<typeof InvoiceRemindersPatch>

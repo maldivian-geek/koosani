@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Money, Email, Tin } from './primitives.js'
+import { Money, Email, Tin, IsoDate } from './primitives.js'
 
 export const ContactCreate = z.object({
   name: z.string().min(1).max(200),
@@ -26,3 +26,10 @@ export type CustomerCreate = z.infer<typeof CustomerCreate>
 
 export const CustomerPatch = CustomerCreate.partial()
 export type CustomerPatch = z.infer<typeof CustomerPatch>
+
+// Phase 24, UPGRADE.md G-3 — email a statement of account
+export const StatementSendBody = z.object({
+  from: IsoDate,
+  to: IsoDate,
+})
+export type StatementSendBody = z.infer<typeof StatementSendBody>

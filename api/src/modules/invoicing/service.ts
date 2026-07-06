@@ -5,6 +5,7 @@ import * as audit from '../audit/service.js'
 import * as gst from '../gst/service.js'
 import * as inventory from '../inventory/service.js'
 import * as customers from '../customers/service.js'
+import { emailQueue } from '../../lib/queues.js'
 import type { AuditCtx } from '../audit/service.js'
 import type {
   Invoice,
@@ -180,6 +181,41 @@ export async function listInvoices(
   params: ListInvoiceParams,
 ): Promise<{ rows: Invoice[]; total: number }> {
   return repo.listInvoices(businessId, params)
+}
+
+export async function listReminderCandidates(businessId: string): Promise<Invoice[]> {
+  return repo.listReminderCandidates(businessId)
+}
+
+export async function setRemindersEnabled(
+  businessId: string,
+  invoiceId: string,
+  enabled: boolean,
+  ctx: AuditCtx,
+): Promise<Invoice> {
+  return db.transaction(async (tx) => {
+    const invoice = await repo.getById(businessId, invoiceId, tx)
+    if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
+
+    const updated = await repo.updateInvoice(
+      businessId,
+      invoiceId,
+      { remindersEnabled: enabled, updatedBy: ctx.userId },
+      tx,
+    )
+
+    await audit.record(
+      'invoice.reminders_toggled',
+      'invoice',
+      invoiceId,
+      { remindersEnabled: invoice.remindersEnabled },
+      { remindersEnabled: enabled },
+      ctx,
+      tx,
+    )
+
+    return updated
+  })
 }
 
 // ─── patchDraft ───────────────────────────────────────────────────────────────
@@ -484,71 +520,85 @@ export async function addPayment(
   data: InvoicePaymentCreate,
   ctx: AuditCtx,
 ): Promise<PaymentReceived> {
-  return db.transaction(async (tx) => {
-    const invoice = await repo.getById(businessId, invoiceId, tx)
-    if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
-    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
-      throw new ValidationError('Payments can only be added to issued invoices')
-    }
+  return db
+    .transaction(async (tx) => {
+      const invoice = await repo.getById(businessId, invoiceId, tx)
+      if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
+      if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+        throw new ValidationError('Payments can only be added to issued invoices')
+      }
 
-    // Reject overpayment — paid_amount must never exceed the invoice total
-    // (UPGRADE.md F-15). Customer credit/advance balances are a separate,
-    // not-yet-built feature (UPGRADE.md Phase 27).
-    const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
-    if (new Decimal(data.amount).gt(outstanding)) {
-      throw new ValidationError(
-        `Payment of ${data.amount} exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+      // Reject overpayment — paid_amount must never exceed the invoice total
+      // (UPGRADE.md F-15). Customer credit/advance balances are a separate,
+      // not-yet-built feature (UPGRADE.md Phase 27).
+      const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
+      if (new Decimal(data.amount).gt(outstanding)) {
+        throw new ValidationError(
+          `Payment of ${data.amount} exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+        )
+      }
+
+      await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
+
+      const payment = await repo.insertPayment(
+        {
+          businessId,
+          invoiceId,
+          customerId: invoice.customerId,
+          amount: data.amount,
+          method: data.method,
+          reference: data.ref ?? null,
+          paidAt: data.paidAt,
+          createdBy: ctx.userId,
+        },
+        tx,
       )
-    }
 
-    await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
+      const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
+      const paid = new Decimal(paidAmount)
+      const total = new Decimal(invoice.total)
 
-    const payment = await repo.insertPayment(
-      {
+      let newStatus: Invoice['status']
+      if (paid.gte(total)) {
+        newStatus = 'paid'
+      } else if (paid.gt(0)) {
+        newStatus = 'partially_paid'
+      } else {
+        newStatus = 'issued'
+      }
+
+      await repo.updateInvoice(
         businessId,
         invoiceId,
-        customerId: invoice.customerId,
-        amount: data.amount,
-        method: data.method,
-        reference: data.ref ?? null,
-        paidAt: data.paidAt,
-        createdBy: ctx.userId,
-      },
-      tx,
-    )
+        { paidAmount, status: newStatus, updatedBy: ctx.userId },
+        tx,
+      )
 
-    const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
-    const paid = new Decimal(paidAmount)
-    const total = new Decimal(invoice.total)
+      await audit.record(
+        'invoice.payment_added',
+        'invoice',
+        invoiceId,
+        { paidAmount: invoice.paidAmount, status: invoice.status },
+        { paidAmount, status: newStatus, paymentId: payment.id },
+        ctx,
+        tx,
+      )
 
-    let newStatus: Invoice['status']
-    if (paid.gte(total)) {
-      newStatus = 'paid'
-    } else if (paid.gt(0)) {
-      newStatus = 'partially_paid'
-    } else {
-      newStatus = 'issued'
-    }
-
-    await repo.updateInvoice(
-      businessId,
-      invoiceId,
-      { paidAmount, status: newStatus, updatedBy: ctx.userId },
-      tx,
-    )
-
-    await audit.record(
-      'invoice.payment_added',
-      'invoice',
-      invoiceId,
-      { paidAmount: invoice.paidAmount, status: invoice.status },
-      { paidAmount, status: newStatus, paymentId: payment.id },
-      ctx,
-      tx,
-    )
-
-    return payment
-  })
+      return payment
+    })
+    .then(async (payment) => {
+      // Fire-and-forget "thank you" receipt (Phase 24, UPGRADE.md G-3). Not part
+      // of the transaction above — a failed/delayed send should never roll back
+      // a recorded payment.
+      await emailQueue.add('receipt', {
+        kind: 'receipt',
+        businessId,
+        invoiceId,
+        paymentId: payment.id,
+        userId: ctx.userId,
+      })
+      return payment
+    })
 }
 
 // ─── reversePayment ───────────────────────────────────────────────────────────

@@ -44,6 +44,23 @@ export async function getLinesByInvoice(
     .orderBy(invoiceLines.sortOrder)
 }
 
+// Candidates for the daily reminders scan (Phase 24, UPGRADE.md G-4) — issued
+// or partially-paid, opted in, with a due date. The cron computes the actual
+// day-offset match; this just narrows the scan to invoices that could match.
+export async function listReminderCandidates(businessId: string): Promise<Invoice[]> {
+  return db
+    .select()
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.businessId, businessId),
+        eq(invoices.remindersEnabled, true),
+        or(eq(invoices.status, 'issued'), eq(invoices.status, 'partially_paid')),
+        sql`${invoices.dueDate} IS NOT NULL`,
+      ),
+    )
+}
+
 export type ListInvoiceParams = {
   status: string | undefined
   customerId: string | undefined

@@ -9,8 +9,18 @@ import Textarea from 'primevue/textarea'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
+import Checkbox from 'primevue/checkbox'
 import { useConfirm } from 'primevue/useconfirm'
-import { ArrowLeft, Download, Pencil, FileX, CheckCircle, Plus, Trash2 } from 'lucide-vue-next'
+import {
+  ArrowLeft,
+  Download,
+  Mail,
+  Pencil,
+  FileX,
+  CheckCircle,
+  Plus,
+  Trash2,
+} from 'lucide-vue-next'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import MoneyInput from '../../../shared/ui/MoneyInput.vue'
@@ -61,6 +71,7 @@ interface Invoice {
   total: string
   paidAmount: string
   createdAt: string
+  remindersEnabled: boolean
   lines: InvoiceLine[]
   payments: Payment[]
   creditNotes: CreditNote[]
@@ -113,6 +124,11 @@ const voidDialogOpen = ref(false)
 const voidReason = ref('')
 const voiding = ref(false)
 const voidError = ref('')
+
+function resetVoidDialog() {
+  voidReason.value = ''
+  voidError.value = ''
+}
 
 async function submitVoid() {
   voidError.value = ''
@@ -275,6 +291,51 @@ async function downloadPdf() {
   }
 }
 
+// ─── Send email ───────────────────────────────────────────────────────────────
+const sending = ref(false)
+
+async function sendEmail() {
+  sending.value = true
+  try {
+    await apiFetch(`/invoices/${invoiceId.value}/send`, { method: 'POST', body: '{}' })
+    toast.add({
+      severity: 'success',
+      summary: 'Queued',
+      detail: 'The invoice email has been queued for sending.',
+      life: 3000,
+    })
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to send email.', life: 4000 })
+  } finally {
+    sending.value = false
+  }
+}
+
+// ─── Reminders toggle ─────────────────────────────────────────────────────────
+const togglingReminders = ref(false)
+
+async function toggleReminders() {
+  if (!invoice.value) return
+  togglingReminders.value = true
+  const next = !invoice.value.remindersEnabled
+  try {
+    await apiFetch(`/invoices/${invoiceId.value}/reminders`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: next }),
+    })
+    invoice.value.remindersEnabled = next
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to update reminder setting.',
+      life: 4000,
+    })
+  } finally {
+    togglingReminders.value = false
+  }
+}
+
 // ─── Load ─────────────────────────────────────────────────────────────────────
 async function load() {
   loading.value = true
@@ -356,6 +417,18 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
           <Download class="w-4 h-4" />
           PDF
         </Button>
+
+        <!-- Email (issued documents only) -->
+        <Button
+          v-if="invoice && invoice.status !== 'draft'"
+          severity="secondary"
+          outlined
+          :loading="sending"
+          @click="sendEmail"
+        >
+          <Mail class="w-4 h-4" />
+          Email
+        </Button>
       </div>
     </div>
 
@@ -416,6 +489,21 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
           <p class="text-sm text-surface-700 dark:text-surface-300 whitespace-pre-line">
             {{ invoice.notes }}
           </p>
+        </div>
+        <div
+          v-if="invoice.status !== 'draft'"
+          class="mt-4 pt-4 border-t border-surface-100 dark:border-surface-800 flex items-center gap-2"
+        >
+          <Checkbox
+            :model-value="invoice.remindersEnabled"
+            binary
+            input-id="reminders-enabled"
+            :disabled="togglingReminders"
+            @update:model-value="toggleReminders"
+          />
+          <label for="reminders-enabled" class="text-sm text-surface-700 dark:text-surface-300">
+            Send automatic payment reminders for this invoice
+          </label>
         </div>
       </div>
 
@@ -563,10 +651,7 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
     header="Void Invoice"
     modal
     :style="{ width: '30rem' }"
-    @hide="
-      voidReason = ''
-      voidError = ''
-    "
+    @hide="resetVoidDialog"
   >
     <div class="space-y-4">
       <p class="text-sm text-surface-600 dark:text-surface-400">

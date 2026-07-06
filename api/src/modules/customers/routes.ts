@@ -1,18 +1,23 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { CustomerCreate, CustomerPatch, ContactCreate } from '@koosani/shared'
+import { CustomerCreate, CustomerPatch, ContactCreate, StatementSendBody } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import { emailQueue } from '../../lib/queues.js'
 import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 
 // Per-user: 10 SOA PDF requests per minute (SECURITY.md §13.7)
 const soaPdfLimiter = createRedisRateLimiter('rl:customer-soa-pdf', 10, 60)
+
+// Per-user: 10 statement-email requests per minute — same CPU cost as the
+// SOA PDF route, plus an outbound send (Phase 24, UPGRADE.md)
+const soaSendLimiter = createRedisRateLimiter('rl:customer-soa-send', 10, 60)
 
 const ListQuery = z.object({
   q: z.string().optional(),
@@ -145,6 +150,34 @@ customerRoutes.get('/:id/soa', async (c) => {
     throw err
   }
 })
+
+// POST /customers/:id/soa/send — emails the statement PDF to the customer on
+// file (Phase 24, UPGRADE.md G-3). Fire-and-forget, like /invoices/:id/send.
+customerRoutes.post(
+  '/:id/soa/send',
+  requirePermission('customers', 'view'),
+  zValidator('json', StatementSendBody),
+  async (c) => {
+    if (!(await soaSendLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+    const { from, to } = c.req.valid('json')
+    const customerId = c.req.param('id')
+    try {
+      await svc.assertExists(customerId, c.get('businessId'))
+      await emailQueue.add('statement', {
+        kind: 'statement',
+        businessId: c.get('businessId'),
+        customerId,
+        from,
+        to,
+        userId: c.get('userId'),
+      })
+      return c.json({ queued: true }, 202)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
 
 // POST /customers/:id/contacts
 customerRoutes.post(
