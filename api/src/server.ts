@@ -23,6 +23,8 @@ import { settingsRoutes } from './modules/settings/routes.js'
 import { estimateRoutes } from './modules/estimates/routes.js'
 import { recurrenceRoutes } from './modules/recurrence/routes.js'
 import { customerCreditRoutes } from './modules/customerCredits/routes.js'
+import { portalAuthRoutes } from './modules/portalAuth/routes.js'
+import { portalRoutes } from './modules/portal/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -54,11 +56,17 @@ app.use(
   }),
 )
 
-// CORS — credentials required for httpOnly cookie transport
+// CORS — credentials required for httpOnly cookie transport. Two explicit
+// allowed origins (staff SPA + customer portal, SECURITY.md §13.14) — never a
+// wildcard or regex.
+const ALLOWED_ORIGINS = [config.FRONTEND_URL, config.PORTAL_FRONTEND_URL].filter(
+  (o): o is string => !!o,
+)
 app.use(
   '*',
   cors({
-    origin: config.FRONTEND_URL,
+    origin: (requestOrigin) =>
+      ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : undefined,
     credentials: true,
     allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Accept'],
@@ -141,6 +149,11 @@ app.route('/settings', settingsRoutes)
 app.route('/estimates', estimateRoutes)
 app.route('/recurrence-profiles', recurrenceRoutes)
 app.route('/customers', customerCreditRoutes)
+
+// Customer portal (Phase 28, UPGRADE.md G-8) — separate auth, separate
+// Variables type, mounted under its own prefix (SECURITY.md §13.14)
+app.route('/portal/auth', portalAuthRoutes)
+app.route('/portal', portalRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

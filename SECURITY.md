@@ -53,6 +53,8 @@ Transport: httpOnly cookie named "session"
 
 **Boot validation:** If `JWT_SECRET` is missing or under 32 characters, the server logs a FATAL error and exits.
 
+**Portal tokens use a separate secret entirely** (`PORTAL_JWT_SECRET`, same length/validation rule) — see §13.14. This is not the same trust boundary as staff auth and must never share a secret with it.
+
 ### JWT_SECRET rotation
 
 Set `JWT_SECRET_PREVIOUS` (optional) to the old secret. `verifyToken` tries the current secret first, falls back to previous. New tokens are always signed with the current secret.
@@ -245,10 +247,15 @@ Applied via `helmet()`:
 
 ```ts
 cors({
-  origin: process.env.FRONTEND_URL,
+  origin: (requestOrigin) =>
+    requestOrigin === config.FRONTEND_URL || requestOrigin === config.PORTAL_FRONTEND_URL
+      ? requestOrigin
+      : undefined,
   credentials: true, // required for cookie transport
 })
 ```
+
+Two allowed origins, both explicit env-configured values — never a wildcard, never a regex. `PORTAL_FRONTEND_URL` was added in Phase 28 for the customer portal (§13.14); it's a distinct origin from `FRONTEND_URL`, not a fallback.
 
 ---
 
@@ -488,3 +495,48 @@ A short list of things people sometimes add that this app explicitly does not do
 - No raw SQL endpoint, no "advanced query" feature.
 
 If any of these are added later, this section is updated first, then the feature.
+
+### 13.14 Customer portal (Phase 28, UPGRADE.md G-8)
+
+The portal is genuinely new attack surface: it is reachable by people who are **not** staff, have no `users` row, and were never vetted by an admin. Everything below treats that as the starting assumption, not an afterthought.
+
+**Separate origin.** The portal is its own deployable frontend (`portal/` workspace package, distinct from `web/`), served from its own origin in production (e.g. `portal.<domain>` vs `app.<domain>`). It talks to the same api process but never shares a build, a route prefix's implicit trust, or a cookie with the staff SPA.
+
+**Separate identity model — no passwords, ever.**
+
+- Portal users are **not** rows in `users`. They authenticate as a specific `(businessId, customerId)` pair via magic link only. There is no password to phish, brute-force, or reuse-attack.
+- New tables: `portal_auth_tokens` (mirrors `auth_tokens` but keyed on `customerId`, not `userId` — a customer has no `users` row to reference) and `portal_sessions` (mirrors `user_sessions`, same shape, keyed on `customerId`).
+- **Separate JWT secret** (`PORTAL_JWT_SECRET`, same `≥32 chars` boot validation as `JWT_SECRET`). A leaked staff secret cannot forge a portal session and vice versa — the two token spaces are cryptographically unrelated, not just logically separate. Portal JWT payload: `{ type: 'portal', businessId, customerId, sid }`. `type: 'portal'` is checked on every portal request in addition to signature/session validity, so a portal JWT can never be replayed against a staff route even if secrets were ever shared by mistake (they are not).
+- **Session lifetime: 2 hours** (vs. staff's 8) — a portal session only needs to last long enough to review a document or two; shorter default lifetime reduces the exposure window from a stolen device/link.
+- Magic-link request takes only an email address (no business context — the portal doesn't ask "which business," since a customer shouldn't need to know or care how Koosani's multi-tenancy works). The backend looks up **every** `customers` row across **every** business matching that email case-insensitively and not soft-deleted, and sends one magic-link email per match — each scoped to exactly one `(businessId, customerId)`. A customer who transacts with two Koosani-hosted businesses under the same email gets two separate emails and two separate sessions; there is no cross-business portal session.
+- Same token mechanics as staff magic links: single-use, consumed via `DELETE ... RETURNING` (atomic, no double-consume), 15-minute expiry, SHA-256 hash stored (never the plaintext token).
+- Same enumeration protection as existing auth flows: the request endpoint always returns 204 regardless of whether any customer matched.
+
+**Rate limits** (Redis-backed, `createRedisRateLimiter`, same infra as staff auth):
+
+| Endpoint                              | Limiter            | Window | Max |
+| ------------------------------------- | ------------------ | ------ | --- |
+| `POST /portal/auth/magic-link`        | per-IP + per-email | 15 min | 5   |
+| `POST /portal/auth/magic-link/verify` | per-IP             | 15 min | 5   |
+| `GET /portal/invoices/:id/pdf`        | per-portal-session | 1 min  | 20  |
+| `GET /portal/estimates/:id/pdf`       | per-portal-session | 1 min  | 20  |
+| `POST /portal/estimates/:id/accept`   | per-portal-session | 1 min  | 20  |
+| `POST /portal/estimates/:id/decline`  | per-portal-session | 1 min  | 20  |
+
+**Read-only by design, with exactly one mutation surface.** Every portal `GET` route is scoped to the authenticated `(businessId, customerId)` — the repository/service calls underneath are the _same_ customer-facing functions the staff SPA uses (`invoicing.getInvoice`, `estimates.getEstimate`, `customers.buildSoa`), called with the portal session's own IDs, never IDs from the request. There is exactly one write surface: `POST /portal/estimates/:id/accept` and `.../decline`, both of which re-check `estimate.customerId === session.customerId` before calling the existing `estimates.markAccepted`/`markDeclined` service functions (UPGRADE.md Phase 25 built these as staff-only; Phase 28 adds the actual customer-facing caller they were always meant to have).
+
+**Audit trail for portal-initiated mutations.** `AuditCtx.userId` is widened to `string | null` (the `audit_logs.user_id` column was always nullable at the DB level — this is the first caller that actually needs that). Portal-initiated accept/decline calls `audit.record` with `userId: null`; the acting identity is recoverable from the audited entity's own `customerId` plus the portal session's IP/user-agent, which are still recorded. This is a deliberate, minimal schema change — not a new actor-identity column — because the estimate row already carries the customer relationship.
+
+**PDF downloads.** Identical mechanism to staff PDF downloads (`files` module: signed URL, 5-minute expiry, `scan_result='clean'` required, `Content-Disposition: attachment`) — no portal-specific exception. The portal never proxies or streams a file itself.
+
+**CORS.** `cors()`'s `origin` option becomes a function checking against **both** `FRONTEND_URL` (staff SPA) and `PORTAL_FRONTEND_URL` (portal SPA) — an explicit allow-list of exactly two origins, not a wildcard or regex.
+
+**CSP.** Unchanged mechanism (`secureHeaders()` in the same api process serves both origins' API responses) — the portal frontend's own hosting is responsible for its own CSP on its own static assets, same as the staff SPA's hosting is today. If the portal is later served from the same api process as static files (not the current plan), this section must be revisited.
+
+**What the portal explicitly does not get**, to keep the threat model narrow:
+
+- No password login, no account settings, no profile editing.
+- No visibility into any other customer's data, any supplier data, or any internal report.
+- No ability to create, edit, or void an invoice — accept/decline on a `sent` estimate is the only state transition a portal session can trigger.
+- No file upload surface (customers cannot push data into the system via the portal).
+- No API tokens, no webhook callbacks — §13.13's rules apply to the portal exactly as they apply to the staff app.

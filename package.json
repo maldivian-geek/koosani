@@ -11,6 +11,7 @@
     "dev": "pnpm -r --parallel run dev",
     "dev:api": "pnpm --filter @koosani/api dev",
     "dev:web": "pnpm --filter @koosani/web dev",
+    "dev:portal": "pnpm --filter @koosani/portal dev",
     "dev:worker": "pnpm --filter @koosani/api dev:worker",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",

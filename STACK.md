@@ -95,6 +95,22 @@
 
 ---
 
+## Customer portal (portal)
+
+Phase 28, UPGRADE.md G-8; SECURITY.md §13.14. A **separate** pnpm workspace package (`/portal`), not a route added to `web/` — deliberately its own deployable frontend on its own origin/port (5174 dev). Reuses the identical stack as `web/` minus what it doesn't need:
+
+| Package                                      | Purpose                                                                           |
+| -------------------------------------------- | --------------------------------------------------------------------------------- |
+| `vue`, `vue-router`, `pinia`                 | Same as `web/`                                                                    |
+| `primevue`, `@primeuix/themes`, `primeicons` | Same theme preset as `web/`, kept in sync so the portal reads as the same product |
+| `tailwindcss` v4 + `@tailwindcss/vite`       | Same as `web/`                                                                    |
+| `zod`                                        | Shared schemas                                                                    |
+| `vite`, `vue-tsc`, `typescript`              | Same build/typecheck setup as `web/`                                              |
+
+**Deliberately not included**: `chart.js`/`vue-chartjs` (no charts in a 5-view read-only portal), `date-fns`/`@vueuse/core` (not needed at this scope), `playwright` (no E2E suite yet — flag if the portal grows past the current small surface). Add these only when a concrete portal feature needs them, not preemptively.
+
+---
+
 ## Shared package
 
 A workspace package (`/shared`) used by both api and web. Contains:

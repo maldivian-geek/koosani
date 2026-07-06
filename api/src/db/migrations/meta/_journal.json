@@ -50,6 +50,13 @@
       "when": 1783330468067,
       "tag": "0006_phase27_customer_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783332795883,
+      "tag": "0007_phase28_customer_portal",
+      "breakpoints": true
     }
   ]
 }

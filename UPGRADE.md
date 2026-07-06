@@ -164,8 +164,9 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 ### Phase 28 — Customer portal — G-8 ⚠️ threat-model change
 
-- Separate portal origin + separate auth (magic-link only, no passwords), read-only invoice/estimate/statement views, estimate accept/decline, PDF downloads via short-lived signed URLs.
-- **SECURITY.md must be updated first** (new public surface, new rate limits, portal session model). Treat as its own security review.
+- ✅ Done: Separate portal origin (`portal/` workspace package) + separate auth (magic-link only, no passwords, own JWT secret/session table — SECURITY.md §13.14), read-only invoice/estimate/statement views, estimate accept/decline (`POST /portal/estimates/:id/accept`/`decline`), PDF downloads via the existing short-lived signed-URL mechanism.
+- ✅ Done: SECURITY.md was updated first, as required — new §13.14, plus JWT/CORS sections revised in place — before any portal code was written.
+- Note: no account settings, no file uploads, no payment on the portal in this phase — see SECURITY.md §13.14's explicit scope boundary. Online payment is Phase 29.
 
 ### Phase 29 — Online payments & payment links — G-9 ⚠️ requires revising SECURITY.md §13.13
 

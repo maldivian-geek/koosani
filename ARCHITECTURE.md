@@ -76,6 +76,8 @@ Each module is a folder under `api/src/modules/` and `web/src/modules/`. A modul
 | `invoicing`       | Sales invoices, credit notes, payments received, customer SOA                                                                                                            |
 | `estimates`       | Quotes: draft → sent → accepted/declined/expired; convert-to-invoice (Phase 25) — see §4.6                                                                               |
 | `recurrence`      | Recurring invoice profiles + template lines; daily cron generates draft/issued invoices (Phase 26) — see §4.7                                                            |
+| `portalAuth`      | Customer portal auth — magic-link only, separate JWT secret/session table from staff `auth` (Phase 28) — see §4.9                                                        |
+| `portal`          | Read-only customer-facing views (own invoices/estimates/statement) + estimate accept/decline (Phase 28) — see §4.9                                                       |
 | `customerCredits` | Append-only credit ledger (overpayments, advances, voided-invoice grants, applications, refunds) — see §4.8                                                              |
 | `purchases`       | Supplier invoices (bills), payments made, supplier SOA                                                                                                                   |
 | `po`              | Purchase orders, goods receipt notes (GRN), PO→bill matching                                                                                                             |
@@ -164,6 +166,16 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
 - **Write-off** (`POST /invoices/:id/write-off`) is a thin wrapper over `invoicing.addPayment` with `method: 'write_off'` for the exact outstanding amount — reuses the same `paidAmount`/status sync rather than a parallel code path. No new `invoice_status` enum value was added (a written-off invoice still shows `paid`); reports that need to exclude non-cash revenue should filter on `payments_received.method != 'write_off'`. The "thank you for your payment" receipt email is skipped for this method (see `invoicing.addPayment`'s `.then()`), since no real payment occurred.
 - Advances and refunds (`POST /customers/:id/credits/advance`, `.../refund`) are manual, staff-entered ledger rows with no invoice/payment reference — used for retainers paid before any invoice exists, and for physically returning credit as cash.
 
+### 4.9 Customer portal — separate identity, separate trust boundary (Phase 28, UPGRADE.md G-8)
+
+Full threat model in SECURITY.md §13.14; this section covers the structural shape.
+
+- **Not staff auth with a filter bolted on — a parallel system.** Portal identities are `(businessId, customerId)` pairs, never `users` rows. `portalAuth` mirrors `auth`'s magic-link mechanics (hashed single-use token, atomic `DELETE ... RETURNING` consume, 15-minute expiry) but owns its own tables (`portal_auth_tokens`, `portal_sessions`), its own JWT secret (`PORTAL_JWT_SECRET`), its own cookie (`portal_session`), and a discriminated payload (`type: 'portal'`) — a leaked staff secret or a staff JWT presented under the portal cookie name is rejected outright, not merely denied by a permission check.
+- **The `portal` module has no domain logic of its own.** Every route calls straight into the existing `invoicing`/`estimates`/`customers` services — the same functions the staff SPA uses — then re-checks the fetched entity's `customerId` against the authenticated session before returning it. This is a deliberate choice: duplicating query logic per-audience would drift; a single ownership check at the portal route layer is the only new code path, and it's the same shape on every route (fetch → compare `customerId` → 404 if mismatched, never 403 — existence of another customer's document is not confirmed).
+- **`AuditRecordCtx` vs `AuditCtx`.** Portal-initiated mutations (estimate accept/decline) have no staff actor. Rather than widen the pervasive `AuditCtx.userId` (reused everywhere for `createdBy`/`updatedBy` NOT NULL columns), `audit.record` alone accepts a wider `AuditRecordCtx` (`userId: string | null`). A real `AuditCtx` is still assignable to it, so this is additive — only the portal's own call sites construct a `userId: null` ctx. Where a DB column still needs a non-null actor (`estimates.updated_by`), a null portal actor falls back to the estimate's own `createdBy`; the audit log itself correctly shows no staff involvement.
+- **Two Hono `Variables` shapes, never merged.** `AppEnv` (staff) and `PortalEnv` (portal) share no keys — `requirePortalAuth` sets `portalBusinessId`/`portalCustomerId`/`portalSid`, `requireAuth` sets `userId`/`businessId`/`role`/etc. A route mounted under `/portal` is typed against `PortalEnv` only; it cannot accidentally read a staff variable that was never set.
+- **Separate deployable frontend.** `portal/` is its own pnpm workspace package (own `package.json`, Vite config, port 5174) — not a route added to `web/`. It imports nothing from `web/` and vice versa; the only shared code is `@koosani/shared` (Zod schemas, primitives), same as `web`/`api` already share.
+
 ---
 
 ## 5. Database schema (overview)
@@ -212,6 +224,8 @@ All tables have `business_id` (multi-tenant key), `created_at`, `updated_at`, `c
 ---
 
 ## 7. Frontend architecture (web)
+
+> This section describes `web/`, the staff SPA. The customer portal (`portal/`, Phase 28 — §4.9) is a **separate** pnpm workspace package with its own Vite config, router, and Pinia store; it follows the same conventions below but is not part of `web/` and shares no runtime code with it beyond `@koosani/shared`.
 
 - Vue 3 + `<script setup lang="ts">` everywhere — TypeScript strict, no JS source. No Options API.
 - **Pinia** stores: one per module (`useAuthStore`, `useCustomersStore`, `useInvoicingStore`, …) plus a global `useUiStore` (theme/dark-mode preference, layout state). Stores own server-state caching and optimistic update logic.
@@ -298,6 +312,14 @@ Cursor-based pagination may be introduced for high-volume lists in a later phase
 │   │   ├── modules/<name>/{views,components,store,routes,api}.ts
 │   │   ├── shared/              (apiFetch, layout, ui)
 │   │   ├── router.ts
+│   │   └── main.ts
+│   └── package.json
+├── portal/                      (customer portal SPA, Phase 28 — §4.9, separate from web/)
+│   ├── src/
+│   │   ├── views/                (invoices, estimates, statement, login/verify)
+│   │   ├── stores/auth.ts
+│   │   ├── lib/apiFetch.ts
+│   │   ├── router/index.ts
 │   │   └── main.ts
 │   └── package.json
 ├── shared/                      (Zod schemas + TS types used by both)

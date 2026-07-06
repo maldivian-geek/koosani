@@ -7,7 +7,7 @@ import * as customers from '../customers/service.js'
 import * as invoicing from '../invoicing/service.js'
 import * as settings from '../settings/service.js'
 import { emailQueue } from '../../lib/queues.js'
-import type { AuditCtx } from '../audit/service.js'
+import type { AuditCtx, AuditRecordCtx } from '../audit/service.js'
 import type {
   Estimate,
   EstimateLine,
@@ -17,7 +17,14 @@ import type {
 import type { EstimateDraftCreate, EstimateDraftPatch } from '@koosani/shared'
 import { gstFor, sumGstLines, todayMv, addDays } from '@koosani/shared'
 
-export type { AuditCtx, Estimate, EstimateLine, ListEstimateParams, EstimateWithCustomer }
+export type {
+  AuditCtx,
+  AuditRecordCtx,
+  Estimate,
+  EstimateLine,
+  ListEstimateParams,
+  EstimateWithCustomer,
+}
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -285,8 +292,13 @@ export async function send(businessId: string, id: string, ctx: AuditCtx): Promi
 }
 
 // ─── markAccepted / markDeclined ──────────────────────────────────────────────
-// No customer portal yet (UPGRADE.md Phase 28) — staff record the customer's
-// response manually (e.g. after a phone call or an emailed reply).
+// Called either by staff (recording what the customer said by phone/email) or
+// by the customer portal itself (Phase 28, UPGRADE.md G-8) — the portal route
+// passes ctx.userId: null (no staff actor) after verifying the estimate
+// belongs to the authenticated portal session's customer. `updated_by` is a
+// NOT NULL column with no "no one" representation, so a null actor falls back
+// to the estimate's own creator for that column specifically; the audit log's
+// actor (which does support null) still correctly shows no staff involvement.
 
 async function transitionStatus(
   businessId: string,
@@ -294,7 +306,7 @@ async function transitionStatus(
   from: Estimate['status'][],
   to: Estimate['status'],
   action: string,
-  ctx: AuditCtx,
+  ctx: AuditRecordCtx,
 ): Promise<Estimate> {
   return db.transaction(async (tx) => {
     const estimate = await repo.getById(businessId, id, tx)
@@ -306,7 +318,7 @@ async function transitionStatus(
     const updated = await repo.updateEstimate(
       businessId,
       id,
-      { status: to, updatedBy: ctx.userId },
+      { status: to, updatedBy: ctx.userId ?? estimate.createdBy },
       tx,
     )
 
@@ -327,7 +339,7 @@ async function transitionStatus(
 export async function markAccepted(
   businessId: string,
   id: string,
-  ctx: AuditCtx,
+  ctx: AuditRecordCtx,
 ): Promise<Estimate> {
   return transitionStatus(businessId, id, ['sent'], 'accepted', 'accepted', ctx)
 }
@@ -335,7 +347,7 @@ export async function markAccepted(
 export async function markDeclined(
   businessId: string,
   id: string,
-  ctx: AuditCtx,
+  ctx: AuditRecordCtx,
 ): Promise<Estimate> {
   return transitionStatus(businessId, id, ['sent'], 'declined', 'declined', ctx)
 }

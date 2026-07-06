@@ -1,6 +1,7 @@
 packages:
   - 'api'
   - 'web'
+  - 'portal'
   - 'shared'
 allowBuilds:
   argon2: true

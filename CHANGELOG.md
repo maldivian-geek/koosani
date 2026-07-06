@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 28 — Customer portal (UPGRADE.md G-8):** A new, separately-deployed customer-facing SPA (`portal/` workspace package, own origin/port) with read-only access to a customer's own invoices, estimates, and statement of account, plus estimate accept/decline — see ARCHITECTURE.md §4.9.
+  - **SECURITY.md was revised first**, per UPGRADE.md's explicit requirement for this phase (new public-facing surface = new threat model): new §13.14 covers the separate auth model, rate limits, and CORS change; JWT and CORS sections updated in place.
+  - **Separate identity, not staff auth with a filter.** New `portalAuth` module: magic-link only (no passwords), own tables (`portal_auth_tokens`, `portal_sessions`), own JWT secret (`PORTAL_JWT_SECRET`), own cookie (`portal_session`), 2-hour session lifetime (vs. staff's 8). A leaked staff secret cannot forge a portal session and vice versa.
+  - **New `portal` module** (`GET /portal/invoices`, `/invoices/:id`, `/invoices/:id/pdf`, `/estimates`, `/estimates/:id`, `/estimates/:id/pdf`, `/statement`, `POST /estimates/:id/accept`/`decline`) — every route calls the existing `invoicing`/`estimates`/`customers` services and re-checks the fetched entity's `customerId` against the session; mismatch is 404, never 403.
+  - **Closes a gap flagged in Phase 25**: `estimates.markAccepted`/`markDeclined` existed as staff-only actions with no customer-facing caller. The portal is that caller.
+  - `AuditCtx` stays unchanged (still required everywhere it also feeds a NOT NULL `createdBy`/`updatedBy`); a new `AuditRecordCtx` widens only `audit.record`'s own parameter to accept `userId: null` for portal-initiated mutations.
+  - CORS now allows two explicit origins (`FRONTEND_URL`, `PORTAL_FRONTEND_URL`) via an allow-list function, never a wildcard.
+  - Tests: `api/src/modules/portal/__tests__/portal.test.ts`, `api/src/modules/portalAuth` coverage — magic-link multi-business fan-out, single-use consumption, cross-customer 404 isolation, a rejected staff-JWT-as-portal-session attempt, and estimate accept/decline including the null-actor audit trail.
+  - Not built: online payment on the portal (Phase 29), account settings, file uploads — see SECURITY.md §13.14's explicit scope boundary.
+
 - **Phase 27 — Customer credits, advances & write-offs (UPGRADE.md G-7):** A new `customerCredits` module — an append-only credit ledger (ARCHITECTURE.md §4.8) that properly resolves two interim Phase 20 policies.
   - **F-14 properly resolved**: `invoicing.voidInvoice` no longer rejects voiding an invoice with active payments. Each active payment is reversed and its amount granted back as customer credit, replacing the "block the void" interim policy.
   - **F-15 properly resolved**: `invoicing.addPayment` no longer rejects an overpayment. It caps the recorded payment at what's actually outstanding (so `paidAmount` still never exceeds `total`) and grants the excess as customer credit, replacing the "reject the payment" interim policy.
