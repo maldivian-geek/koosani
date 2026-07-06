@@ -16,34 +16,52 @@
 
 ## Module: `auth`
 
-| Kind         | Name                           | Signature                                                | Purpose                                   |
-| ------------ | ------------------------------ | -------------------------------------------------------- | ----------------------------------------- |
-| route public | `POST /auth/login`             | `{ email, password }` → `{ user, permissions }` + cookie | Password login                            |
-| route public | `POST /auth/magic-link`        | `{ email }` → `204`                                      | Request magic link                        |
-| route public | `POST /auth/magic-link/verify` | `{ token }` → `{ user, permissions }` + cookie           | Consume magic link                        |
-| route public | `POST /auth/forgot-password`   | `{ email }` → `204`                                      | Request reset link                        |
-| route public | `POST /auth/reset-password`    | `{ token, password }` → `204`                            | Set new password                          |
-| route public | `POST /auth/accept-invite`     | `{ token, password }` → `{ user, permissions }` + cookie | Activate invited account                  |
-| route        | `POST /auth/logout`            | `{}` → `204`                                             | Logout current session                    |
-| route        | `POST /auth/logout-all`        | `{}` → `204`                                             | Bump token_version, revoke all sessions   |
-| route        | `POST /auth/logout-others`     | `{}` → `204`                                             | Revoke all sessions except current        |
-| route        | `GET  /me`                     | `→ { ...profile, permissions, sessions }`                | Bootstrap on page load                    |
-| svc          | `auth.issueSession`            | `(user, { ip, ua }) → { sid, jwt }`                      | Used by login, magic-link, invite         |
-| svc          | `auth.verifyToken`             | `(jwt) → JwtPayload \| null`                             | Current secret then `JWT_SECRET_PREVIOUS` |
-| svc          | `auth.toProfile`               | `(user) → MeProfile`                                     | Shapes user row for API responses         |
+| Kind         | Name                           | Signature                                                                                      | Purpose                                                                                                   |
+| ------------ | ------------------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| route public | `POST /auth/login`             | `{ email, password }` → `{ user, permissions }` + cookie                                       | Password login                                                                                            |
+| route public | `POST /auth/magic-link`        | `{ email }` → `204`                                                                            | Request magic link                                                                                        |
+| route public | `POST /auth/magic-link/verify` | `{ token }` → `{ user, permissions }` + cookie                                                 | Consume magic link                                                                                        |
+| route public | `POST /auth/forgot-password`   | `{ email }` → `204`                                                                            | Request reset link                                                                                        |
+| route public | `POST /auth/reset-password`    | `{ token, password }` → `204`                                                                  | Set new password                                                                                          |
+| route public | `POST /auth/accept-invite`     | `{ token, password }` → `{ user, permissions }` + cookie                                       | Activate invited account                                                                                  |
+| route        | `POST /auth/logout`            | `{}` → `204`                                                                                   | Logout current session                                                                                    |
+| route        | `POST /auth/logout-all`        | `{}` → `204`                                                                                   | Bump token_version, revoke all sessions                                                                   |
+| route        | `POST /auth/logout-others`     | `{}` → `204`                                                                                   | Revoke all sessions except current                                                                        |
+| route        | `POST /auth/change-password`   | `{ currentPassword, newPassword }` → `204` + fresh cookie                                      | Self-service; revokes other sessions, keeps current one alive with a re-signed JWT (Phase 21, UPGRADE.md) |
+| route        | `GET  /admin/activity`         | `?event&userId&page` → `{ items, total, page, pageSize }`                                      | Admin only; joins `auth_logs` with `users` (SECURITY.md §Auth Event Logging, Phase 21)                    |
+| route        | `GET  /me`                     | `→ { ...profile, permissions, sessions }`                                                      | Bootstrap on page load; `permissions` is the real explicit-grant list as of Phase 21 (was hardcoded `[]`) |
+| svc          | `auth.issueSession`            | `(user, { ip, ua }) → { sid, jwt }`                                                            | Used by login, magic-link, invite                                                                         |
+| svc          | `auth.verifyToken`             | `(jwt) → JwtPayload \| null`                                                                   | Current secret then `JWT_SECRET_PREVIOUS`                                                                 |
+| svc          | `auth.toProfile`               | `(user) → MeProfile`                                                                           | Shapes user row for API responses                                                                         |
+| svc          | `auth.changePassword`          | `(user, currentSid, currentPassword, newPassword, ctx) → { ok, jwt } \| { ok: false, reason }` | Verifies current password, bumps token_version, re-signs current session                                  |
 
 ---
 
 ## Module: `users`
 
-| Kind  | Name                   | Signature                                                     | Purpose                           |
-| ----- | ---------------------- | ------------------------------------------------------------- | --------------------------------- |
-| route | `GET  /users`          | `?q&role&page` → `User[]`                                     | Admin only                        |
-| route | `POST /users`          | `{ email, name, role, departmentId?, permissions? }` → `User` | Creates user + sends invite       |
-| route | `PATCH /users/:id`     | `{ name?, role?, permissions? }` → `User`                     | Admin only                        |
-| route | `DELETE /users/:id`    | → `204`                                                       | Soft delete + revoke all sessions |
-| svc   | `users.create`         | `(input, actorId) → User`                                     | Generates invite token            |
-| svc   | `users.setPermissions` | `(userId, perms) → void`                                      | —                                 |
+Admin only, every route (FUNCTIONS.md convention: user management is not permission-grantable like the domain resources — SECURITY.md §Authorization Model).
+
+| Kind  | Name                | Signature                                                            | Purpose                                                                                                                        |
+| ----- | ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| route | `GET  /users`       | `?q&role&page&pageSize` → `{ items: User[], total, page, pageSize }` | List with offset pagination                                                                                                    |
+| route | `GET  /users/:id`   | → `User & { permissions: Permission[] }`                             | Detail + explicit grant list                                                                                                   |
+| route | `POST /users`       | `{ email, name, role, permissions? }` → `User`                       | Creates (no password) + emails a 7-day invite token                                                                            |
+| route | `PATCH /users/:id`  | `{ name?, role?, permissions? }` → `User & { permissions }`          | `permissions` is a full-replace of the grant set, not a diff                                                                   |
+| route | `DELETE /users/:id` | → `204`                                                              | Soft delete + revoke all sessions; rejects deleting your own account                                                           |
+| svc   | `users.create`      | `(businessId, UserCreate, ctx) → User`                               | Rejects if email already exists (global unique); generates invite token via `auth.generateToken`/`sha256`, sends `inviteEmail` |
+| svc   | `users.update`      | `(businessId, id, UserPatch, ctx) → User & { permissions }`          | —                                                                                                                              |
+| svc   | `users.softDelete`  | `(businessId, id, ctx) → void`                                       | —                                                                                                                              |
+
+---
+
+## Module: `permissions`
+
+Not exposed via routes — a thin service/repository backing `user_permissions`, called by `middleware/authorize.ts` (`hasExplicitGrant`), `users` (`replaceForUser`/`listForUser`), and `auth` (`listForUser` for `/me` and login responses).
+
+| Kind | Name                         | Signature                                                  | Purpose                                                                 |
+| ---- | ---------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| svc  | `permissions.listForUser`    | `(userId, tx?) → Permission[]`                             | Pass `tx` when reading back inside the same transaction that just wrote |
+| svc  | `permissions.replaceForUser` | `(businessId, userId, Permission[], grantedBy, tx) → void` | Deletes all existing grants for the user, then inserts the new set      |
 
 ---
 
@@ -252,10 +270,11 @@ All `reports.*` functions are **pure read-only** — no writes, no audit rows, n
 
 ## Module: `audit`
 
-| Kind  | Name           | Signature                                                                       | Purpose                                                                |
-| ----- | -------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| route | `GET /audit`   | `?entityType&entityId&userId&from&to&page` → `AuditRow[]`                       | Admin only; not yet implemented                                        |
-| svc   | `audit.record` | `(action, entityType, entityId, before, after, ctx: AuditCtx, tx: DbTx) → void` | The only writer of `audit_logs`. Always called inside the mutating tx. |
+| Kind  | Name                  | Signature                                                                                            | Purpose                                                                          |
+| ----- | --------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| route | `GET /audit`          | `?entityType&entityId&userId&from&to&page&pageSize` → `{ items: AuditLog[], total, page, pageSize }` | Admin only (Phase 21, UPGRADE.md)                                                |
+| svc   | `audit.record`        | `(action, entityType, entityId, before, after, ctx: AuditCtx, tx: DbTx) → void`                      | The only writer of `audit_logs`. Always called inside the mutating tx.           |
+| repo  | `audit.listAuditLogs` | `(businessId, params) → { rows: AuditLog[], total }`                                                 | Read-only, offset-paginated, filterable by entityType/entityId/userId/date range |
 
 `AuditCtx = { userId: string; businessId: string; ip: string; ua?: string }`
 
@@ -294,6 +313,7 @@ Detailed Zod schemas live in `/shared/src/*.ts`. Names you'll see in this file:
 | `shared/src/customers.ts` | `CustomerCreate`, `CustomerPatch`, `ContactCreate`         |
 | `shared/src/suppliers.ts` | `SupplierCreate`, `SupplierPatch`, `SupplierContactCreate` |
 | `shared/src/items.ts`     | `ItemCreate`, `ItemPatch`, `ItemCategoryCreate`            |
+| `shared/src/users.ts`     | `UserCreate`, `UserPatch`, `ChangePasswordBody` (Phase 21) |
 
 ---
 

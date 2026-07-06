@@ -1,16 +1,20 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import { setCookie, deleteCookie } from 'hono/cookie'
 import {
   RateLimiterRedis,
   RateLimiterMemory,
   type RateLimiterAbstract,
 } from 'rate-limiter-flexible'
+import { ChangePasswordBody } from '@koosani/shared'
 import { redis } from '../../lib/redis.js'
 import { getRealIp } from '../../lib/ip.js'
 import { requireAuth, invalidateSessionCache } from '../../middleware/requireAuth.js'
+import { requireRole } from '../../middleware/authorize.js'
 import * as svc from './service.js'
 import * as repo from './repository.js'
+import * as permissions from '../permissions/service.js'
 import {
   loginSchema,
   magicLinkRequestSchema,
@@ -72,8 +76,13 @@ function clearSessionCookie(c: Parameters<typeof deleteCookie>[0]): void {
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }
 
-function userResponse(user: ReturnType<typeof svc.toProfile>) {
-  return { user, permissions: [] as unknown[] }
+// Returns the user's explicit permission grants (SECURITY.md §Authorization
+// Model) — role-based defaults (admin bypasses everything; manager gets
+// add/edit/delete by default) are policy the frontend/backend apply on top
+// of this list, not part of it.
+async function userResponse(user: ReturnType<typeof svc.toProfile>) {
+  const perms = await permissions.listForUser(user.id)
+  return { user, permissions: perms }
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -93,7 +102,7 @@ authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
   if (!result.ok) return c.json({ error: 'invalid_credentials' }, 401)
 
   setSessionCookie(c, result.jwt)
-  return c.json(userResponse(svc.toProfile(result.user)))
+  return c.json(await userResponse(svc.toProfile(result.user)))
 })
 
 // POST /auth/magic-link
@@ -127,7 +136,7 @@ authRoutes.post('/magic-link/verify', zValidator('json', magicLinkVerifySchema),
   if (!result.ok) return c.json({ error: 'invalid_token' }, 401)
 
   setSessionCookie(c, result.jwt)
-  return c.json(userResponse(svc.toProfile(result.user)))
+  return c.json(await userResponse(svc.toProfile(result.user)))
 })
 
 // POST /auth/forgot-password
@@ -179,7 +188,7 @@ authRoutes.post('/accept-invite', zValidator('json', acceptInviteSchema), async 
   if (!result.ok) return c.json({ error: 'invalid_token' }, 401)
 
   setSessionCookie(c, result.jwt)
-  return c.json(userResponse(svc.toProfile(result.user)))
+  return c.json(await userResponse(svc.toProfile(result.user)))
 })
 
 // POST /auth/logout (authenticated)
@@ -248,9 +257,72 @@ authRoutes.get('/me', requireAuth, async (c) => {
     isCurrent: s.id === c.get('sid'),
   }))
 
+  const perms = await permissions.listForUser(userId)
+
   return c.json({
     ...svc.toProfile(user),
-    permissions: [] as unknown[],
+    permissions: perms,
     sessions: sessionsOut,
   })
 })
+
+// POST /auth/change-password (authenticated, self-service)
+authRoutes.post(
+  '/change-password',
+  requireAuth,
+  zValidator('json', ChangePasswordBody),
+  async (c) => {
+    const { currentPassword, newPassword } = c.req.valid('json')
+    const userId = c.get('userId')
+    const sid = c.get('sid')
+    const ip = getRealIp(c)
+    const ua = c.req.header('user-agent') ?? ''
+
+    const user = await repo.findUserById(userId)
+    if (!user) return c.json({ error: 'unauthorized' }, 401)
+
+    const result = await svc.changePassword(user, sid, currentPassword, newPassword, { ip, ua })
+    if (!result.ok) return c.json({ error: result.reason }, 401)
+
+    invalidateSessionCache(userId) // token_version changed for every session of this user
+    setSessionCookie(c, result.jwt)
+    return c.body(null, 204)
+  },
+)
+
+// GET /admin/activity (admin only) — SECURITY.md §Auth Event Logging
+const ActivityQuery = z.object({
+  event: z
+    .enum([
+      'login_success',
+      'login_failed',
+      'logout',
+      'logout_all',
+      'logout_others',
+      'magic_link_used',
+      'password_changed',
+      'password_reset',
+      'emergency_jwt_rotation',
+    ])
+    .optional(),
+  userId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+})
+
+authRoutes.get(
+  '/admin/activity',
+  requireAuth,
+  requireRole('admin'),
+  zValidator('query', ActivityQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await repo.listActivity(c.get('businessId'), {
+      event: q.event,
+      userId: q.userId,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)

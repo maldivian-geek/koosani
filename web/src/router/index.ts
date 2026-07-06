@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth.js'
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
+    requiresAdmin?: boolean
     public?: boolean
     title?: string
   }
@@ -186,6 +187,17 @@ export const router = createRouter({
           component: () => import('../modules/reports/views/GstSummaryReportView.vue'),
           meta: { requiresAuth: true, title: 'GST Summary' },
         },
+        // Admin (Phase 21)
+        {
+          path: 'users',
+          component: () => import('../modules/users/views/UsersView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Users' },
+        },
+        {
+          path: 'audit',
+          component: () => import('../modules/audit/views/AuditLogView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Audit Log' },
+        },
       ],
     },
     {
@@ -201,6 +213,10 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
+    return { path: '/dashboard' }
   }
 
   if (to.meta.public && authStore.isAuthenticated) {

@@ -23,7 +23,7 @@ export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, HASH_OPTIONS)
 }
 
-async function verifyPassword(hash: string, password: string): Promise<boolean> {
+export async function verifyPassword(hash: string, password: string): Promise<boolean> {
   return argon2.verify(hash, password)
 }
 
@@ -68,11 +68,11 @@ export function verifyToken(token: string): JwtPayload | null {
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
-function generateToken(): string {
+export function generateToken(): string {
   return randomBytes(32).toString('hex')
 }
 
-function sha256(input: string): string {
+export function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex')
 }
 
@@ -349,6 +349,53 @@ export async function resetPassword(
   })
 
   return { ok: true }
+}
+
+// ─── Change password (self-service, authenticated) ───────────────────────────
+// Unlike resetPassword, the user stays logged in on their current device: all
+// *other* sessions are revoked, token_version is bumped (invalidating every
+// existing JWT including the current one), and a fresh JWT is signed for the
+// current session so the caller can keep working without re-authenticating.
+
+export type ChangePasswordResult =
+  | { ok: true; jwt: string }
+  | { ok: false; reason: 'invalid_current_password' }
+
+export async function changePassword(
+  user: User,
+  currentSid: string,
+  currentPassword: string,
+  newPassword: string,
+  ctx: SessionContext,
+): Promise<ChangePasswordResult> {
+  if (!user.passwordHash || !(await verifyPassword(user.passwordHash, currentPassword))) {
+    return { ok: false, reason: 'invalid_current_password' }
+  }
+
+  const passwordHash = await hashPassword(newPassword)
+  await repo.updatePasswordHash(user.id, passwordHash)
+  const newVersion = await repo.incrementTokenVersion(user.id)
+  await repo.deactivateOtherSessions(user.id, currentSid)
+
+  await repo.recordAuthLog({
+    businessId: user.businessId,
+    userId: user.id,
+    event: 'password_changed',
+    ip: ctx.ip,
+    userAgent: ctx.ua,
+  })
+
+  const jwt = signToken({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name,
+    businessId: user.businessId,
+    tokenVersion: newVersion,
+    sid: currentSid,
+  })
+
+  return { ok: true, jwt }
 }
 
 // ─── Accept invite ────────────────────────────────────────────────────────────

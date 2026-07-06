@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 21 — Users, admin & account security (UPGRADE.md F-6):**
+  - **`users` module** — did not previously exist despite being documented: `api/src/modules/users/{repository,service,routes}.ts`. `GET /users` (list, paginated), `GET /users/:id` (detail + permission grants), `POST /users` (invite — no password until accepted, 7-day token via the previously-dead `inviteEmail` helper, rejects duplicate email), `PATCH /users/:id` (name/role + full-replace permission grants), `DELETE /users/:id` (soft delete + revoke all sessions, rejects self-delete). Every route is `requireRole('admin')`.
+  - **`permissions` module** (`api/src/modules/permissions/{repository,service}.ts`) — `listForUser`/`replaceForUser` backing `user_permissions`, consumed by `users`, `auth` (`/me`, login responses), and `middleware/authorize.ts`.
+  - **`GET /audit`** implemented (`api/src/modules/audit/{repository,routes}.ts`) — was documented as "not yet implemented"; admin only, paginated, filterable by entityType/entityId/userId/date range.
+  - **`POST /auth/change-password`** — self-service password change. Unlike `resetPassword`, keeps the current device logged in: verifies the current password, bumps `token_version` (invalidating every other JWT), revokes all _other_ sessions, and re-signs a fresh JWT for the current session.
+  - **`GET /admin/activity`** (SECURITY.md §Auth Event Logging) — admin-only, joins `auth_logs` with `users`.
+  - **`GET /me` and login/magic-link/accept-invite responses now return real permission grants** instead of a hardcoded `[]`.
+  - Web: `web/src/modules/users/views/UsersView.vue` + `UserDrawer.vue` (list, invite, role + permission-grant editing, delete — admin only); `web/src/modules/audit/views/AuditLogView.vue` (filterable, before/after JSON detail dialog). Both gated by a new `requiresAdmin` route meta and hidden from the sidebar for non-admins.
+  - `web/src/stores/auth.ts` — fixed a stale `role: 'admin' | 'accountant' | 'viewer'` type (never matched the backend's actual `admin | manager | staff`); added `permissions` state and a `hasPermission(resource, action)` helper that mirrors the backend's default policy exactly (`middleware/authorize.ts`).
+  - Tests: `api/src/middleware/__tests__/authorize.test.ts`, `api/src/modules/users/__tests__/users.test.ts`, password-change cases in `auth.test.ts`.
+
+### Fixed
+
+- **`GET /users` echoed the Drizzle row directly**, including the argon2 `passwordHash` (hashed, but never meant to leave the api — ARCHITECTURE.md §6) and `tokenVersion`. Caught via a live smoke test against a real running server, not just vitest. `users.service.ts` now returns an explicit `SafeUser` allow-list projection from every route.
+- **`permissions.listForUser` read via a separate DB connection than the transaction that just wrote**, inside `users.update`'s own response construction — a read-committed-isolation bug where the PATCH response would show the _previous_ permission set instead of the one just saved. Fixed by threading `tx` through `listForUser` when reading back inside the same transaction.
+
 ### Security
 
 - **Phase 20 — Correctness & security hardening (UPGRADE.md Part 2/3):**

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { markRaw, type Component } from 'vue'
+import { markRaw, computed, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   LayoutDashboard,
@@ -12,6 +12,8 @@ import {
   ShoppingCart,
   Percent,
   BarChart2,
+  ShieldCheck,
+  ScrollText,
   LogOut,
 } from 'lucide-vue-next'
 import { useAuthStore } from '../../stores/auth.js'
@@ -26,7 +28,7 @@ interface NavGroup {
   items: NavItem[]
 }
 
-const groups: NavGroup[] = [
+const BASE_GROUPS: NavGroup[] = [
   {
     items: [{ label: 'Dashboard', to: '/dashboard', icon: markRaw(LayoutDashboard) }],
   },
@@ -57,8 +59,19 @@ const groups: NavGroup[] = [
   },
 ]
 
+const ADMIN_GROUP: NavGroup = {
+  items: [
+    { label: 'Users', to: '/users', icon: markRaw(ShieldCheck) },
+    { label: 'Audit Log', to: '/audit', icon: markRaw(ScrollText) },
+  ],
+}
+
 const route = useRoute()
 const authStore = useAuthStore()
+
+const groups = computed<NavGroup[]>(() =>
+  authStore.user?.role === 'admin' ? [...BASE_GROUPS, ADMIN_GROUP] : BASE_GROUPS,
+)
 
 function isActive(to: string): boolean {
   return route.path === to || route.path.startsWith(to + '/')

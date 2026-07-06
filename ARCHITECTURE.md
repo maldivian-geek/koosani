@@ -64,21 +64,22 @@ Database            (PostgreSQL — constraints enforce invariants)
 
 Each module is a folder under `api/src/modules/` and `web/src/modules/`. A module owns its routes, services, repositories, schemas, and Vue views. Cross-module calls go through the _service_ of the other module, never its repository.
 
-| Module      | Owns                                                                          |
-| ----------- | ----------------------------------------------------------------------------- |
-| `auth`      | Login, sessions, JWT, password reset, invite, magic link (per SECURITY.md)    |
-| `users`     | User CRUD, roles, permissions                                                 |
-| `customers` | Customer master, contact persons, billing addresses, credit terms, TIN        |
-| `suppliers` | Supplier master, contact persons, payment terms, TIN                          |
-| `items`     | Item master (SKU, name, unit, GST category, default price/cost), categories   |
-| `inventory` | Stock-on-hand per item, movement ledger, adjustments, stock counts            |
-| `invoicing` | Sales invoices, credit notes, payments received, customer SOA                 |
-| `purchases` | Supplier invoices (bills), payments made, supplier SOA                        |
-| `po`        | Purchase orders, goods receipt notes (GRN), PO→bill matching                  |
-| `gst`       | GST rate config, MIRA 205 / 206 builders, Input Tax Statement, period locking |
-| `reports`   | Cross-module reports (sales, purchases, stock valuation, P&L summary)         |
-| `files`     | Upload, virus-scan handoff, signed-URL download for PDFs and uploaded docs    |
-| `audit`     | Append-only audit log for all financial mutations                             |
+| Module        | Owns                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| `auth`        | Login, sessions, JWT, password reset, invite, magic link (per SECURITY.md)                               |
+| `users`       | User CRUD, invite issuance, role changes (implemented Phase 21; previously documented but non-existent)  |
+| `permissions` | `user_permissions` grants — no routes; consumed by `middleware/authorize.ts`, `users`, `auth` (Phase 21) |
+| `customers`   | Customer master, contact persons, billing addresses, credit terms, TIN                                   |
+| `suppliers`   | Supplier master, contact persons, payment terms, TIN                                                     |
+| `items`       | Item master (SKU, name, unit, GST category, default price/cost), categories                              |
+| `inventory`   | Stock-on-hand per item, movement ledger, adjustments, stock counts                                       |
+| `invoicing`   | Sales invoices, credit notes, payments received, customer SOA                                            |
+| `purchases`   | Supplier invoices (bills), payments made, supplier SOA                                                   |
+| `po`          | Purchase orders, goods receipt notes (GRN), PO→bill matching                                             |
+| `gst`         | GST rate config, MIRA 205 / 206 builders, Input Tax Statement, period locking                            |
+| `reports`     | Cross-module reports (sales, purchases, stock valuation, P&L summary)                                    |
+| `files`       | Upload, virus-scan handoff, signed-URL download for PDFs and uploaded docs                               |
+| `audit`       | Append-only audit log for all financial mutations                                                        |
 
 **Forbidden cross-module patterns:**
 

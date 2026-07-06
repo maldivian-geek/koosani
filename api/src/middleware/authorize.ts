@@ -3,6 +3,11 @@ import { hasExplicitGrant } from '../modules/permissions/repository.js'
 import type { AppEnv } from '../types.js'
 import type { PermissionResource, PermissionAction, Role } from '@koosani/shared'
 
+// Note: `authorize` is shared request-pipeline infrastructure (like
+// `requireAuth`), not a peer module, so it reads the `permissions` module's
+// repository directly for this single boolean check rather than adding a
+// service-layer indirection for a one-line query.
+
 // Role hierarchy: admin > manager > staff (SECURITY.md §Authorization Model).
 const ROLE_RANK: Record<Role, number> = { staff: 0, manager: 1, admin: 2 }
 

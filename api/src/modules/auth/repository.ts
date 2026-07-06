@@ -187,6 +187,62 @@ export function evictTouchThrottle(sid: string): void {
   touchThrottle.delete(sid)
 }
 
+// ─── Admin activity log ────────────────────────────────────────────────────────
+// GET /admin/activity (SECURITY.md §Auth Event Logging) — joins auth_logs with
+// users so the admin view can show who did what, not just a user_id.
+
+export type ActivityRow = {
+  id: string
+  event: (typeof authLogs.$inferSelect)['event']
+  ip: string
+  userAgent: string | null
+  createdAt: Date
+  userId: string | null
+  userName: string | null
+  userEmail: string | null
+}
+
+export type ListActivityParams = {
+  event: (typeof authLogs.$inferSelect)['event'] | undefined
+  userId: string | undefined
+  page: number
+  pageSize: number
+}
+
+export async function listActivity(
+  businessId: string,
+  { event, userId, page, pageSize }: ListActivityParams,
+): Promise<{ rows: ActivityRow[]; total: number }> {
+  const where = and(
+    eq(authLogs.businessId, businessId),
+    event ? eq(authLogs.event, event) : undefined,
+    userId ? eq(authLogs.userId, userId) : undefined,
+  )
+
+  const [totalRow, rows] = await Promise.all([
+    db.select({ n: count() }).from(authLogs).where(where),
+    db
+      .select({
+        id: authLogs.id,
+        event: authLogs.event,
+        ip: authLogs.ip,
+        userAgent: authLogs.userAgent,
+        createdAt: authLogs.createdAt,
+        userId: users.id,
+        userName: users.name,
+        userEmail: users.email,
+      })
+      .from(authLogs)
+      .leftJoin(users, eq(users.id, authLogs.userId))
+      .where(where)
+      .orderBy(desc(authLogs.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+  ])
+
+  return { rows, total: totalRow[0]?.n ?? 0 }
+}
+
 export async function getActiveSessions(userId: string): Promise<UserSession[]> {
   return db
     .select()

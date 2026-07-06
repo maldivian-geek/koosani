@@ -262,6 +262,82 @@ describe('auth — token_version invalidation', () => {
   })
 })
 
+// ─── Change password (self-service) ──────────────────────────────────────────
+
+describe('auth — change password', () => {
+  it('changes the password and keeps the current session usable via a fresh token', async () => {
+    const { app } = await import('../../../server.js')
+    const { user, password } = await seedUser()
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password }),
+    })
+    const cookie = loginRes.headers.get('set-cookie') ?? ''
+    const oldToken = cookie.match(/session=([^;]+)/)?.[1]
+
+    const changeRes = await app.request('/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: `session=${oldToken}` },
+      body: JSON.stringify({ currentPassword: password, newPassword: 'NewPassword2!' }),
+    })
+    expect(changeRes.status).toBe(204)
+
+    // The response sets a fresh cookie for the same session — current device stays logged in
+    const newCookie = changeRes.headers.get('set-cookie') ?? ''
+    const newToken = newCookie.match(/session=([^;]+)/)?.[1]
+    expect(newToken).toBeTruthy()
+    expect(newToken).not.toBe(oldToken)
+
+    const meWithNewToken = await app.request('/me', {
+      headers: { Cookie: `session=${newToken}` },
+    })
+    expect(meWithNewToken.status).toBe(200)
+
+    // The pre-change token is now stale (token_version bumped)
+    const meWithOldToken = await app.request('/me', {
+      headers: { Cookie: `session=${oldToken}` },
+    })
+    expect(meWithOldToken.status).toBe(401)
+
+    // The new password logs in; the old one no longer works
+    const reloginOld = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password }),
+    })
+    expect(reloginOld.status).toBe(401)
+
+    const reloginNew = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password: 'NewPassword2!' }),
+    })
+    expect(reloginNew.status).toBe(200)
+  })
+
+  it('rejects a wrong current password', async () => {
+    const { app } = await import('../../../server.js')
+    const { user, password } = await seedUser()
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password }),
+    })
+    const cookie = loginRes.headers.get('set-cookie') ?? ''
+    const token = cookie.match(/session=([^;]+)/)?.[1]
+
+    const res = await app.request('/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: `session=${token}` },
+      body: JSON.stringify({ currentPassword: 'WrongPassword!', newPassword: 'NewPassword2!' }),
+    })
+    expect(res.status).toBe(401)
+  })
+})
+
 // ─── /me endpoint ────────────────────────────────────────────────────────────
 
 describe('auth — /me', () => {
