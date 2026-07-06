@@ -16,6 +16,7 @@ export interface Customer {
   creditTermsDays: number | null
   creditLimit: string | null
   notes: string | null
+  currency: 'MVR' | 'USD' | 'EUR' | 'GBP'
   createdAt: string
   updatedAt: string
   deletedAt: string | null

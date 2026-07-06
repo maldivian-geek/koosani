@@ -74,6 +74,10 @@ export interface GstBillAgg {
 }
 
 // ─── Sales register ───────────────────────────────────────────────────────────
+// Sales-side reports sum the *_mvr line columns, not the document-currency
+// ones — reports are always in the business's home currency (ARCHITECTURE.md
+// §4.10). A no-op for MVR-only businesses since the Mvr columns equal their
+// document-currency counterparts exactly when exchangeRate is 1.
 
 export async function salesInvoicesByCustomer(
   businessId: string,
@@ -85,9 +89,9 @@ export async function salesInvoicesByCustomer(
       groupKey: customers.id,
       label: customers.name,
       docCount: sql<string>`COUNT(DISTINCT ${invoices.id})::text`,
-      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal} - ${invoiceLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr} - ${invoiceLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr}), '0')`,
     })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
@@ -112,9 +116,9 @@ export async function salesCNByCustomer(
   return db
     .select({
       groupKey: creditNotes.customerId,
-      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal} - ${creditNoteLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr} - ${creditNoteLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr}), '0')`,
     })
     .from(creditNoteLines)
     .innerJoin(creditNotes, eq(creditNoteLines.creditNoteId, creditNotes.id))
@@ -140,9 +144,9 @@ export async function salesInvoicesByItem(
       groupKey: sql<string>`COALESCE(${invoiceLines.itemId}::text, ${invoiceLines.description})`,
       label: sql<string>`MAX(${invoiceLines.description})`,
       docCount: sql<string>`COUNT(DISTINCT ${invoices.id})::text`,
-      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal} - ${invoiceLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr} - ${invoiceLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr}), '0')`,
     })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
@@ -168,9 +172,9 @@ export async function salesCNByItem(
   return db
     .select({
       groupKey: sql<string>`COALESCE(${creditNoteLines.itemId}::text, ${creditNoteLines.description})`,
-      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal} - ${creditNoteLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr} - ${creditNoteLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr}), '0')`,
     })
     .from(creditNoteLines)
     .innerJoin(creditNotes, eq(creditNoteLines.creditNoteId, creditNotes.id))
@@ -198,9 +202,9 @@ export async function salesInvoicesByDay(
       groupKey: sql<string>`${invoices.issueDate}::text`,
       label: sql<string>`${invoices.issueDate}::text`,
       docCount: sql<string>`COUNT(DISTINCT ${invoices.id})::text`,
-      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal} - ${invoiceLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr} - ${invoiceLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr}), '0')`,
     })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
@@ -225,9 +229,9 @@ export async function salesCNByDay(
   return db
     .select({
       groupKey: sql<string>`${creditNotes.issueDate}::text`,
-      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal} - ${creditNoteLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmount}), '0')`,
-      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal}), '0')`,
+      subtotal: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr} - ${creditNoteLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmountMvr}), '0')`,
+      total: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr}), '0')`,
     })
     .from(creditNoteLines)
     .innerJoin(creditNotes, eq(creditNoteLines.creditNoteId, creditNotes.id))
@@ -380,6 +384,10 @@ export async function allItems(businessId: string): Promise<ItemRow[]> {
 // Returns one row per outstanding invoice as of asOf (issue_date <= asOf,
 // status is issued or partially_paid with remaining balance > 0).
 
+// Uses total_mvr/paid_amount_mvr, not the document-currency columns — aged
+// receivables is a header-level (not line-level) read, and reports are
+// always in the business's home currency (ARCHITECTURE.md §4.10). A no-op
+// for MVR-only businesses.
 export async function agedReceivablesRaw(businessId: string, asOf: string): Promise<AgedRow[]> {
   return db
     .select({
@@ -388,7 +396,7 @@ export async function agedReceivablesRaw(businessId: string, asOf: string): Prom
       docId: invoices.id,
       docNumber: invoices.invoiceNumber,
       dueDate: sql<string | null>`${invoices.dueDate}::text`,
-      outstanding: sql<string>`(${invoices.total} - ${invoices.paidAmount})::text`,
+      outstanding: sql<string>`(${invoices.totalMvr} - ${invoices.paidAmountMvr})::text`,
     })
     .from(invoices)
     .innerJoin(customers, eq(invoices.customerId, customers.id))
@@ -399,7 +407,7 @@ export async function agedReceivablesRaw(businessId: string, asOf: string): Prom
         isNotNull(invoices.issueDate),
         lte(invoices.issueDate, asOf),
         // only include invoices where there is actually an outstanding balance
-        sql`${invoices.total} > ${invoices.paidAmount}`,
+        sql`${invoices.totalMvr} > ${invoices.paidAmountMvr}`,
       ),
     )
     .orderBy(customers.name, invoices.dueDate) as unknown as AgedRow[]
@@ -442,8 +450,8 @@ export async function gstSummaryInvoiceLines(
   return db
     .select({
       category: invoiceLines.gstCategory,
-      netAmount: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal} - ${invoiceLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmount}), '0')`,
+      netAmount: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr} - ${invoiceLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmountMvr}), '0')`,
     })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
@@ -467,8 +475,8 @@ export async function gstSummaryCNLines(
   return db
     .select({
       category: creditNoteLines.gstCategory,
-      netAmount: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal} - ${creditNoteLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmount}), '0')`,
+      netAmount: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr} - ${creditNoteLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmountMvr}), '0')`,
     })
     .from(creditNoteLines)
     .innerJoin(creditNotes, eq(creditNoteLines.creditNoteId, creditNotes.id))

@@ -1,6 +1,7 @@
 ﻿import { boolean, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, auditedBy } from './helpers'
 import { businesses } from './businesses'
+import { currencyCodeEnum } from './enums'
 
 export const customers = pgTable('customers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -15,6 +16,9 @@ export const customers = pgTable('customers', {
   creditTermsDays: numeric('credit_terms_days', { precision: 5, scale: 0 }).default('30').notNull(),
   creditLimit: numeric('credit_limit', { precision: 15, scale: 2 }),
   notes: text('notes'),
+  // Default document currency for new invoices/estimates (Phase 30, UPGRADE.md
+  // G-10) — can still be overridden per-document at creation time.
+  currency: currencyCodeEnum('currency').default('MVR').notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   ...timestamps,
   ...auditedBy,

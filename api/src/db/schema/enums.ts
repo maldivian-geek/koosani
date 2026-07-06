@@ -129,3 +129,9 @@ export const creditLedgerKindEnum = pgEnum('credit_ledger_kind', [
   'applied_to_invoice', // - credit consumed against an invoice's outstanding balance
   'refunded', // - money physically paid back to the customer
 ])
+
+// Multi-currency (Phase 30, UPGRADE.md G-10). MVR is the functional currency
+// (MIRA GST reporting is always MVR, ARCHITECTURE.md's MIRAconnect note) and
+// is always a valid document currency alongside these. Starter set for the
+// Maldives SME market — extend as customers request more.
+export const currencyCodeEnum = pgEnum('currency_code', ['MVR', 'USD', 'EUR', 'GBP'])

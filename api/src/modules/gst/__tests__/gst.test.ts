@@ -587,6 +587,10 @@ async function seedReturnFixture() {
     .returning()
   if (!inv1) throw new Error('seed: no inv1')
 
+  // MVR-denominated (exchangeRate 1) — *Mvr columns mirror gstAmount/lineTotal
+  // exactly, same as a real issue() would produce (Phase 30, UPGRADE.md
+  // G-10). The GST builder now sums the Mvr columns, not the document-
+  // currency ones.
   await appDb.insert(schema.invoiceLines).values([
     {
       businessId: business.id,
@@ -598,6 +602,8 @@ async function seedReturnFixture() {
       gstRate: '0.0800',
       gstAmount: '80.00',
       lineTotal: '1080.00',
+      gstAmountMvr: '80.00',
+      lineTotalMvr: '1080.00',
       sortOrder: 0,
       createdBy: user.id,
       updatedBy: user.id,
@@ -612,6 +618,8 @@ async function seedReturnFixture() {
       gstRate: '0.0000',
       gstAmount: '0.00',
       lineTotal: '200.00',
+      gstAmountMvr: '0.00',
+      lineTotalMvr: '200.00',
       sortOrder: 1,
       createdBy: user.id,
       updatedBy: user.id,
@@ -648,6 +656,8 @@ async function seedReturnFixture() {
     gstRate: '0.1700',
     gstAmount: '170.00',
     lineTotal: '1170.00',
+    gstAmountMvr: '170.00',
+    lineTotalMvr: '1170.00',
     sortOrder: 0,
     createdBy: user.id,
     updatedBy: user.id,
@@ -683,6 +693,8 @@ async function seedReturnFixture() {
     gstRate: '0.0800',
     gstAmount: '8.00',
     lineTotal: '108.00',
+    gstAmountMvr: '8.00',
+    lineTotalMvr: '108.00',
     sortOrder: 0,
     createdBy: user.id,
     updatedBy: user.id,

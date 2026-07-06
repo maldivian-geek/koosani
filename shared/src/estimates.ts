@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { IsoDate, Qty, Money, GstCategory } from './primitives.js'
+import { IsoDate, Qty, Money, GstCategory, CurrencyCode } from './primitives.js'
 
 // Estimates / quotes (Phase 25, UPGRADE.md G-5) — mirrors invoicing's draft
 // pattern (shared/src/invoicing.ts's InvoiceLineCreate).
@@ -19,6 +19,9 @@ export const EstimateDraftCreate = z.object({
   expiryDate: IsoDate.optional(),
   notes: z.string().max(2000).optional(),
   lines: z.array(EstimateLineCreate).min(1),
+  // Multi-currency (Phase 30, UPGRADE.md G-10) — defaults to the customer's
+  // own currency if omitted.
+  currency: CurrencyCode.optional(),
 })
 export type EstimateDraftCreate = z.infer<typeof EstimateDraftCreate>
 

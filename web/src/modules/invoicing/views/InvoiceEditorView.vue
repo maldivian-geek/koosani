@@ -19,6 +19,7 @@ interface CustomerOption {
   id: string
   name: string
   tin: string | null
+  currency?: string
 }
 
 interface ItemOption {
@@ -52,8 +53,22 @@ const customerQuery = ref('')
 const customerSuggestions = ref<CustomerOption[]>([])
 const dueDate = ref<Date | null>(null)
 const notes = ref('')
+const currency = ref('MVR')
 const saving = ref(false)
 const loading = ref(false)
+
+// Multi-currency (Phase 30, UPGRADE.md G-10) — fixed at draft creation,
+// mirroring the backend (currency isn't part of InvoiceDraftPatch).
+const currencyOptions = [
+  { label: 'MVR', value: 'MVR' },
+  { label: 'USD', value: 'USD' },
+  { label: 'EUR', value: 'EUR' },
+  { label: 'GBP', value: 'GBP' },
+]
+
+function onCustomerSelect(option: CustomerOption) {
+  if (!isEdit.value) currency.value = option.currency ?? 'MVR'
+}
 
 let lineKey = 0
 const lines = ref<DraftLine[]>([
@@ -191,6 +206,7 @@ onMounted(async () => {
       dueDate: string | null
       notes: string | null
       status: string
+      currency: string
       lines: Array<{
         id: string
         itemId: string | null
@@ -217,6 +233,7 @@ onMounted(async () => {
     customerQuery.value = inv.customerName
     dueDate.value = inv.dueDate ? new Date(inv.dueDate) : null
     notes.value = inv.notes ?? ''
+    currency.value = inv.currency
     lines.value = inv.lines.map((l) => ({
       _key: lineKey++,
       itemId: l.itemId,
@@ -268,6 +285,7 @@ async function save() {
     customerId: customer.value!.id,
     dueDate: dueDateStr,
     notes: notes.value || undefined,
+    currency: currency.value as InvoiceDraftCreate['currency'],
     lines: lines.value.map((l, i) => ({
       itemId: l.itemId ?? undefined,
       description: l.description,
@@ -349,6 +367,7 @@ async function save() {
               placeholder="Search customers…"
               :class="{ 'p-invalid': errors.customer }"
               @complete="searchCustomers"
+              @option-select="(e) => onCustomerSelect(e.value as CustomerOption)"
             >
               <template #option="{ option }">
                 <div class="flex flex-col">
@@ -373,6 +392,20 @@ async function save() {
               placeholder="Select date"
               show-icon
               show-button-bar
+            />
+          </div>
+
+          <!-- Currency (Phase 30, UPGRADE.md G-10) — fixed at draft creation -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-sm font-medium text-surface-700 dark:text-surface-300"
+              >Currency</label
+            >
+            <Select
+              v-model="currency"
+              :options="currencyOptions"
+              option-label="label"
+              option-value="value"
+              :disabled="isEdit"
             />
           </div>
 

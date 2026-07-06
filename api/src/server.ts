@@ -25,6 +25,7 @@ import { recurrenceRoutes } from './modules/recurrence/routes.js'
 import { customerCreditRoutes } from './modules/customerCredits/routes.js'
 import { portalAuthRoutes } from './modules/portalAuth/routes.js'
 import { portalRoutes } from './modules/portal/routes.js'
+import { exchangeRateRoutes } from './modules/exchangeRates/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -154,6 +155,9 @@ app.route('/customers', customerCreditRoutes)
 // Variables type, mounted under its own prefix (SECURITY.md §13.14)
 app.route('/portal/auth', portalAuthRoutes)
 app.route('/portal', portalRoutes)
+
+// Multi-currency (Phase 30, UPGRADE.md G-10)
+app.route('/exchange-rates', exchangeRateRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

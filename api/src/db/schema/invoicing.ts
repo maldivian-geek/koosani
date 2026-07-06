@@ -11,7 +11,7 @@
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, invoiceStatusEnum, creditNoteStatusEnum } from './enums'
+import { gstCategoryEnum, invoiceStatusEnum, creditNoteStatusEnum, currencyCodeEnum } from './enums'
 import { businesses } from './businesses'
 import { customers } from './customers'
 import { items } from './items'
@@ -34,6 +34,18 @@ export const invoices = pgTable(
     gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).default('0').notNull(),
     total: numeric('total', { precision: 15, scale: 2 }).default('0').notNull(),
     paidAmount: numeric('paid_amount', { precision: 15, scale: 2 }).default('0').notNull(),
+    // Multi-currency (Phase 30, UPGRADE.md G-10; ARCHITECTURE.md §4.10).
+    // subtotal/gstAmount/total/paidAmount above are always in `currency`;
+    // the *Mvr columns are the MVR-equivalent snapshot at `exchangeRate`,
+    // re-snapshotted at issue time (mirrors gst_rate's re-snapshot on issue).
+    // MVR-denominated documents always carry exchangeRate '1' and Mvr columns
+    // equal to their document-currency counterparts — no special-casing.
+    currency: currencyCodeEnum('currency').default('MVR').notNull(),
+    exchangeRate: numeric('exchange_rate', { precision: 15, scale: 6 }).default('1').notNull(),
+    subtotalMvr: numeric('subtotal_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    totalMvr: numeric('total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    paidAmountMvr: numeric('paid_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
     notes: text('notes'),
     voidReason: text('void_reason'),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
@@ -75,6 +87,11 @@ export const invoiceLines = pgTable('invoice_lines', {
   gstRate: numeric('gst_rate', { precision: 6, scale: 4 }).notNull(),
   gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).notNull(),
   lineTotal: numeric('line_total', { precision: 15, scale: 2 }).notNull(),
+  // MVR-equivalent snapshot (Phase 30, UPGRADE.md G-10) — the GST module and
+  // most reports sum line-level gstAmount/lineTotal, so the MVR columns must
+  // live here, not just on the invoice header (ARCHITECTURE.md §4.10).
+  gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+  lineTotalMvr: numeric('line_total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   ...timestamps,
   ...auditedBy,
@@ -97,6 +114,13 @@ export const creditNotes = pgTable(
     subtotal: numeric('subtotal', { precision: 15, scale: 2 }).default('0').notNull(),
     gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).default('0').notNull(),
     total: numeric('total', { precision: 15, scale: 2 }).default('0').notNull(),
+    // Multi-currency (Phase 30, UPGRADE.md G-10) — same shape as invoices,
+    // no paidAmount equivalent (credit notes aren't paid against).
+    currency: currencyCodeEnum('currency').default('MVR').notNull(),
+    exchangeRate: numeric('exchange_rate', { precision: 15, scale: 6 }).default('1').notNull(),
+    subtotalMvr: numeric('subtotal_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    totalMvr: numeric('total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
     reason: text('reason'),
     ...timestamps,
     ...auditedBy,
@@ -124,6 +148,8 @@ export const creditNoteLines = pgTable('credit_note_lines', {
   gstRate: numeric('gst_rate', { precision: 6, scale: 4 }).notNull(),
   gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).notNull(),
   lineTotal: numeric('line_total', { precision: 15, scale: 2 }).notNull(),
+  gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+  lineTotalMvr: numeric('line_total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   ...timestamps,
   ...auditedBy,
@@ -147,6 +173,13 @@ export const paymentsReceived = pgTable('payments_received', {
   paidAt: date('paid_at').notNull(),
   reversedAt: timestamp('reversed_at', { withTimezone: true }),
   reversalOfId: uuid('reversal_of_id'),
+  // Multi-currency (Phase 30, UPGRADE.md G-10) — the exchange rate on the
+  // *payment* date (which may differ from the invoice's issue-date rate),
+  // and this payment's own MVR-equivalent. The gap between amountMvr here
+  // and (amount * invoice.exchangeRate) is the realized gain/loss recorded
+  // in fx_realized_gain_loss. Always exchangeRate '1' for MVR invoices.
+  exchangeRate: numeric('exchange_rate', { precision: 15, scale: 6 }).default('1').notNull(),
+  amountMvr: numeric('amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
   ...timestamps,
   ...auditedBy,
 })

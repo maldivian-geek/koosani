@@ -196,9 +196,17 @@ onMounted(() => void load())
 
 <template>
   <div class="space-y-6 max-w-3xl">
-    <div>
-      <h2 class="text-2xl font-semibold text-surface-900">Business Settings</h2>
-      <p class="text-surface-500 mt-0.5">Profile, branding, and document defaults.</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 class="text-2xl font-semibold text-surface-900">Business Settings</h2>
+        <p class="text-surface-500 mt-0.5">Profile, branding, and document defaults.</p>
+      </div>
+      <RouterLink
+        to="/settings/exchange-rates"
+        class="text-sm text-primary-500 hover:underline mt-1"
+      >
+        Exchange rates →
+      </RouterLink>
     </div>
 
     <div v-if="!loading" class="card space-y-6">

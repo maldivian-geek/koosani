@@ -6,6 +6,7 @@ import * as gst from '../gst/service.js'
 import * as customers from '../customers/service.js'
 import * as invoicing from '../invoicing/service.js'
 import * as settings from '../settings/service.js'
+import * as exchangeRates from '../exchangeRates/service.js'
 import { emailQueue } from '../../lib/queues.js'
 import type { AuditCtx, AuditRecordCtx } from '../audit/service.js'
 import type {
@@ -14,8 +15,8 @@ import type {
   ListEstimateParams,
   EstimateWithCustomer,
 } from './repository.js'
-import type { EstimateDraftCreate, EstimateDraftPatch } from '@koosani/shared'
-import { gstFor, sumGstLines, todayMv, addDays } from '@koosani/shared'
+import type { EstimateDraftCreate, EstimateDraftPatch, CurrencyCode } from '@koosani/shared'
+import { gstFor, sumGstLines, todayMv, addDays, money, exchangeRate } from '@koosani/shared'
 
 export type {
   AuditCtx,
@@ -67,6 +68,26 @@ export function computeTotals(
   return { subtotal: totalTaxable, gstAmount: totalGst, total: totalGross }
 }
 
+// Multi-currency (Phase 30, UPGRADE.md G-10) — mirrors invoicing's own
+// computeLineMvr/computeMvrTotals (ARCHITECTURE.md §4.10).
+type LineMvr = { gstAmountMvr: string; lineTotalMvr: string }
+
+function computeLineMvr(gstAmount: string, lineTotal: string, rate: string): LineMvr {
+  return {
+    gstAmountMvr: exchangeRate.toMvr(gstAmount, rate),
+    lineTotalMvr: exchangeRate.toMvr(lineTotal, rate),
+  }
+}
+
+type MvrTotals = { subtotalMvr: string; gstAmountMvr: string; totalMvr: string }
+
+function computeMvrTotals(lines: Array<LineMvr>): MvrTotals {
+  const gstAmountMvr = money.sum(lines.map((l) => l.gstAmountMvr))
+  const totalMvr = money.sum(lines.map((l) => l.lineTotalMvr))
+  const subtotalMvr = money.sub(totalMvr, gstAmountMvr)
+  return { subtotalMvr, gstAmountMvr, totalMvr }
+}
+
 // ─── createDraft ──────────────────────────────────────────────────────────────
 
 export async function createDraft(
@@ -74,19 +95,23 @@ export async function createDraft(
   data: EstimateDraftCreate,
   ctx: AuditCtx,
 ): Promise<Estimate & { lines: EstimateLine[] }> {
-  await customers.assertExists(data.customerId, businessId)
+  const customer = await customers.assertExists(data.customerId, businessId)
+  const currency: CurrencyCode = data.currency ?? customer.currency
 
   return db.transaction(async (tx) => {
     const today = todayMv()
+    const rate = await exchangeRates.rateAt(businessId, currency, today)
+    const rateStr = exchangeRate.round6(rate)
 
     const lineInputs = await Promise.all(
       data.lines.map(async (l, idx) => {
-        const rate = await gst.rateAt(businessId, l.gstCategory, today)
+        const gstRateVal = await gst.rateAt(businessId, l.gstCategory, today)
         const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
           l.qty,
           l.unitPrice,
-          rate.toString(),
+          gstRateVal.toString(),
         )
+        const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
         return {
           businessId,
           estimateId: '' as string,
@@ -98,6 +123,8 @@ export async function createDraft(
           gstRate,
           gstAmount,
           lineTotal,
+          gstAmountMvr,
+          lineTotalMvr,
           sortOrder: l.sortOrder ?? idx,
           createdBy: ctx.userId,
         }
@@ -105,6 +132,7 @@ export async function createDraft(
     )
 
     const totals = computeTotals(lineInputs)
+    const mvrTotals = computeMvrTotals(lineInputs)
 
     let expiryDate = data.expiryDate ?? null
     if (!expiryDate) {
@@ -121,6 +149,11 @@ export async function createDraft(
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
         total: totals.total,
+        currency,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         createdBy: ctx.userId,
         updatedBy: ctx.userId,
       },
@@ -137,7 +170,7 @@ export async function createDraft(
       'estimate',
       estimate.id,
       null,
-      { customerId: data.customerId, total: totals.total, lineCount: lines.length },
+      { customerId: data.customerId, total: totals.total, currency, lineCount: lines.length },
       ctx,
       tx,
     )
@@ -189,17 +222,23 @@ export async function patchDraft(
 
     let lines = await repo.getLinesByEstimate(businessId, id, tx)
 
+    const today = todayMv()
+    // Refreshed on every patch, same rationale as invoicing.patchDraft — a
+    // manually-entered rate after draft creation should show in the preview.
+    const rate = await exchangeRates.rateAt(businessId, before.currency, today)
+    const rateStr = exchangeRate.round6(rate)
+
     if (data.lines) {
       await repo.deleteLinesByEstimate(businessId, id, tx)
-      const today = todayMv()
       const lineInputs = await Promise.all(
         data.lines.map(async (l, idx) => {
-          const rate = await gst.rateAt(businessId, l.gstCategory, today)
+          const gstRateVal = await gst.rateAt(businessId, l.gstCategory, today)
           const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
             l.qty,
             l.unitPrice,
-            rate.toString(),
+            gstRateVal.toString(),
           )
+          const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
           return {
             businessId,
             estimateId: id,
@@ -211,6 +250,8 @@ export async function patchDraft(
             gstRate,
             gstAmount,
             lineTotal,
+            gstAmountMvr,
+            lineTotalMvr,
             sortOrder: l.sortOrder ?? idx,
             createdBy: ctx.userId,
           }
@@ -220,6 +261,9 @@ export async function patchDraft(
     }
 
     const totals = computeTotals(lines)
+    const mvrTotals = computeMvrTotals(
+      lines.map((l) => computeLineMvr(l.gstAmount, l.lineTotal, rateStr)),
+    )
 
     const updated = await repo.updateEstimate(
       businessId,
@@ -230,6 +274,10 @@ export async function patchDraft(
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
         total: totals.total,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         updatedBy: ctx.userId,
       },
       tx,
@@ -386,6 +434,11 @@ export async function convertToInvoice(
     {
       customerId: estimate.customerId,
       notes: estimate.notes ?? undefined,
+      // Carries the estimate's own currency through explicitly — the new
+      // invoice still re-snapshots its own exchange rate fresh (Phase 30,
+      // UPGRADE.md G-10), same "re-price, don't copy stale snapshots"
+      // philosophy already applied to GST rates here.
+      currency: estimate.currency,
       lines: lines.map((l) => ({
         itemId: l.itemId ?? undefined,
         description: l.description,

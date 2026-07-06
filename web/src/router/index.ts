@@ -251,6 +251,12 @@ export const router = createRouter({
           component: () => import('../modules/settings/views/SettingsView.vue'),
           meta: { requiresAuth: true, requiresAdmin: true, title: 'Settings' },
         },
+        // Exchange rates (Phase 30, UPGRADE.md G-10)
+        {
+          path: 'settings/exchange-rates',
+          component: () => import('../modules/settings/views/ExchangeRatesView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Exchange Rates' },
+        },
       ],
     },
     {

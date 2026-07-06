@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Money, Email, Tin, IsoDate } from './primitives.js'
+import { Money, Email, Tin, IsoDate, CurrencyCode } from './primitives.js'
 
 export const ContactCreate = z.object({
   name: z.string().min(1).max(200),
@@ -21,6 +21,9 @@ export const CustomerCreate = z.object({
   /** Optional credit limit ceiling; omit for unlimited. */
   creditLimit: Money.optional(),
   notes: z.string().max(2000).optional(),
+  // Multi-currency (Phase 30, UPGRADE.md G-10) — default document currency
+  // for new invoices/estimates for this customer; defaults to MVR.
+  currency: CurrencyCode.optional(),
 })
 export type CustomerCreate = z.infer<typeof CustomerCreate>
 

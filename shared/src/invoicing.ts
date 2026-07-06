@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { Decimal } from 'decimal.js'
-import { IsoDate, Qty, Money, GstCategory } from './primitives.js'
+import { IsoDate, Qty, Money, GstCategory, CurrencyCode } from './primitives.js'
 
 // ─── Invoice line (shared between create and patch) ───────────────────────────
 
@@ -21,6 +21,9 @@ export const InvoiceDraftCreate = z.object({
   dueDate: IsoDate.optional(),
   notes: z.string().max(2000).optional(),
   lines: z.array(InvoiceLineCreate).min(1),
+  // Multi-currency (Phase 30, UPGRADE.md G-10) — defaults to the customer's
+  // own currency if omitted.
+  currency: CurrencyCode.optional(),
 })
 export type InvoiceDraftCreate = z.infer<typeof InvoiceDraftCreate>
 

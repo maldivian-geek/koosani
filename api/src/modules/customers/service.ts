@@ -102,6 +102,7 @@ export async function create(
       creditTermsDays: String(data.creditTermsDays ?? defaultTerms),
       creditLimit: data.creditLimit ?? null,
       notes: data.notes ?? null,
+      currency: data.currency ?? 'MVR',
       createdBy: ctx.userId,
       updatedBy: ctx.userId,
     })
@@ -139,6 +140,7 @@ export async function update(
     if (data.creditTermsDays !== undefined) patch['creditTermsDays'] = String(data.creditTermsDays)
     if (data.creditLimit !== undefined) patch['creditLimit'] = data.creditLimit
     if (data.notes !== undefined) patch['notes'] = data.notes
+    if (data.currency !== undefined) patch['currency'] = data.currency
     patch['updatedBy'] = ctx.userId
 
     const after = await repo.updateCustomer(businessId, id, patch, tx)

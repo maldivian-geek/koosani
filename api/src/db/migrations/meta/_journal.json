@@ -57,6 +57,13 @@
       "when": 1783332795883,
       "tag": "0007_phase28_customer_portal",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783337626163,
+      "tag": "0008_phase30_multi_currency",
+      "breakpoints": true
     }
   ]
 }

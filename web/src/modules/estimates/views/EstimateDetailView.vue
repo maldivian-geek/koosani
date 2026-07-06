@@ -45,6 +45,12 @@ interface Estimate {
   subtotal: string
   gstAmount: string
   total: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  currency: 'MVR' | 'USD' | 'EUR' | 'GBP'
+  exchangeRate: string
+  subtotalMvr: string
+  gstAmountMvr: string
+  totalMvr: string
   convertedAt: string | null
   lines: EstimateLine[]
 }
@@ -358,7 +364,10 @@ onMounted(() => void load())
               Total
             </p>
             <p class="text-sm font-semibold text-surface-900 dark:text-surface-50 tabular-nums">
-              <MoneyCell :amount="estimate.total" />
+              <MoneyCell :amount="estimate.total" :currency="estimate.currency" />
+            </p>
+            <p v-if="estimate.currency !== 'MVR'" class="text-xs text-surface-400 tabular-nums">
+              <MoneyCell :amount="estimate.totalMvr" currency="MVR" />
             </p>
           </div>
         </div>
@@ -410,17 +419,24 @@ onMounted(() => void load())
           <div class="w-56 space-y-2 text-sm">
             <div class="flex justify-between">
               <span class="text-surface-600 dark:text-surface-400">Subtotal</span>
-              <MoneyCell :amount="estimate.subtotal" />
+              <MoneyCell :amount="estimate.subtotal" :currency="estimate.currency" />
             </div>
             <div class="flex justify-between">
               <span class="text-surface-600 dark:text-surface-400">Estimated GST</span>
-              <MoneyCell :amount="estimate.gstAmount" />
+              <MoneyCell :amount="estimate.gstAmount" :currency="estimate.currency" />
             </div>
             <div
               class="flex justify-between font-semibold border-t border-surface-200 dark:border-surface-700 pt-2"
             >
               <span class="text-surface-900 dark:text-surface-50">Total</span>
-              <MoneyCell :amount="estimate.total" />
+              <MoneyCell :amount="estimate.total" :currency="estimate.currency" />
+            </div>
+            <div
+              v-if="estimate.currency !== 'MVR'"
+              class="flex justify-between text-xs text-surface-400"
+            >
+              <span>Total (MVR @ {{ estimate.exchangeRate }})</span>
+              <MoneyCell :amount="estimate.totalMvr" currency="MVR" />
             </div>
           </div>
         </div>

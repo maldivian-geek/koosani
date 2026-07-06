@@ -143,6 +143,7 @@ No runtime dependencies except `zod` and `decimal.js`. Never import Vue, Hono, o
 2. **~~Virus scanning~~ — decided Phase 20.** Self-hosted ClamAV sidecar (`clamd`), spoken directly over TCP via `api/src/lib/virusScan.ts` — no client library needed. `docker-compose.yml` runs it locally; deploy the same image alongside the API in production.
 3. **MaxMind GeoLite2** for IP→country (per SECURITY.md). Free with attribution; needs license key.
 4. **Background OCR for scanned SOAs?** If suppliers send scanned PDFs, `pdf-parse` won't help. Add `tesseract.js` only if/when needed — don't pre-optimise.
+5. **FX rate data provider — not decided (Phase 30).** Exchange rates (ARCHITECTURE.md §4.10) are manual entry only in this phase; `exchange_rates.source` is `'manual'` for every row today, but the column exists as an extension point for an automated daily-rate job. No vendor has been chosen or integrated — mirror the `GEO_PROVIDER` pattern (an env-configured provider enum, `disabled` as the safe default) if/when one is picked, rather than hardcoding a single vendor's API.
 
 ---
 

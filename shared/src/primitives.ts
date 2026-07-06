@@ -24,6 +24,20 @@ export type Tin = z.infer<typeof Tin>
 export const GstCategory = z.enum(['general_8', 'tourism_16', 'tourism_17', 'zero', 'exempt'])
 export type GstCategory = z.infer<typeof GstCategory>
 
+// Multi-currency (Phase 30, UPGRADE.md G-10). MVR is the business's functional
+// currency — MIRA GST reporting is always MVR (ARCHITECTURE.md's MIRAconnect
+// note) — so it is always a valid document currency alongside these. Starter
+// set for the Maldives SME market; extend as customers request more.
+export const CurrencyCode = z.enum(['MVR', 'USD', 'EUR', 'GBP'])
+export type CurrencyCode = z.infer<typeof CurrencyCode>
+
+// Stringified decimal — 6dp, MVR per 1 unit of foreign currency. Always
+// positive (a rate of 0 or negative makes no economic sense).
+export const ExchangeRateValue = z
+  .string()
+  .regex(/^\d+(\.\d{1,6})?$/, 'Invalid exchange rate format')
+export type ExchangeRateValue = z.infer<typeof ExchangeRateValue>
+
 // Permission model
 export const PermissionResource = z.enum([
   'customers',

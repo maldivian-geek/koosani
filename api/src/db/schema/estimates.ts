@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, estimateStatusEnum } from './enums'
+import { gstCategoryEnum, estimateStatusEnum, currencyCodeEnum } from './enums'
 import { businesses } from './businesses'
 import { customers } from './customers'
 import { items } from './items'
@@ -36,6 +36,14 @@ export const estimates = pgTable(
     subtotal: numeric('subtotal', { precision: 15, scale: 2 }).default('0').notNull(),
     gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).default('0').notNull(),
     total: numeric('total', { precision: 15, scale: 2 }).default('0').notNull(),
+    // Multi-currency (Phase 30, UPGRADE.md G-10) — same shape as invoices,
+    // re-snapshotted fresh at draft-creation only (estimates never re-snapshot
+    // GST or currency at `send`, unlike invoice `issue` — ARCHITECTURE.md §4.6).
+    currency: currencyCodeEnum('currency').default('MVR').notNull(),
+    exchangeRate: numeric('exchange_rate', { precision: 15, scale: 6 }).default('1').notNull(),
+    subtotalMvr: numeric('subtotal_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+    totalMvr: numeric('total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
     notes: text('notes'),
     // Set once, on conversion — guards against converting the same estimate twice.
     convertedAt: timestamp('converted_at', { withTimezone: true }),
@@ -65,6 +73,8 @@ export const estimateLines = pgTable('estimate_lines', {
   gstRate: numeric('gst_rate', { precision: 6, scale: 4 }).notNull(),
   gstAmount: numeric('gst_amount', { precision: 15, scale: 2 }).notNull(),
   lineTotal: numeric('line_total', { precision: 15, scale: 2 }).notNull(),
+  gstAmountMvr: numeric('gst_amount_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
+  lineTotalMvr: numeric('line_total_mvr', { precision: 15, scale: 2 }).default('0').notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   ...timestamps,
   ...auditedBy,

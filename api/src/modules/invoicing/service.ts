@@ -7,6 +7,7 @@ import * as gst from '../gst/service.js'
 import * as inventory from '../inventory/service.js'
 import * as customers from '../customers/service.js'
 import * as customerCredits from '../customerCredits/service.js'
+import * as exchangeRates from '../exchangeRates/service.js'
 import { emailQueue } from '../../lib/queues.js'
 import type { AuditCtx } from '../audit/service.js'
 import type {
@@ -22,8 +23,9 @@ import type {
   InvoiceDraftPatch,
   InvoicePaymentCreate,
   CreditNoteCreate,
+  CurrencyCode,
 } from '@koosani/shared'
-import { gstFor, sumGstLines, todayMv } from '@koosani/shared'
+import { gstFor, sumGstLines, todayMv, money, exchangeRate } from '@koosani/shared'
 
 export type { AuditCtx, Invoice, InvoiceLine, PaymentReceived, CreditNote, CreditNoteLine }
 
@@ -67,6 +69,30 @@ export function computeTotals(
   return { subtotal: totalTaxable, gstAmount: totalGst, total: totalGross }
 }
 
+// ─── Multi-currency helpers (Phase 30, UPGRADE.md G-10) ──────────────────────
+// See ARCHITECTURE.md §4.10. Document-currency amounts (subtotal/gstAmount/
+// total) are computed by computeTotals above, unchanged; these derive the
+// MVR-equivalent snapshot from the same lines' already-converted per-line
+// MVR columns, mirroring computeTotals' own shape.
+
+export type LineMvr = { gstAmountMvr: string; lineTotalMvr: string }
+
+export function computeLineMvr(gstAmount: string, lineTotal: string, rate: string): LineMvr {
+  return {
+    gstAmountMvr: exchangeRate.toMvr(gstAmount, rate),
+    lineTotalMvr: exchangeRate.toMvr(lineTotal, rate),
+  }
+}
+
+export type MvrTotals = { subtotalMvr: string; gstAmountMvr: string; totalMvr: string }
+
+export function computeMvrTotals(lines: Array<LineMvr>): MvrTotals {
+  const gstAmountMvr = money.sum(lines.map((l) => l.gstAmountMvr))
+  const totalMvr = money.sum(lines.map((l) => l.lineTotalMvr))
+  const subtotalMvr = money.sub(totalMvr, gstAmountMvr)
+  return { subtotalMvr, gstAmountMvr, totalMvr }
+}
+
 // ─── assertNotLocked ──────────────────────────────────────────────────────────
 // Wraps gst.assertPeriodOpen (FUNCTIONS.md §invoicing).
 
@@ -90,19 +116,23 @@ export async function createDraft(
   data: InvoiceDraftCreate,
   ctx: AuditCtx,
 ): Promise<Invoice & { lines: InvoiceLine[] }> {
-  await customers.assertExists(data.customerId, businessId)
+  const customer = await customers.assertExists(data.customerId, businessId)
+  const currency: CurrencyCode = data.currency ?? customer.currency
 
   return db.transaction(async (tx) => {
     const today = todayMv()
+    const rate = await exchangeRates.rateAt(businessId, currency, today)
+    const rateStr = exchangeRate.round6(rate)
 
     const lineInputs = await Promise.all(
       data.lines.map(async (l, idx) => {
-        const rate = await gst.rateAt(businessId, l.gstCategory, today)
+        const gstRateVal = await gst.rateAt(businessId, l.gstCategory, today)
         const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
           l.qty,
           l.unitPrice,
-          rate.toString(),
+          gstRateVal.toString(),
         )
+        const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
         return {
           businessId,
           invoiceId: '' as string, // replaced after invoice insert
@@ -114,6 +144,8 @@ export async function createDraft(
           gstRate,
           gstAmount,
           lineTotal,
+          gstAmountMvr,
+          lineTotalMvr,
           sortOrder: l.sortOrder ?? idx,
           createdBy: ctx.userId,
         }
@@ -121,6 +153,7 @@ export async function createDraft(
     )
 
     const totals = computeTotals(lineInputs)
+    const mvrTotals = computeMvrTotals(lineInputs)
 
     const invoice = await repo.insertInvoice(
       {
@@ -131,6 +164,11 @@ export async function createDraft(
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
         total: totals.total,
+        currency,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         createdBy: ctx.userId,
         updatedBy: ctx.userId,
       },
@@ -147,7 +185,7 @@ export async function createDraft(
       'invoice',
       invoice.id,
       null,
-      { customerId: data.customerId, total: totals.total, lineCount: lines.length },
+      { customerId: data.customerId, total: totals.total, currency, lineCount: lines.length },
       ctx,
       tx,
     )
@@ -260,16 +298,23 @@ export async function patchDraft(
 
     let lines: InvoiceLine[] = await repo.getLinesByInvoice(businessId, id, tx)
 
+    const today = todayMv()
+    // Refreshed on every patch (not just when lines change) — a manual
+    // exchange rate entered after this draft was created should still be
+    // reflected in the preview totals before issue freezes it for good.
+    const rate = await exchangeRates.rateAt(businessId, invoice.currency, today)
+    const rateStr = exchangeRate.round6(rate)
+
     if (data.lines !== undefined) {
-      const today = todayMv()
       const lineInputs = await Promise.all(
         data.lines.map(async (l, idx) => {
-          const rate = await gst.rateAt(businessId, l.gstCategory, today)
+          const gstRateVal = await gst.rateAt(businessId, l.gstCategory, today)
           const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
             l.qty,
             l.unitPrice,
-            rate.toString(),
+            gstRateVal.toString(),
           )
+          const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
           return {
             businessId,
             invoiceId: id,
@@ -281,6 +326,8 @@ export async function patchDraft(
             gstRate,
             gstAmount,
             lineTotal,
+            gstAmountMvr,
+            lineTotalMvr,
             sortOrder: l.sortOrder ?? idx,
             createdBy: ctx.userId,
           }
@@ -292,6 +339,9 @@ export async function patchDraft(
     }
 
     const totals = computeTotals(lines)
+    const mvrTotals = computeMvrTotals(
+      lines.map((l) => computeLineMvr(l.gstAmount, l.lineTotal, rateStr)),
+    )
 
     const updated = await repo.updateInvoice(
       businessId,
@@ -301,6 +351,10 @@ export async function patchDraft(
         ...(data.notes !== undefined ? { notes: data.notes } : {}),
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         total: totals.total,
         updatedBy: ctx.userId,
       },
@@ -340,21 +394,37 @@ export async function issue(
 
     const lines = await repo.getLinesByInvoice(businessId, invoiceId, tx)
 
-    // Re-snapshot GST rates at issueDate — the trigger hasn't fired yet (still draft)
+    // Re-snapshot GST rates AND the exchange rate at issueDate — the invoice
+    // is becoming an official financial record now, not at draft-creation
+    // time (ARCHITECTURE.md §4.10, mirrors GST rate re-snapshotting below).
+    const rate = await exchangeRates.rateAt(businessId, invoice.currency, issueDate)
+    const rateStr = exchangeRate.round6(rate)
+
     const snapshotted = await Promise.all(
       lines.map(async (l) => {
-        const rate = await gst.rateAt(businessId, l.gstCategory, issueDate)
+        const gstRateVal = await gst.rateAt(businessId, l.gstCategory, issueDate)
         const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
           l.qty,
           l.unitPrice,
-          rate.toString(),
+          gstRateVal.toString(),
         )
-        return { line: l, gstRate, gstAmount, lineTotal }
+        const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
+        return { line: l, gstRate, gstAmount, lineTotal, gstAmountMvr, lineTotalMvr }
       }),
     )
 
-    for (const { line, gstRate, gstAmount, lineTotal } of snapshotted) {
-      await repo.updateInvoiceLine(line.id, { gstRate, gstAmount, lineTotal }, tx)
+    for (const s of snapshotted) {
+      await repo.updateInvoiceLine(
+        s.line.id,
+        {
+          gstRate: s.gstRate,
+          gstAmount: s.gstAmount,
+          lineTotal: s.lineTotal,
+          gstAmountMvr: s.gstAmountMvr,
+          lineTotalMvr: s.lineTotalMvr,
+        },
+        tx,
+      )
     }
 
     const updatedLines = snapshotted.map(({ line, gstRate, gstAmount, lineTotal }) => ({
@@ -364,6 +434,7 @@ export async function issue(
       lineTotal,
     }))
     const totals = computeTotals(updatedLines)
+    const mvrTotals = computeMvrTotals(snapshotted)
 
     // Check stock before committing any movements
     for (const line of lines) {
@@ -402,6 +473,10 @@ export async function issue(
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
         total: totals.total,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         updatedBy: ctx.userId,
       },
       tx,
@@ -453,21 +528,27 @@ export async function voidInvoice(
     for (const payment of activePayments) {
       const reversed = await repo.markPaymentReversed(payment.id, tx)
       if (reversed) {
+        // customer_credits is always MVR-denominated (Phase 27 predates
+        // multi-currency) — grant the payment's own MVR-equivalent, not its
+        // document-currency amount (ARCHITECTURE.md §4.10).
         await customerCredits.creditFromVoidedInvoice(
           businessId,
           invoice.customerId,
-          payment.amount,
+          payment.amountMvr,
           invoiceId,
           ctx,
           tx,
         )
       }
     }
-    const paidAmountAfterReversal = await repo.syncPaidAmount(businessId, invoiceId, tx)
+    const { paidAmount: paidAmountAfterReversal, paidAmountMvr: paidAmountMvrAfterReversal } =
+      await repo.syncPaidAmount(businessId, invoiceId, tx)
 
     const lines = await repo.getLinesByInvoice(businessId, invoiceId, tx)
 
-    // Create a reversing credit note mirroring the invoice
+    // Create a reversing credit note mirroring the invoice — copies the
+    // invoice's own currency/rate/Mvr snapshot verbatim (not re-rated at
+    // today), same rationale as copying gstRate/gstAmount/lineTotal below.
     const cn = await repo.insertCreditNote(
       {
         businessId,
@@ -478,6 +559,11 @@ export async function voidInvoice(
         subtotal: invoice.subtotal,
         gstAmount: invoice.gstAmount,
         total: invoice.total,
+        currency: invoice.currency,
+        exchangeRate: invoice.exchangeRate,
+        subtotalMvr: invoice.subtotalMvr,
+        gstAmountMvr: invoice.gstAmountMvr,
+        totalMvr: invoice.totalMvr,
         reason,
         createdBy: ctx.userId,
       },
@@ -496,6 +582,8 @@ export async function voidInvoice(
         gstRate: l.gstRate,
         gstAmount: l.gstAmount,
         lineTotal: l.lineTotal,
+        gstAmountMvr: l.gstAmountMvr,
+        lineTotalMvr: l.lineTotalMvr,
         sortOrder: l.sortOrder ?? idx,
         createdBy: ctx.userId,
       })),
@@ -532,6 +620,7 @@ export async function voidInvoice(
       {
         status: 'voided',
         paidAmount: paidAmountAfterReversal,
+        paidAmountMvr: paidAmountMvrAfterReversal,
         voidReason: reason,
         voidedAt: new Date(),
         updatedBy: ctx.userId,
@@ -585,6 +674,13 @@ export async function addPayment(
 
       await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
 
+      // Exchange rate at the PAYMENT date, not the invoice's own issue-date
+      // rate — the two can differ, and that difference is the realized
+      // gain/loss recorded below (ARCHITECTURE.md §4.10).
+      const paymentRate = await exchangeRates.rateAt(businessId, invoice.currency, data.paidAt)
+      const paymentRateStr = exchangeRate.round6(paymentRate)
+      const appliedAmountMvr = exchangeRate.toMvr(appliedAmount.toFixed(2), paymentRateStr)
+
       const payment = await repo.insertPayment(
         {
           businessId,
@@ -594,23 +690,37 @@ export async function addPayment(
           method: data.method,
           reference: data.ref ?? null,
           paidAt: data.paidAt,
+          exchangeRate: paymentRateStr,
+          amountMvr: appliedAmountMvr,
           createdBy: ctx.userId,
         },
         tx,
       )
 
+      // What this applied amount was worth in MVR at the invoice's own
+      // (issue-date) rate, vs. what it's actually worth at the payment-date
+      // rate — the gap is realized now. Always zero for MVR invoices, since
+      // exchangeRate is always 1 on both sides (no special-casing needed).
+      const expectedMvr = exchangeRate.toMvr(appliedAmount.toFixed(2), invoice.exchangeRate)
+      const gainLoss = money.sub(appliedAmountMvr, expectedMvr)
+      await exchangeRates.recordRealizedGainLoss(businessId, invoiceId, payment.id, gainLoss, tx)
+
       if (overpaidAmount.gt(0)) {
+        // customer_credits is always MVR-denominated (Phase 27 predates
+        // multi-currency) — grant the MVR-equivalent of the overpayment at
+        // the payment-date rate, not the document-currency amount.
+        const overpaidAmountMvr = exchangeRate.toMvr(overpaidAmount.toFixed(2), paymentRateStr)
         await customerCredits.creditFromOverpayment(
           businessId,
           invoice.customerId,
-          overpaidAmount.toFixed(2),
+          overpaidAmountMvr,
           payment.id,
           ctx,
           tx,
         )
       }
 
-      const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
+      const { paidAmount, paidAmountMvr } = await repo.syncPaidAmount(businessId, invoiceId, tx)
       const paid = new Decimal(paidAmount)
       const total = new Decimal(invoice.total)
 
@@ -626,7 +736,7 @@ export async function addPayment(
       await repo.updateInvoice(
         businessId,
         invoiceId,
-        { paidAmount, status: newStatus, updatedBy: ctx.userId },
+        { paidAmount, paidAmountMvr, status: newStatus, updatedBy: ctx.userId },
         tx,
       )
 
@@ -684,6 +794,15 @@ export async function applyCreditToInvoice(
     if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
       throw new ValidationError('Credit can only be applied to issued invoices')
     }
+    // customer_credits is always MVR-denominated (Phase 27 predates
+    // multi-currency) — applying it to a foreign-currency invoice would mix
+    // an MVR balance with a document-currency outstanding amount with no
+    // correct conversion semantics. Not supported in this phase
+    // (ARCHITECTURE.md §4.10); write off or record a same-currency payment
+    // instead.
+    if (invoice.currency !== 'MVR') {
+      throw new ValidationError('Customer credit can only be applied to MVR-denominated invoices')
+    }
 
     const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
     const requested = new Decimal(amount)
@@ -724,12 +843,15 @@ export async function applyCreditToInvoice(
         method: 'credit',
         reference: null,
         paidAt: today,
+        // invoice.currency is guaranteed 'MVR' here (guarded above)
+        exchangeRate: '1',
+        amountMvr: requested.toFixed(2),
         createdBy: ctx.userId,
       },
       tx,
     )
 
-    const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
+    const { paidAmount, paidAmountMvr } = await repo.syncPaidAmount(businessId, invoiceId, tx)
     const paid = new Decimal(paidAmount)
     const total = new Decimal(invoice.total)
 
@@ -745,7 +867,7 @@ export async function applyCreditToInvoice(
     await repo.updateInvoice(
       businessId,
       invoiceId,
-      { paidAmount, status: newStatus, updatedBy: ctx.userId },
+      { paidAmount, paidAmountMvr, status: newStatus, updatedBy: ctx.userId },
       tx,
     )
 
@@ -820,7 +942,7 @@ export async function reversePayment(
     const reversed = await repo.markPaymentReversed(paymentId, tx)
     if (!reversed) throw new ValidationError('Payment is already reversed')
 
-    const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
+    const { paidAmount, paidAmountMvr } = await repo.syncPaidAmount(businessId, invoiceId, tx)
     const paid = new Decimal(paidAmount)
     const total = new Decimal(invoice.total)
 
@@ -838,7 +960,7 @@ export async function reversePayment(
     await repo.updateInvoice(
       businessId,
       invoiceId,
-      { paidAmount, status: newStatus, updatedBy: ctx.userId },
+      { paidAmount, paidAmountMvr, status: newStatus, updatedBy: ctx.userId },
       tx,
     )
 
@@ -875,15 +997,22 @@ export async function createCreditNote(
 
   return db.transaction(async (tx) => {
     const today = todayMv()
+    // Credits the source invoice's own currency, always — a credit note
+    // can't be raised in a different currency than what it's crediting.
+    // Rated fresh at today (not copied from the invoice), same rationale as
+    // the GST rate below: rates may have moved since the invoice was issued.
+    const rate = await exchangeRates.rateAt(businessId, invoice.currency, today)
+    const rateStr = exchangeRate.round6(rate)
 
     const lineInputs = await Promise.all(
       data.lines.map(async (l, idx) => {
-        const rate = await gst.rateAt(businessId, l.gstCategory, today)
+        const gstRateVal = await gst.rateAt(businessId, l.gstCategory, today)
         const { gstRate, gstAmount, lineTotal } = computeLineAmounts(
           l.qty,
           l.unitPrice,
-          rate.toString(),
+          gstRateVal.toString(),
         )
+        const { gstAmountMvr, lineTotalMvr } = computeLineMvr(gstAmount, lineTotal, rateStr)
         return {
           businessId,
           creditNoteId: '' as string, // replaced after CN insert
@@ -895,6 +1024,8 @@ export async function createCreditNote(
           gstRate,
           gstAmount,
           lineTotal,
+          gstAmountMvr,
+          lineTotalMvr,
           sortOrder: l.sortOrder ?? idx,
           createdBy: ctx.userId,
         }
@@ -902,6 +1033,7 @@ export async function createCreditNote(
     )
 
     const totals = computeTotals(lineInputs)
+    const mvrTotals = computeMvrTotals(lineInputs)
 
     const cn = await repo.insertCreditNote(
       {
@@ -912,6 +1044,11 @@ export async function createCreditNote(
         subtotal: totals.subtotal,
         gstAmount: totals.gstAmount,
         total: totals.total,
+        currency: invoice.currency,
+        exchangeRate: rateStr,
+        subtotalMvr: mvrTotals.subtotalMvr,
+        gstAmountMvr: mvrTotals.gstAmountMvr,
+        totalMvr: mvrTotals.totalMvr,
         reason: data.reason,
         createdBy: ctx.userId,
       },

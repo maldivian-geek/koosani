@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Drawer from 'primevue/drawer'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
+import Select from 'primevue/select'
 import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -36,7 +37,17 @@ interface FormState {
   creditTermsDays: string
   creditLimit: string
   notes: string
+  currency: string
 }
+
+// Multi-currency (Phase 30, UPGRADE.md G-10) — starter set, matches
+// shared/src/primitives.ts's CurrencyCode.
+const currencyOptions = [
+  { label: 'MVR', value: 'MVR' },
+  { label: 'USD', value: 'USD' },
+  { label: 'EUR', value: 'EUR' },
+  { label: 'GBP', value: 'GBP' },
+]
 
 const blank = (): FormState => ({
   name: '',
@@ -47,6 +58,7 @@ const blank = (): FormState => ({
   creditTermsDays: '',
   creditLimit: '',
   notes: '',
+  currency: 'MVR',
 })
 
 const form = ref<FormState>(blank())
@@ -70,6 +82,7 @@ watch(
         creditTermsDays: c.creditTermsDays != null ? String(c.creditTermsDays) : '',
         creditLimit: c.creditLimit ?? '',
         notes: c.notes ?? '',
+        currency: c.currency ?? 'MVR',
       }
     } else {
       form.value = blank()
@@ -88,6 +101,7 @@ async function onSave() {
     creditTermsDays: form.value.creditTermsDays ? Number(form.value.creditTermsDays) : undefined,
     creditLimit: form.value.creditLimit || undefined,
     notes: form.value.notes || undefined,
+    currency: form.value.currency || undefined,
   }
 
   const Schema = props.customer ? CustomerCreate.partial() : CustomerCreate
@@ -233,6 +247,19 @@ function onDelete() {
           />
           <small v-if="errors.creditLimit" class="text-red-500">{{ errors.creditLimit }}</small>
         </div>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-sm">Default currency</label>
+        <Select
+          v-model="form.currency"
+          :options="currencyOptions"
+          option-label="label"
+          option-value="value"
+          :invalid="!!errors.currency"
+          fluid
+        />
+        <small v-if="errors.currency" class="text-red-500">{{ errors.currency }}</small>
       </div>
 
       <div class="flex flex-col gap-1">

@@ -72,6 +72,13 @@ interface Invoice {
   gstAmount: string
   total: string
   paidAmount: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  currency: 'MVR' | 'USD' | 'EUR' | 'GBP'
+  exchangeRate: string
+  subtotalMvr: string
+  gstAmountMvr: string
+  totalMvr: string
+  paidAmountMvr: string
   createdAt: string
   remindersEnabled: boolean
   lines: InvoiceLine[]
@@ -569,6 +576,20 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
                     ),
                   )
                 "
+                :currency="invoice.currency"
+              />
+            </p>
+            <p v-if="invoice.currency !== 'MVR'" class="text-xs text-surface-400 tabular-nums">
+              <MoneyCell
+                :amount="
+                  String(
+                    Math.max(
+                      0,
+                      parseFloat(invoice.totalMvr) - parseFloat(invoice.paidAmountMvr),
+                    ).toFixed(2),
+                  )
+                "
+                currency="MVR"
               />
             </p>
           </div>
@@ -632,24 +653,33 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
           <div class="w-64 space-y-2 text-sm">
             <div class="flex justify-between">
               <span class="text-surface-600 dark:text-surface-400">Subtotal</span>
-              <MoneyCell :amount="invoice.subtotal" />
+              <MoneyCell :amount="invoice.subtotal" :currency="invoice.currency" />
             </div>
             <div class="flex justify-between">
               <span class="text-surface-600 dark:text-surface-400">GST</span>
-              <MoneyCell :amount="invoice.gstAmount" />
+              <MoneyCell :amount="invoice.gstAmount" :currency="invoice.currency" />
             </div>
             <div
               class="flex justify-between font-semibold border-t border-surface-200 dark:border-surface-700 pt-2"
             >
               <span class="text-surface-900 dark:text-surface-50">Total</span>
-              <MoneyCell :amount="invoice.total" />
+              <MoneyCell :amount="invoice.total" :currency="invoice.currency" />
+            </div>
+            <!-- MVR-equivalent, Phase 30 UPGRADE.md G-10 — only shown for
+                 foreign-currency invoices; the exchangeRate is frozen at issue. -->
+            <div
+              v-if="invoice.currency !== 'MVR'"
+              class="flex justify-between text-xs text-surface-400"
+            >
+              <span>Total (MVR @ {{ invoice.exchangeRate }})</span>
+              <MoneyCell :amount="invoice.totalMvr" currency="MVR" />
             </div>
             <div
               v-if="parseFloat(invoice.paidAmount) > 0"
               class="flex justify-between text-green-600 dark:text-green-400"
             >
               <span>Paid</span>
-              <MoneyCell :amount="invoice.paidAmount" />
+              <MoneyCell :amount="invoice.paidAmount" :currency="invoice.currency" />
             </div>
           </div>
         </div>

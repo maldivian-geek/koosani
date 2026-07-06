@@ -139,6 +139,9 @@ type NewLine = {
   gstRate: string
   gstAmount: string
   lineTotal: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  gstAmountMvr: string
+  lineTotalMvr: string
   sortOrder?: number
   createdBy: string
 }
@@ -163,7 +166,13 @@ export async function deleteLinesByInvoice(
 
 export async function updateInvoiceLine(
   id: string,
-  data: { gstRate: string; gstAmount: string; lineTotal: string },
+  data: {
+    gstRate: string
+    gstAmount: string
+    lineTotal: string
+    gstAmountMvr: string
+    lineTotalMvr: string
+  },
   tx: DbTx,
 ): Promise<void> {
   await tx
@@ -199,6 +208,11 @@ type NewPayment = {
   paidAt: string
   reversalOfId?: string | null
   createdBy: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10) — exchange rate at paidAt and
+  // this payment's own MVR-equivalent (used for the credit ledger and
+  // realized gain/loss, both MVR-only). Defaults matching 'MVR' documents.
+  exchangeRate?: string
+  amountMvr?: string
 }
 
 export async function insertPayment(data: NewPayment, tx: DbTx): Promise<PaymentReceived> {
@@ -285,14 +299,18 @@ export async function markPaymentReversed(id: string, tx: DbTx): Promise<boolean
   return rows.length > 0
 }
 
-// Recomputes invoice.paid_amount from the live sum of payment rows (including reversals).
+// Recomputes invoice.paid_amount (and its MVR-equivalent) from the live sum of
+// payment rows (including reversals).
 export async function syncPaidAmount(
   businessId: string,
   invoiceId: string,
   tx: DbTx,
-): Promise<string> {
+): Promise<{ paidAmount: string; paidAmountMvr: string }> {
   const [row] = await tx
-    .select({ total: sql<string>`COALESCE(SUM(amount), '0')` })
+    .select({
+      paidAmount: sql<string>`COALESCE(SUM(amount), '0')`,
+      paidAmountMvr: sql<string>`COALESCE(SUM(amount_mvr), '0')`,
+    })
     .from(paymentsReceived)
     .where(
       and(
@@ -301,7 +319,7 @@ export async function syncPaidAmount(
         isNull(paymentsReceived.reversedAt),
       ),
     )
-  return row?.total ?? '0'
+  return { paidAmount: row?.paidAmount ?? '0', paidAmountMvr: row?.paidAmountMvr ?? '0' }
 }
 
 // ─── Credit notes ─────────────────────────────────────────────────────────────
@@ -318,6 +336,12 @@ type NewCreditNote = {
   total: string
   reason?: string | null
   createdBy: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  currency?: CreditNote['currency']
+  exchangeRate?: string
+  subtotalMvr?: string
+  gstAmountMvr?: string
+  totalMvr?: string
 }
 
 type UpdateCreditNoteData = {
@@ -428,6 +452,9 @@ type NewCreditNoteLine = {
   lineTotal: string
   sortOrder?: number
   createdBy: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  gstAmountMvr?: string
+  lineTotalMvr?: string
 }
 
 export async function insertCreditNoteLines(

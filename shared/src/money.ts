@@ -136,3 +136,24 @@ export const qty = {
   isNegative: qIsNegative,
   sum: qSum,
 }
+
+// --- Exchange rate helpers (Phase 30, UPGRADE.md G-10) ---
+// Rates are stringified decimals at 6dp (MVR per 1 unit of foreign currency).
+// Converting a document-currency amount to its MVR equivalent always rounds
+// to 2dp — money.mul can't be reused directly since its inputs/output are
+// both 2dp, which would truncate the rate's precision before multiplying.
+
+function rateRound6(a: string | number | Decimal): string {
+  return new Decimal(a).toFixed(6)
+}
+
+// amount is a 2dp money string in the document currency; rate is a 6dp
+// exchange rate (MVR per unit); result is a 2dp money string in MVR.
+function toMvr(amount: string, rate: string): string {
+  return new Decimal(amount).times(new Decimal(rate)).toFixed(2)
+}
+
+export const exchangeRate = {
+  round6: rateRound6,
+  toMvr,
+}

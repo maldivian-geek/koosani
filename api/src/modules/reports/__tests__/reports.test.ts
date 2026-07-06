@@ -714,6 +714,12 @@ describe('reports: aged receivables', () => {
         gstAmount: '8.00',
         total: '108.00',
         paidAmount: '0.00',
+        // MVR-denominated (exchangeRate 1) — totalMvr/paidAmountMvr mirror
+        // total/paidAmount exactly, same as a real issue()/addPayment() would
+        // produce (Phase 30, UPGRADE.md G-10). Aged receivables reads these
+        // MVR columns, not the document-currency ones.
+        totalMvr: '108.00',
+        paidAmountMvr: '0.00',
         createdBy: user.id,
         updatedBy: user.id,
       },
@@ -729,6 +735,8 @@ describe('reports: aged receivables', () => {
         gstAmount: '16.00',
         total: '216.00',
         paidAmount: '0.00',
+        totalMvr: '216.00',
+        paidAmountMvr: '0.00',
         createdBy: user.id,
         updatedBy: user.id,
       },
@@ -744,6 +752,8 @@ describe('reports: aged receivables', () => {
         gstAmount: '24.00',
         total: '324.00',
         paidAmount: '0.00',
+        totalMvr: '324.00',
+        paidAmountMvr: '0.00',
         createdBy: user.id,
         updatedBy: user.id,
       },
@@ -759,6 +769,8 @@ describe('reports: aged receivables', () => {
         gstAmount: '40.00',
         total: '540.00',
         paidAmount: '100.00', // partial payment → outstanding 440
+        totalMvr: '540.00',
+        paidAmountMvr: '100.00',
         createdBy: user.id,
         updatedBy: user.id,
       },
@@ -799,6 +811,8 @@ describe('reports: aged receivables', () => {
         gstAmount: '40.00',
         total: '540.00',
         paidAmount: '540.00', // fully paid
+        totalMvr: '540.00',
+        paidAmountMvr: '540.00',
         createdBy: user.id,
         updatedBy: user.id,
       },

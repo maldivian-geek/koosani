@@ -76,6 +76,11 @@ export async function listEstimates(
         subtotal: estimates.subtotal,
         gstAmount: estimates.gstAmount,
         total: estimates.total,
+        currency: estimates.currency,
+        exchangeRate: estimates.exchangeRate,
+        subtotalMvr: estimates.subtotalMvr,
+        gstAmountMvr: estimates.gstAmountMvr,
+        totalMvr: estimates.totalMvr,
         notes: estimates.notes,
         convertedAt: estimates.convertedAt,
         createdAt: estimates.createdAt,
@@ -142,6 +147,9 @@ type NewLine = {
   gstRate: string
   gstAmount: string
   lineTotal: string
+  // Multi-currency (Phase 30, UPGRADE.md G-10)
+  gstAmountMvr: string
+  lineTotalMvr: string
   sortOrder?: number
   createdBy: string
 }

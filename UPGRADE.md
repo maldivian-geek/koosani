@@ -168,15 +168,16 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 - ✅ Done: SECURITY.md was updated first, as required — new §13.14, plus JWT/CORS sections revised in place — before any portal code was written.
 - Note: no account settings, no file uploads, no payment on the portal in this phase — see SECURITY.md §13.14's explicit scope boundary. Online payment is Phase 29.
 
-### Phase 29 — Online payments & payment links — G-9 ⚠️ requires revising SECURITY.md §13.13
+### Phase 29 — Online payments & payment links — G-9 ⛔ dropped
 
-- Gateway abstraction; realistic Maldives options: BML payment gateway (MVR) + Stripe (USD) — confirm with owner.
-- Payment links on invoices/emails/portal; inbound webhooks (signature-verified, idempotent, IP-allowlisted) — §13.13 currently forbids webhooks, so the section is amended first with the trade-off named, per CLAUDE.md §9.
+- **Dropped by owner decision (2026-07-06)** — not implemented. SECURITY.md §13.13's "no webhook outputs" policy stands unchanged; no gateway abstraction, no payment links, no inbound webhook surface exists anywhere in this app.
+- If revisited later: still requires a gateway choice (BML for MVR vs. Stripe for USD) and a §13.13 amendment naming the webhook trade-off, per CLAUDE.md §9, before any implementation.
 
 ### Phase 30 — Multi-currency — G-10 (largest schema change; recommended for Maldives)
 
-- Currency on customers/invoices/estimates; manual + daily exchange rates; document stored in doc currency **and** MVR at the document-date rate (MIRA reporting stays MVR); realized gain/loss rows on payment.
-- Touches invoicing, payments, reports, GST build — plan a dedicated design pass before implementation.
+- ✅ Done: Currency on customers/invoices/estimates/credit notes (`currencyCodeEnum`: MVR/USD/EUR/GBP); manual exchange rates (`exchangeRates` module, `rateAt`/`recordRate`); every sales document stored in doc currency **and** MVR at the document-date rate (MIRA reporting stays MVR — GST builder and reports read the MVR columns, ARCHITECTURE.md §4.10); realized gain/loss rows on payment (`fx_realized_gain_loss`).
+- ✅ Done: Design pass folded into implementation — see ARCHITECTURE.md §4.10 for the snapshot-timing model (mirrors GST rate snapshotting), the MVR-only boundary on the Phase 27 credit ledger, and the line-level-vs-header-level column split (driven by what GST/reports actually query).
+- ⏸ Deferred: automated daily exchange-rate fetching (manual entry only — no FX data provider chosen, see STACK.md open decision #5); multi-currency on the purchases/payables side (suppliers/bills/payments made are untouched, out of G-10's stated scope); cross-currency credit application (explicitly rejected, not silently mishandled).
 
 ### Phase 31 (optional) — Expenses — G-11
 

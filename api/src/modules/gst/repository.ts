@@ -208,6 +208,14 @@ export async function getBusinessPeriodType(
 // ─── GST return aggregation ───────────────────────────────────────────────────
 // These read persisted gst_amount / line_total from invoice_lines, credit_note_lines,
 // and bill_lines — they never recompute tax (ARCHITECTURE.md §3).
+//
+// Invoice/CN lines sum the *_mvr columns, not the document-currency ones —
+// MIRA GST reporting is always MVR (ARCHITECTURE.md §4.10, §MIRAconnect
+// integration note). For MVR-denominated documents (exchangeRate always 1)
+// gstAmountMvr/lineTotalMvr equal gstAmount/lineTotal exactly, so this is a
+// no-op for domestic-only businesses and correct for foreign-currency ones.
+// Bill lines are untouched — the payables side has no currency concept
+// (Phase 30, UPGRADE.md G-10 scoped multi-currency to the sales side only).
 
 export async function getInvoiceLinesForPeriod(
   businessId: string,
@@ -217,8 +225,8 @@ export async function getInvoiceLinesForPeriod(
   return db
     .select({
       category: invoiceLines.gstCategory,
-      netAmount: sql<string>`COALESCE(SUM(${invoiceLines.lineTotal} - ${invoiceLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmount}), '0')`,
+      netAmount: sql<string>`COALESCE(SUM(${invoiceLines.lineTotalMvr} - ${invoiceLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${invoiceLines.gstAmountMvr}), '0')`,
     })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoiceLines.invoiceId, invoices.id))
@@ -242,8 +250,8 @@ export async function getCreditNoteLinesForPeriod(
   return db
     .select({
       category: creditNoteLines.gstCategory,
-      netAmount: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotal} - ${creditNoteLines.gstAmount}), '0')`,
-      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmount}), '0')`,
+      netAmount: sql<string>`COALESCE(SUM(${creditNoteLines.lineTotalMvr} - ${creditNoteLines.gstAmountMvr}), '0')`,
+      gstAmount: sql<string>`COALESCE(SUM(${creditNoteLines.gstAmountMvr}), '0')`,
     })
     .from(creditNoteLines)
     .innerJoin(creditNotes, eq(creditNoteLines.creditNoteId, creditNotes.id))
