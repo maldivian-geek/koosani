@@ -20,6 +20,8 @@ import {
   CheckCircle,
   Plus,
   Trash2,
+  Ban,
+  Wallet,
 } from 'lucide-vue-next'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
@@ -260,6 +262,98 @@ function reversePayment(pid: string) {
       }
     },
   })
+}
+
+// ─── Write off ────────────────────────────────────────────────────────────────
+const writeOffDialogOpen = ref(false)
+const writeOffReason = ref('')
+const writeOffError = ref('')
+const writingOff = ref(false)
+
+function openWriteOffDialog() {
+  writeOffReason.value = ''
+  writeOffError.value = ''
+  writeOffDialogOpen.value = true
+}
+
+function resetWriteOffDialog() {
+  writeOffReason.value = ''
+  writeOffError.value = ''
+}
+
+async function submitWriteOff() {
+  writeOffError.value = ''
+  if (!writeOffReason.value.trim()) {
+    writeOffError.value = 'Reason is required.'
+    return
+  }
+  writingOff.value = true
+  try {
+    await apiFetch(`/invoices/${invoiceId.value}/write-off`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: writeOffReason.value }),
+    })
+    writeOffDialogOpen.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Written off',
+      detail: 'The outstanding balance has been written off.',
+      life: 3000,
+    })
+    await load()
+  } catch (err) {
+    const msg =
+      err instanceof ApiError && err.status === 422
+        ? 'Nothing outstanding to write off.'
+        : 'Something went wrong. Please try again.'
+    toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 5000 })
+  } finally {
+    writingOff.value = false
+  }
+}
+
+// ─── Apply credit ─────────────────────────────────────────────────────────────
+const applyCreditDialogOpen = ref(false)
+const applyCreditAmount = ref('0.00')
+const applyCreditError = ref('')
+const applyingCredit = ref(false)
+
+function openApplyCreditDialog() {
+  applyCreditAmount.value = '0.00'
+  applyCreditError.value = ''
+  applyCreditDialogOpen.value = true
+}
+
+async function submitApplyCredit() {
+  applyCreditError.value = ''
+  const amt = parseFloat(applyCreditAmount.value)
+  if (isNaN(amt) || amt <= 0) {
+    applyCreditError.value = 'Enter a positive amount.'
+    return
+  }
+  applyingCredit.value = true
+  try {
+    await apiFetch(`/invoices/${invoiceId.value}/apply-credit`, {
+      method: 'POST',
+      body: JSON.stringify({ amount: applyCreditAmount.value }),
+    })
+    applyCreditDialogOpen.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Applied',
+      detail: 'Customer credit applied to this invoice.',
+      life: 3000,
+    })
+    await load()
+  } catch (err) {
+    const msg =
+      err instanceof ApiError && err.status === 422
+        ? 'Amount exceeds either the outstanding balance or the available credit.'
+        : 'Something went wrong. Please try again.'
+    toast.add({ severity: 'error', summary: 'Error', detail: msg, life: 5000 })
+  } finally {
+    applyingCredit.value = false
+  }
 }
 
 // ─── PDF download ─────────────────────────────────────────────────────────────
@@ -565,14 +659,23 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
       <div class="card p-6 space-y-4">
         <div class="flex items-center justify-between">
           <h3 class="text-base font-medium text-surface-700 dark:text-surface-300">Payments</h3>
-          <Button
+          <div
             v-if="invoice.status === 'issued' || invoice.status === 'partially_paid'"
-            size="small"
-            @click="openPaymentDialog"
+            class="flex gap-2"
           >
-            <Plus class="w-4 h-4" />
-            Record Payment
-          </Button>
+            <Button size="small" severity="secondary" outlined @click="openWriteOffDialog">
+              <Ban class="w-4 h-4" />
+              Write Off
+            </Button>
+            <Button size="small" severity="secondary" @click="openApplyCreditDialog">
+              <Wallet class="w-4 h-4" />
+              Apply Credit
+            </Button>
+            <Button size="small" @click="openPaymentDialog">
+              <Plus class="w-4 h-4" />
+              Record Payment
+            </Button>
+          </div>
         </div>
 
         <div v-if="activePayments.length === 0" class="text-center py-8 text-sm text-surface-400">
@@ -655,7 +758,8 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
   >
     <div class="space-y-4">
       <p class="text-sm text-surface-600 dark:text-surface-400">
-        Voiding will lock this invoice and create a reversing credit note. This cannot be undone.
+        Voiding will lock this invoice and create a reversing credit note. Any active payments will
+        be reversed and returned to the customer as available credit. This cannot be undone.
       </p>
       <div class="flex flex-col gap-1.5">
         <label class="text-sm font-medium text-surface-700 dark:text-surface-300"
@@ -733,6 +837,62 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
     <template #footer>
       <Button severity="secondary" outlined @click="paymentDialogOpen = false">Cancel</Button>
       <Button :loading="paymentSaving" @click="submitPayment">Record Payment</Button>
+    </template>
+  </Dialog>
+
+  <!-- Write off dialog -->
+  <Dialog
+    v-model:visible="writeOffDialogOpen"
+    header="Write Off Invoice"
+    modal
+    :style="{ width: '30rem' }"
+    @hide="resetWriteOffDialog"
+  >
+    <div class="space-y-4">
+      <p class="text-sm text-surface-600 dark:text-surface-400">
+        This closes out the remaining outstanding balance with no cash movement — for bad debt, not
+        a real payment. It cannot be undone.
+      </p>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-surface-700 dark:text-surface-300"
+          >Reason <span class="text-red-500">*</span></label
+        >
+        <Textarea
+          v-model="writeOffReason"
+          rows="3"
+          placeholder="Explain why this balance is being written off…"
+          :class="{ 'p-invalid': writeOffError }"
+          auto-resize
+        />
+        <span v-if="writeOffError" class="text-xs text-red-500">{{ writeOffError }}</span>
+      </div>
+    </div>
+    <template #footer>
+      <Button severity="secondary" outlined @click="writeOffDialogOpen = false">Cancel</Button>
+      <Button severity="danger" :loading="writingOff" @click="submitWriteOff">Write Off</Button>
+    </template>
+  </Dialog>
+
+  <!-- Apply credit dialog -->
+  <Dialog
+    v-model:visible="applyCreditDialogOpen"
+    header="Apply Customer Credit"
+    modal
+    :style="{ width: '26rem' }"
+  >
+    <div class="space-y-4">
+      <p class="text-sm text-surface-600 dark:text-surface-400">
+        Applies the customer's available credit balance to reduce this invoice's outstanding amount.
+      </p>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-surface-700 dark:text-surface-300">Amount</label>
+        <MoneyInput v-model="applyCreditAmount" :invalid="!!applyCreditError" />
+        <span v-if="applyCreditError" class="text-xs text-red-500">{{ applyCreditError }}</span>
+      </div>
+    </div>
+    <template #footer>
+      <Button severity="secondary" outlined @click="applyCreditDialogOpen = false">Cancel</Button>
+      <Button :loading="applyingCredit" @click="submitApplyCredit">Apply Credit</Button>
     </template>
   </Dialog>
 </template>

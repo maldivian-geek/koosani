@@ -252,6 +252,27 @@ export async function listPaymentsByInvoice(
     .orderBy(paymentsReceived.paidAt)
 }
 
+// Locks every active (non-reversed) payment on the invoice until the caller's
+// tx commits — used by voidInvoice (UPGRADE.md F-14) so a concurrent
+// reversal/void of the same payment can't race past either's checks.
+export async function listActivePaymentsByInvoiceForUpdate(
+  businessId: string,
+  invoiceId: string,
+  tx: DbTx,
+): Promise<PaymentReceived[]> {
+  return tx
+    .select()
+    .from(paymentsReceived)
+    .where(
+      and(
+        eq(paymentsReceived.businessId, businessId),
+        eq(paymentsReceived.invoiceId, invoiceId),
+        isNull(paymentsReceived.reversedAt),
+      ),
+    )
+    .for('update')
+}
+
 // Guards on reversedAt IS NULL so a double-reversal race is a no-op update
 // rather than a second reversal (UPGRADE.md F-17). Returns false if the
 // payment was already reversed (by a concurrent request or otherwise).

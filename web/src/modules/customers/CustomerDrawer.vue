@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import Drawer from 'primevue/drawer'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -9,6 +10,8 @@ import { useConfirm } from 'primevue/useconfirm'
 import { apiFetch, ApiError } from '../../lib/apiFetch.js'
 import { CustomerCreate } from '@koosani/shared'
 import type { Customer } from './views/CustomersView.vue'
+
+const router = useRouter()
 
 const props = defineProps<{
   customer: Customer | null
@@ -238,6 +241,23 @@ function onDelete() {
         <small v-if="errors.notes" class="text-red-500">{{ errors.notes }}</small>
       </div>
     </form>
+
+    <div v-if="customer" class="flex gap-3 mt-2">
+      <Button
+        label="Statement"
+        severity="secondary"
+        text
+        size="small"
+        @click="() => void router.push(`/customers/${customer!.id}/soa`)"
+      />
+      <Button
+        label="Credits"
+        severity="secondary"
+        text
+        size="small"
+        @click="() => void router.push(`/customers/${customer!.id}/credits`)"
+      />
+    </div>
 
     <template #footer>
       <div class="flex items-center gap-2">

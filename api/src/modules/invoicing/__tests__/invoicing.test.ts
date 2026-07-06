@@ -514,12 +514,13 @@ describe('voidInvoice', () => {
   })
 
   // UPGRADE.md F-14 — money already received must be reversed before voiding
-  it('rejects voiding an invoice with active payments', async () => {
+  it('voids an invoice with active payments by reversing them and granting customer credit (UPGRADE.md F-14)', async () => {
     const { business, user } = await seedBusiness()
     await seedRates(business.id, user.id)
     const customer = await seedCustomer(business.id, user.id)
 
     const svc = await import('../service.js')
+    const creditsSvc = await import('../../customerCredits/service.js')
     const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
     const { todayMv } = await import('@koosani/shared')
 
@@ -532,16 +533,29 @@ describe('voidInvoice', () => {
       ctx,
     )
     const issued = await svc.issue(business.id, draft.id, ctx)
-    await svc.addPayment(
+    const payment = await svc.addPayment(
       business.id,
       issued.id,
       { amount: '50.00', method: 'cash', paidAt: todayMv() },
       ctx,
     )
 
-    await expect(svc.voidInvoice(business.id, issued.id, 'reason', ctx)).rejects.toThrow(
-      'active payments',
-    )
+    const voided = await svc.voidInvoice(business.id, issued.id, 'reason', ctx)
+    expect(voided.status).toBe('voided')
+    expect(voided.paidAmount).toBe('0.00')
+
+    // The payment was reversed, not left dangling against a voided document
+    const invoiceAfter = await svc.getInvoice(business.id, issued.id)
+    const reversedPayment = invoiceAfter.payments.find((p) => p.id === payment.id)
+    expect(reversedPayment?.reversedAt).not.toBeNull()
+
+    // And the customer was made whole via a credit ledger entry, not left short
+    const balance = await creditsSvc.getBalance(business.id, customer.id)
+    expect(balance).toBe('50.00')
+    const ledger = await creditsSvc.listLedger(business.id, customer.id)
+    expect(ledger).toHaveLength(1)
+    expect(ledger[0]?.kind).toBe('voided_invoice')
+    expect(ledger[0]?.amount).toBe('50.00')
   })
 })
 
@@ -620,13 +634,16 @@ describe('addPayment / reversePayment', () => {
     expect(after.paidAmount).toBe('50.00')
   })
 
-  // UPGRADE.md F-15 — paid_amount must never exceed the invoice total
-  it('rejects a payment that would exceed the outstanding balance', async () => {
+  // UPGRADE.md F-15 — paid_amount must never exceed the invoice total, but an
+  // overpayment is no longer rejected: it's capped at outstanding and the
+  // excess becomes customer credit (properly resolves F-15, Phase 27).
+  it('caps an overpayment at the outstanding balance and credits the excess', async () => {
     const { business, user } = await seedBusiness()
     await seedRates(business.id, user.id)
     const customer = await seedCustomer(business.id, user.id)
 
     const svc = await import('../service.js')
+    const creditsSvc = await import('../../customerCredits/service.js')
     const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
     const { todayMv } = await import('@koosani/shared')
 
@@ -640,18 +657,22 @@ describe('addPayment / reversePayment', () => {
     )
     const issued = await svc.issue(business.id, draft.id, ctx)
 
-    await expect(
-      svc.addPayment(
-        business.id,
-        issued.id,
-        { amount: '999.00', method: 'cash', paidAt: todayMv() },
-        ctx,
-      ),
-    ).rejects.toThrow(svc.ValidationError)
+    const payment = await svc.addPayment(
+      business.id,
+      issued.id,
+      { amount: '999.00', method: 'cash', paidAt: todayMv() },
+      ctx,
+    )
+    // The invoice's own payment record never exceeds what was outstanding (108.00)
+    expect(payment.amount).toBe('108.00')
 
     const after = await svc.getInvoice(business.id, issued.id)
-    expect(after.status).toBe('issued')
-    expect(after.paidAmount).toBe('0.00')
+    expect(after.status).toBe('paid')
+    expect(after.paidAmount).toBe('108.00')
+
+    // The 891.00 excess became available credit, not a rejected payment
+    const balance = await creditsSvc.getBalance(business.id, customer.id)
+    expect(balance).toBe('891.00')
   })
 
   // UPGRADE.md F-17 — a payment cannot be reversed twice

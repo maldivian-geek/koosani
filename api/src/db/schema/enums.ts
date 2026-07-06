@@ -118,3 +118,14 @@ export const recurrenceFrequencyEnum = pgEnum('recurrence_frequency', [
   'quarterly',
   'yearly',
 ])
+
+// Customer credit ledger (Phase 27, UPGRADE.md G-7) — append-only double-entry
+// style: positive-amount kinds add credit, negative-amount kinds consume it.
+// Never updated once written; a correction is always a new offsetting row.
+export const creditLedgerKindEnum = pgEnum('credit_ledger_kind', [
+  'overpayment', // + created automatically when a payment exceeds the invoice's outstanding balance
+  'advance', // + manually recorded retainer/advance payment with no invoice yet
+  'voided_invoice', // + created when voiding an invoice that had active (non-reversed) payments
+  'applied_to_invoice', // - credit consumed against an invoice's outstanding balance
+  'refunded', // - money physically paid back to the customer
+])

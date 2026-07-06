@@ -43,6 +43,13 @@
       "when": 1783328995974,
       "tag": "0005_phase26_recurrence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783330468067,
+      "tag": "0006_phase27_customer_credits",
+      "breakpoints": true
     }
   ]
 }

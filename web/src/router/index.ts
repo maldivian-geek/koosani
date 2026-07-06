@@ -68,6 +68,11 @@ export const router = createRouter({
           meta: { requiresAuth: true, title: 'Statement of Account' },
         },
         {
+          path: 'customers/:id/credits',
+          component: () => import('../modules/customers/views/CustomerCreditsView.vue'),
+          meta: { requiresAuth: true, title: 'Customer Credit' },
+        },
+        {
           path: 'invoices',
           component: () => import('../modules/invoicing/views/InvoiceListView.vue'),
           meta: { requiresAuth: true, title: 'Invoices' },

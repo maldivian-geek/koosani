@@ -6,6 +6,7 @@ import * as audit from '../audit/service.js'
 import * as gst from '../gst/service.js'
 import * as inventory from '../inventory/service.js'
 import * as customers from '../customers/service.js'
+import * as customerCredits from '../customerCredits/service.js'
 import { emailQueue } from '../../lib/queues.js'
 import type { AuditCtx } from '../audit/service.js'
 import type {
@@ -436,18 +437,33 @@ export async function voidInvoice(
     if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
       throw new ValidationError('Only issued invoices can be voided')
     }
-    // Money already received must be reversed or reallocated before voiding —
-    // otherwise it sits against a voided document with no owner (UPGRADE.md
-    // F-14). Proper credit/refund handling lands in UPGRADE.md Phase 27; this
-    // is the interim, financially-safe policy.
-    if (new Decimal(invoice.paidAmount ?? '0').gt(0)) {
-      throw new ValidationError(
-        'Cannot void an invoice with active payments — reverse all payments first',
-      )
-    }
 
     const today = todayMv()
     await gst.assertPeriodOpen(businessId, today, ctx, tx)
+
+    // Money already received on a voided invoice isn't lost — it becomes
+    // customer credit (properly resolves UPGRADE.md F-14, replacing Phase
+    // 20's interim "reject the void" policy). Each active payment is
+    // reversed and its amount granted back as credit, one-for-one.
+    const activePayments = await repo.listActivePaymentsByInvoiceForUpdate(
+      businessId,
+      invoiceId,
+      tx,
+    )
+    for (const payment of activePayments) {
+      const reversed = await repo.markPaymentReversed(payment.id, tx)
+      if (reversed) {
+        await customerCredits.creditFromVoidedInvoice(
+          businessId,
+          invoice.customerId,
+          payment.amount,
+          invoiceId,
+          ctx,
+          tx,
+        )
+      }
+    }
+    const paidAmountAfterReversal = await repo.syncPaidAmount(businessId, invoiceId, tx)
 
     const lines = await repo.getLinesByInvoice(businessId, invoiceId, tx)
 
@@ -515,6 +531,7 @@ export async function voidInvoice(
       invoiceId,
       {
         status: 'voided',
+        paidAmount: paidAmountAfterReversal,
         voidReason: reason,
         voidedAt: new Date(),
         updatedBy: ctx.userId,
@@ -526,8 +543,13 @@ export async function voidInvoice(
       'invoice.voided',
       'invoice',
       invoiceId,
-      { status: invoice.status },
-      { status: 'voided', reason, reversedByCn: cn.id },
+      { status: invoice.status, paidAmount: invoice.paidAmount },
+      {
+        status: 'voided',
+        reason,
+        reversedByCn: cn.id,
+        paymentsReversed: activePayments.length,
+      },
       ctx,
       tx,
     )
@@ -552,15 +574,14 @@ export async function addPayment(
         throw new ValidationError('Payments can only be added to issued invoices')
       }
 
-      // Reject overpayment — paid_amount must never exceed the invoice total
-      // (UPGRADE.md F-15). Customer credit/advance balances are a separate,
-      // not-yet-built feature (UPGRADE.md Phase 27).
+      // paid_amount must never exceed the invoice total (UPGRADE.md F-15).
+      // An overpayment is no longer rejected — it's capped at what's actually
+      // outstanding on this invoice, and the excess becomes customer credit
+      // (properly resolves F-15, replacing Phase 20's "reject" interim policy).
       const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
-      if (new Decimal(data.amount).gt(outstanding)) {
-        throw new ValidationError(
-          `Payment of ${data.amount} exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
-        )
-      }
+      const requestedAmount = new Decimal(data.amount)
+      const appliedAmount = Decimal.min(requestedAmount, outstanding)
+      const overpaidAmount = requestedAmount.minus(appliedAmount)
 
       await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
 
@@ -569,7 +590,7 @@ export async function addPayment(
           businessId,
           invoiceId,
           customerId: invoice.customerId,
-          amount: data.amount,
+          amount: appliedAmount.toFixed(2),
           method: data.method,
           reference: data.ref ?? null,
           paidAt: data.paidAt,
@@ -577,6 +598,17 @@ export async function addPayment(
         },
         tx,
       )
+
+      if (overpaidAmount.gt(0)) {
+        await customerCredits.creditFromOverpayment(
+          businessId,
+          invoice.customerId,
+          overpaidAmount.toFixed(2),
+          payment.id,
+          ctx,
+          tx,
+        )
+      }
 
       const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
       const paid = new Decimal(paidAmount)
@@ -603,7 +635,12 @@ export async function addPayment(
         'invoice',
         invoiceId,
         { paidAmount: invoice.paidAmount, status: invoice.status },
-        { paidAmount, status: newStatus, paymentId: payment.id },
+        {
+          paidAmount,
+          status: newStatus,
+          paymentId: payment.id,
+          overpaidAmount: overpaidAmount.gt(0) ? overpaidAmount.toFixed(2) : undefined,
+        },
         ctx,
         tx,
       )
@@ -613,16 +650,145 @@ export async function addPayment(
     .then(async (payment) => {
       // Fire-and-forget "thank you" receipt (Phase 24, UPGRADE.md G-3). Not part
       // of the transaction above — a failed/delayed send should never roll back
-      // a recorded payment.
-      await emailQueue.add('receipt', {
-        kind: 'receipt',
-        businessId,
-        invoiceId,
-        paymentId: payment.id,
-        userId: ctx.userId,
-      })
+      // a recorded payment. Skipped for write-offs (Phase 27) — no real money
+      // moved, so a "thank you for your payment" email would be misleading.
+      if (payment.method !== 'write_off') {
+        await emailQueue.add('receipt', {
+          kind: 'receipt',
+          businessId,
+          invoiceId,
+          paymentId: payment.id,
+          userId: ctx.userId,
+        })
+      }
       return payment
     })
+}
+
+// ─── applyCreditToInvoice ─────────────────────────────────────────────────────
+// Consumes the customer's existing credit balance (from an overpayment,
+// advance, or voided invoice) against this invoice's outstanding balance
+// (UPGRADE.md Phase 27, G-7). Recorded as a payments_received row
+// (method: 'credit') so it flows through the exact same paidAmount/status
+// sync as a cash payment.
+
+export async function applyCreditToInvoice(
+  businessId: string,
+  invoiceId: string,
+  amount: string,
+  ctx: AuditCtx,
+): Promise<PaymentReceived> {
+  return db.transaction(async (tx) => {
+    const invoice = await repo.getById(businessId, invoiceId, tx)
+    if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
+    if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+      throw new ValidationError('Credit can only be applied to issued invoices')
+    }
+
+    const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
+    const requested = new Decimal(amount)
+    if (requested.lte(0)) throw new ValidationError('Amount must be greater than zero')
+    if (requested.gt(outstanding)) {
+      throw new ValidationError(
+        `Amount exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+      )
+    }
+
+    const today = todayMv()
+    await gst.assertPeriodOpen(businessId, today, ctx, tx)
+
+    // Debits the ledger first — throws if the balance is insufficient, before
+    // anything else is written. Re-thrown as invoicing's own ValidationError:
+    // customerCredits.ValidationError is a distinct class, so the route's
+    // `instanceof svc.ValidationError` check wouldn't otherwise catch it.
+    try {
+      await customerCredits.applyToInvoice(
+        businessId,
+        invoice.customerId,
+        invoiceId,
+        amount,
+        ctx,
+        tx,
+      )
+    } catch (err) {
+      if (err instanceof customerCredits.ValidationError) throw new ValidationError(err.message)
+      throw err
+    }
+
+    const payment = await repo.insertPayment(
+      {
+        businessId,
+        invoiceId,
+        customerId: invoice.customerId,
+        amount: requested.toFixed(2),
+        method: 'credit',
+        reference: null,
+        paidAt: today,
+        createdBy: ctx.userId,
+      },
+      tx,
+    )
+
+    const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
+    const paid = new Decimal(paidAmount)
+    const total = new Decimal(invoice.total)
+
+    let newStatus: Invoice['status']
+    if (paid.gte(total)) {
+      newStatus = 'paid'
+    } else if (paid.gt(0)) {
+      newStatus = 'partially_paid'
+    } else {
+      newStatus = 'issued'
+    }
+
+    await repo.updateInvoice(
+      businessId,
+      invoiceId,
+      { paidAmount, status: newStatus, updatedBy: ctx.userId },
+      tx,
+    )
+
+    await audit.record(
+      'invoice.credit_applied',
+      'invoice',
+      invoiceId,
+      { paidAmount: invoice.paidAmount, status: invoice.status },
+      { paidAmount, status: newStatus, paymentId: payment.id, amount: requested.toFixed(2) },
+      ctx,
+      tx,
+    )
+
+    return payment
+  })
+}
+
+// ─── writeOffInvoice ──────────────────────────────────────────────────────────
+// Bad-debt write-off (UPGRADE.md Phase 27, G-7): closes out the remaining
+// outstanding balance with no cash movement. Reuses addPayment's exact
+// paidAmount/status-sync logic via method: 'write_off' — see there for why
+// the receipt email is skipped for this method.
+
+export async function writeOffInvoice(
+  businessId: string,
+  invoiceId: string,
+  reason: string,
+  ctx: AuditCtx,
+): Promise<PaymentReceived> {
+  const invoice = await repo.getById(businessId, invoiceId)
+  if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
+  if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
+    throw new ValidationError('Only issued invoices can be written off')
+  }
+  const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
+  if (outstanding.lte(0)) throw new ValidationError('Nothing outstanding to write off')
+
+  return addPayment(
+    businessId,
+    invoiceId,
+    { amount: outstanding.toFixed(2), method: 'write_off', ref: reason, paidAt: todayMv() },
+    ctx,
+  )
 }
 
 // ─── reversePayment ───────────────────────────────────────────────────────────

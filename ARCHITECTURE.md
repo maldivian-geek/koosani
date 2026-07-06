@@ -64,26 +64,27 @@ Database            (PostgreSQL — constraints enforce invariants)
 
 Each module is a folder under `api/src/modules/` and `web/src/modules/`. A module owns its routes, services, repositories, schemas, and Vue views. Cross-module calls go through the _service_ of the other module, never its repository.
 
-| Module        | Owns                                                                                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `auth`        | Login, sessions, JWT, password reset, invite, magic link (per SECURITY.md)                                                                                               |
-| `users`       | User CRUD, invite issuance, role changes (implemented Phase 21; previously documented but non-existent)                                                                  |
-| `permissions` | `user_permissions` grants — no routes; consumed by `middleware/authorize.ts`, `users`, `auth` (Phase 21)                                                                 |
-| `customers`   | Customer master, contact persons, billing addresses, credit terms, TIN                                                                                                   |
-| `suppliers`   | Supplier master, contact persons, payment terms, TIN                                                                                                                     |
-| `items`       | Item master (SKU, name, unit, GST category, default price/cost), categories                                                                                              |
-| `inventory`   | Stock-on-hand per item, movement ledger, adjustments, stock counts                                                                                                       |
-| `invoicing`   | Sales invoices, credit notes, payments received, customer SOA                                                                                                            |
-| `estimates`   | Quotes: draft → sent → accepted/declined/expired; convert-to-invoice (Phase 25) — see §4.6                                                                               |
-| `recurrence`  | Recurring invoice profiles + template lines; daily cron generates draft/issued invoices (Phase 26) — see §4.7                                                            |
-| `purchases`   | Supplier invoices (bills), payments made, supplier SOA                                                                                                                   |
-| `po`          | Purchase orders, goods receipt notes (GRN), PO→bill matching                                                                                                             |
-| `gst`         | GST rate config, MIRA 205 / 206 builders, Input Tax Statement, period locking                                                                                            |
-| `reports`     | Cross-module reports (sales, purchases, stock valuation, P&L summary)                                                                                                    |
-| `files`       | Upload, virus-scan handoff, signed-URL download for PDFs and uploaded docs                                                                                               |
-| `audit`       | Append-only audit log for all financial mutations                                                                                                                        |
-| `settings`    | Business profile, logo, numbering prefixes, defaults — reads/writes the `businesses` row (Phase 22)                                                                      |
-| `emailLogs`   | Append-only outbound email log (`email_logs`) and reminder idempotency (`invoice_reminders_sent`) — no routes of its own; read via `GET /invoices/:id/emails` (Phase 24) |
+| Module            | Owns                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth`            | Login, sessions, JWT, password reset, invite, magic link (per SECURITY.md)                                                                                               |
+| `users`           | User CRUD, invite issuance, role changes (implemented Phase 21; previously documented but non-existent)                                                                  |
+| `permissions`     | `user_permissions` grants — no routes; consumed by `middleware/authorize.ts`, `users`, `auth` (Phase 21)                                                                 |
+| `customers`       | Customer master, contact persons, billing addresses, credit terms, TIN                                                                                                   |
+| `suppliers`       | Supplier master, contact persons, payment terms, TIN                                                                                                                     |
+| `items`           | Item master (SKU, name, unit, GST category, default price/cost), categories                                                                                              |
+| `inventory`       | Stock-on-hand per item, movement ledger, adjustments, stock counts                                                                                                       |
+| `invoicing`       | Sales invoices, credit notes, payments received, customer SOA                                                                                                            |
+| `estimates`       | Quotes: draft → sent → accepted/declined/expired; convert-to-invoice (Phase 25) — see §4.6                                                                               |
+| `recurrence`      | Recurring invoice profiles + template lines; daily cron generates draft/issued invoices (Phase 26) — see §4.7                                                            |
+| `customerCredits` | Append-only credit ledger (overpayments, advances, voided-invoice grants, applications, refunds) — see §4.8                                                              |
+| `purchases`       | Supplier invoices (bills), payments made, supplier SOA                                                                                                                   |
+| `po`              | Purchase orders, goods receipt notes (GRN), PO→bill matching                                                                                                             |
+| `gst`             | GST rate config, MIRA 205 / 206 builders, Input Tax Statement, period locking                                                                                            |
+| `reports`         | Cross-module reports (sales, purchases, stock valuation, P&L summary)                                                                                                    |
+| `files`           | Upload, virus-scan handoff, signed-URL download for PDFs and uploaded docs                                                                                               |
+| `audit`           | Append-only audit log for all financial mutations                                                                                                                        |
+| `settings`        | Business profile, logo, numbering prefixes, defaults — reads/writes the `businesses` row (Phase 22)                                                                      |
+| `emailLogs`       | Append-only outbound email log (`email_logs`) and reminder idempotency (`invoice_reminders_sent`) — no routes of its own; read via `GET /invoices/:id/emails` (Phase 24) |
 
 **Forbidden cross-module patterns:**
 
@@ -153,6 +154,15 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
 - Two generation modes per profile: `autoIssue: false` (default) creates a **draft** for staff review; `autoIssue: true` immediately calls `invoicing.issue` (stock commit, number allocation, no human in the loop) — an intentionally blunt per-profile flag, not a business-level default, since auto-issuing is a meaningfully bigger trust decision than auto-drafting.
 - `invoices.recurrence_profile_id` traces a generated invoice back to its profile (same no-FK-at-the-schema-level pattern as `estimates`' `invoices.estimate_id`, via `invoicing.setRecurrenceLink`).
 - **Late fees are explicitly not implemented.** UPGRADE.md flags that MIRA's GST treatment of late fees needs owner confirmation before that half of G-6/G-4b is built — see `api/src/db/schema/enums.ts`'s comment on `recurrenceFrequencyEnum`. No late-fee columns, rules, or generated lines exist anywhere in this schema.
+
+### 4.8 Customer credits — properly resolves F-14 and F-15
+
+- `customer_credits` is an append-only ledger — a customer's available balance is `SUM(amount)` over their rows, never a stored/cached counter. Positive-amount kinds grant credit (`overpayment`, `advance`, `voided_invoice`); negative-amount kinds consume it (`applied_to_invoice`, `refunded`). Rows are never updated; a correction is always a new offsetting row (Phase 27, UPGRADE.md G-7).
+- **F-15, properly resolved**: `invoicing.addPayment` no longer rejects an overpayment. It caps the `payments_received` row at what's actually outstanding on the invoice, and the excess becomes a `customer_credits` grant (`kind: 'overpayment'`) referencing the payment. `paidAmount` therefore still never exceeds `total` — the Phase 20 interim invariant holds — but the excess isn't lost, it's redirected.
+- **F-14, properly resolved**: `invoicing.voidInvoice` no longer rejects voiding an invoice with active payments. Each active (non-reversed) payment is locked (`FOR UPDATE`), reversed via the same mechanism as a manual reversal, and its amount granted back as credit (`kind: 'voided_invoice'`). The invoice's `paidAmount` is re-synced to the post-reversal total (0, if all payments were active) before the final `voided` status update.
+- **Applying credit** (`POST /invoices/:id/apply-credit`) debits the ledger (`customerCredits.applyToInvoice`, serialized per-customer via `pg_advisory_xact_lock` — same pattern as `db/numbering.ts` — so two concurrent applications can't both pass a balance check that's only sufficient for one) and inserts a `payments_received` row with `method: 'credit'`, so it flows through the exact same `paidAmount`/status sync as a cash payment. Cross-module error translation matters here: `customerCredits.ValidationError` is caught and re-thrown as `invoicing.ValidationError` at the call site, since they're distinct classes despite the same name — a route's `instanceof svc.ValidationError` check only recognizes its own module's class.
+- **Write-off** (`POST /invoices/:id/write-off`) is a thin wrapper over `invoicing.addPayment` with `method: 'write_off'` for the exact outstanding amount — reuses the same `paidAmount`/status sync rather than a parallel code path. No new `invoice_status` enum value was added (a written-off invoice still shows `paid`); reports that need to exclude non-cash revenue should filter on `payments_received.method != 'write_off'`. The "thank you for your payment" receipt email is skipped for this method (see `invoicing.addPayment`'s `.then()`), since no real payment occurred.
+- Advances and refunds (`POST /customers/:id/credits/advance`, `.../refund`) are manual, staff-entered ledger rows with no invoice/payment reference — used for retainers paid before any invoice exists, and for physically returning credit as cash.
 
 ---
 

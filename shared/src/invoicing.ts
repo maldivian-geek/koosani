@@ -68,3 +68,10 @@ export const InvoiceRemindersPatch = z.object({
   enabled: z.boolean(),
 })
 export type InvoiceRemindersPatch = z.infer<typeof InvoiceRemindersPatch>
+
+// ─── Customer credit application (Phase 27, UPGRADE.md G-7) ─────────────────
+
+export const ApplyCreditBody = z.object({
+  amount: Money,
+})
+export type ApplyCreditBody = z.infer<typeof ApplyCreditBody>
