@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `UPGRADE.md` — full codebase analysis: Zoho Invoice feature-parity matrix (17 gaps, G-1…G-17), verified flaw audit with file:line evidence and fixes (26 findings, F-1…F-26, spanning security, financial correctness, and dead plumbing), and a phased upgrade plan (Phases 20–33). Notable confirmed flaws: `token_version` middleware check is a no-op, no `requireRole`/`requirePermission` layer exists, uploads trust client MIME with no virus scan, negative-stock TOCTOU race, payment reversals skip GST period lock, SOA-extract worker never registered, and no PDF/email capability exists despite documented queues (UPGRADE.md Part 2).
 - Root `pnpm dev` script that runs the api and web dev servers concurrently via pnpm's built-in `--parallel` (no new dependency; `dev:api` / `dev:web` retained for running either alone).
 
 ### Changed
