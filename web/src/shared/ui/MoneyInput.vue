@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import InputText from 'primevue/inputtext'
+import { money } from '@koosani/shared'
 
 const props = defineProps<{
   modelValue: string
@@ -23,12 +24,16 @@ watch(
 )
 
 function onBlur() {
-  const n = parseFloat(internal.value.replace(/[^0-9.-]/g, ''))
-  if (isNaN(n)) {
+  // Normalize via decimal.js (money.round2), never parseFloat — a float can
+  // silently lose precision on large amounts (UPGRADE.md F-13).
+  const cleaned = internal.value.replace(/[^0-9.-]/g, '')
+  let formatted: string
+  try {
+    formatted = money.round2(cleaned)
+  } catch {
     internal.value = props.modelValue
     return
   }
-  const formatted = n.toFixed(2)
   internal.value = formatted
   emit('update:modelValue', formatted)
 }

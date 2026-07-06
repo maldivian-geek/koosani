@@ -71,7 +71,9 @@ export async function assertAvailable(
   const allowBackorders = await repo.getBackorderFlag(businessId)
   if (allowBackorders) return
 
-  const onHand = await repo.getItemOnHand(businessId, itemId, tx)
+  // Locks the item row until this tx commits, so a concurrent issue/adjustment
+  // against the same item cannot also pass this check before stock is updated.
+  const onHand = await repo.getItemOnHandForUpdate(businessId, itemId, tx)
   if (onHand === null) return // item not found — FK constraint will catch it
 
   const result = new Decimal(onHand).plus(qty)

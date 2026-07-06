@@ -9,6 +9,8 @@
 > - `repo` = repository-layer function (DB only, no business rules)
 >
 > Every authenticated route receives an implicit `ctx` with `{ userId, businessId, role, ip }`. Not shown in signatures.
+>
+> **Authorization middleware** (`api/src/middleware/authorize.ts`, Phase 20 — SECURITY.md §Authorization Model): `requireRole(minRole)` and `requirePermission(resource, action)` are applied per-route alongside `requireAuth`, not shown per-row below except where they gate an otherwise-undocumented action (e.g. admin-only). `hasPermission(role, userId, resource, action)` is the underlying check, also used directly by `reports` routes for the `export` action.
 
 ---
 
@@ -138,13 +140,13 @@
 
 ## Module: `files`
 
-| Kind  | Name                    | Signature                                                     | Purpose                                                     |
-| ----- | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
-| route | `POST   /files`         | `multipart { file }` → `{ id, url }`                          | Upload file; validates MIME + 25 MB cap (SECURITY.md §13.5) |
-| route | `GET    /files/:id/url` | → `{ url }`                                                   | Get 1-hour signed download URL                              |
-| svc   | `files.uploadFile`      | `(businessId, buffer, name, mime, ctx) → File`                | SHA-256 keyed storage + DB record + audit                   |
-| svc   | `files.getSignedUrl`    | `(businessId, fileId) → string`                               | Delegates to storage backend                                |
-| svc   | `files.attachToEntity`  | `(businessId, fileId, entityType, entityId, ctx, tx?) → void` | Links file to any entity; audited                           |
+| Kind  | Name                    | Signature                                                     | Purpose                                                                                                |
+| ----- | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| route | `POST   /files`         | `multipart { file }` → `{ id, url }`                          | Upload file; magic-byte MIME check, EXIF strip, virus scan, 25 MB cap (SECURITY.md §13.5)              |
+| route | `GET    /files/:id/url` | → `{ url }`                                                   | Get 5-minute signed download URL (only for `scan_result='clean'`)                                      |
+| svc   | `files.uploadFile`      | `(businessId, buffer, name, mime, ctx) → File`                | Sniffs magic bytes, strips EXIF (images), scans for viruses, SHA-256 keyed storage + DB record + audit |
+| svc   | `files.getSignedUrl`    | `(businessId, fileId) → string`                               | Delegates to storage backend                                                                           |
+| svc   | `files.attachToEntity`  | `(businessId, fileId, entityType, entityId, ctx, tx?) → void` | Links file to any entity; audited                                                                      |
 
 ---
 
@@ -245,16 +247,6 @@
 `GstSummaryResult = { from, to, outputTaxByCategory, inputTaxByCategory, totalOutputTax, totalInputTax, netPayable }`
 
 All `reports.*` functions are **pure read-only** — no writes, no audit rows, no period locks.
-
----
-
-## Module: `files`
-
-| Kind  | Name                      | Signature                          | Purpose                                                           |
-| ----- | ------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| route | `POST /files`             | `multipart` → `{ fileId, sha256 }` | Upload, scan, store                                               |
-| route | `GET  /files/:id/url`     | → `{ url, expiresAt }`             | Signed download URL                                               |
-| svc   | `files.requirePermission` | `(fileId, ctx) → File`             | File belongs to ctx's business AND user has read on linked entity |
 
 ---
 

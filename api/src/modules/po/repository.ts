@@ -55,6 +55,22 @@ export async function getPoLineById(
   return row ?? null
 }
 
+// Locks the PO line row until the caller's tx commits — prevents two
+// concurrent GRNs against the same line from both passing the over-receipt
+// check before either commits (UPGRADE.md F-16).
+export async function getPoLineByIdForUpdate(
+  businessId: string,
+  lineId: string,
+  tx: DbTx,
+): Promise<PoLine | null> {
+  const [row] = await tx
+    .select()
+    .from(poLines)
+    .where(and(eq(poLines.businessId, businessId), eq(poLines.id, lineId)))
+    .for('update')
+  return row ?? null
+}
+
 export type ListPoParams = {
   status: string | undefined
   supplierId: string | undefined

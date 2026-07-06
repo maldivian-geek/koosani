@@ -3,13 +3,14 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { PoDraftCreate, PoDraftPatch, PoCancelBody, GrnCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
-import { createRateLimiter } from '../../lib/rateLimiter.js'
+import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 
 // Per-user: 20 PDF requests per minute (SECURITY.md §13.7)
-const pdfLimiter = createRateLimiter(60_000, 20)
+const pdfLimiter = createRedisRateLimiter('rl:po-pdf', 20, 60)
 
 const ListPosQuery = z.object({
   status: z.string().optional(),
@@ -51,7 +52,7 @@ poRoutes.get('/:id', async (c) => {
 })
 
 // POST /pos
-poRoutes.post('/', zValidator('json', PoDraftCreate), async (c) => {
+poRoutes.post('/', requirePermission('po', 'add'), zValidator('json', PoDraftCreate), async (c) => {
   const data = c.req.valid('json')
   const ctx = {
     userId: c.get('userId'),
@@ -69,26 +70,31 @@ poRoutes.post('/', zValidator('json', PoDraftCreate), async (c) => {
 })
 
 // PATCH /pos/:id
-poRoutes.patch('/:id', zValidator('json', PoDraftPatch), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const po = await svc.patchDraft(c.get('businessId'), c.req.param('id'), data, ctx)
-    return c.json(po)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+poRoutes.patch(
+  '/:id',
+  requirePermission('po', 'edit'),
+  zValidator('json', PoDraftPatch),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const po = await svc.patchDraft(c.get('businessId'), c.req.param('id'), data, ctx)
+      return c.json(po)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /pos/:id/approve
-poRoutes.post('/:id/approve', async (c) => {
+poRoutes.post('/:id/approve', requirePermission('po', 'edit'), async (c) => {
   const ctx = {
     userId: c.get('userId'),
     businessId: c.get('businessId'),
@@ -106,27 +112,32 @@ poRoutes.post('/:id/approve', async (c) => {
 })
 
 // POST /pos/:id/cancel
-poRoutes.post('/:id/cancel', zValidator('json', PoCancelBody), async (c) => {
-  const { reason } = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const po = await svc.cancelPo(c.get('businessId'), c.req.param('id'), reason, ctx)
-    return c.json(po)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+poRoutes.post(
+  '/:id/cancel',
+  requirePermission('po', 'edit'),
+  zValidator('json', PoCancelBody),
+  async (c) => {
+    const { reason } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const po = await svc.cancelPo(c.get('businessId'), c.req.param('id'), reason, ctx)
+      return c.json(po)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // GET /pos/:id/pdf — PDF enqueued on approve; return job status
 poRoutes.get('/:id/pdf', async (c) => {
-  if (!pdfLimiter(c.get('userId'))) return c.json({ error: 'rate_limited' }, 429)
+  if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   try {
     await svc.getPo(c.get('businessId'), c.req.param('id'))
     // PDF generation handled by the worker; return 501 until Phase 12 renders PDFs
@@ -138,26 +149,31 @@ poRoutes.get('/:id/pdf', async (c) => {
 })
 
 // POST /pos/:id/grns
-poRoutes.post('/:id/grns', zValidator('json', GrnCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const grn = await svc.createGrn(c.get('businessId'), c.req.param('id'), data, ctx)
-    return c.json(grn, 201)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+poRoutes.post(
+  '/:id/grns',
+  requirePermission('po', 'edit'),
+  zValidator('json', GrnCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const grn = await svc.createGrn(c.get('businessId'), c.req.param('id'), data, ctx)
+      return c.json(grn, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /pos/:id/bill — create a draft bill pre-filled from PO/GRN lines
-poRoutes.post('/:id/bill', async (c) => {
+poRoutes.post('/:id/bill', requirePermission('po', 'edit'), async (c) => {
   const ctx = {
     userId: c.get('userId'),
     businessId: c.get('businessId'),

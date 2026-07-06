@@ -89,8 +89,10 @@ export async function insertRate(
 export async function getPeriodForDate(
   businessId: string,
   date: string,
+  tx?: DbTx,
 ): Promise<GstPeriod | null> {
-  const [row] = await db
+  const q = tx ?? db
+  const [row] = await q
     .select()
     .from(gstPeriods)
     .where(
@@ -191,8 +193,12 @@ export async function unlockPeriod(id: string, unlockedBy: string, tx: DbTx): Pr
 
 // ─── Business config ──────────────────────────────────────────────────────────
 
-export async function getBusinessPeriodType(businessId: string): Promise<'monthly' | 'quarterly'> {
-  const [row] = await db
+export async function getBusinessPeriodType(
+  businessId: string,
+  tx?: DbTx,
+): Promise<'monthly' | 'quarterly'> {
+  const q = tx ?? db
+  const [row] = await q
     .select({ gstPeriodType: businesses.gstPeriodType })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -279,7 +285,12 @@ export async function getBillLinesForPeriod(
         lte(bills.billDate, periodEnd),
       ),
     )
-    .groupBy(suppliers.id, suppliers.name, suppliers.tin, billLines.gstCategory) as unknown as BillLineAgg[]
+    .groupBy(
+      suppliers.id,
+      suppliers.name,
+      suppliers.tin,
+      billLines.gstCategory,
+    ) as unknown as BillLineAgg[]
 }
 
 // ─── GST returns (append-only, SECURITY.md §13.4) ────────────────────────────

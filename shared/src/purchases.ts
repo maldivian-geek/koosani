@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { Decimal } from 'decimal.js'
 import { IsoDate, Qty, Money, GstCategory } from './primitives.js'
 
 // ─── Bill line (shared between create and patch) ──────────────────────────────
@@ -37,7 +38,12 @@ export type BillDraftPatch = z.infer<typeof BillDraftPatch>
 // ─── Payment ──────────────────────────────────────────────────────────────────
 
 export const BillPaymentCreate = z.object({
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a positive decimal'),
+  // Strictly positive money amount — zero and negative payments are rejected
+  // (UPGRADE.md F-15; a reversal, not a zero payment, is how you undo one)
+  amount: z
+    .string()
+    .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a positive decimal')
+    .refine((v) => new Decimal(v).gt(0), 'Amount must be greater than zero'),
   method: z.string().min(1).max(100),
   ref: z.string().max(200).optional(),
   paidAt: IsoDate,

@@ -158,6 +158,22 @@ export async function getPaymentById(
   return row ?? null
 }
 
+// Locks the payment row until the caller's tx commits — prevents a concurrent
+// reversal of the same payment from also passing the reversedAt check
+// (UPGRADE.md F-17).
+export async function getPaymentByIdForUpdate(
+  businessId: string,
+  id: string,
+  tx: DbTx,
+): Promise<PaymentMade | null> {
+  const [row] = await tx
+    .select()
+    .from(paymentsMade)
+    .where(and(eq(paymentsMade.businessId, businessId), eq(paymentsMade.id, id)))
+    .for('update')
+  return row ?? null
+}
+
 export async function getPaymentsByBill(
   businessId: string,
   billId: string,
@@ -189,18 +205,27 @@ export async function sumActivePayments(
   return (row as { total: string }).total ?? '0'
 }
 
+// Guards on reversedAt IS NULL — a double-reversal race becomes a no-op
+// instead of a second reversal (UPGRADE.md F-17). Returns null if the payment
+// was already reversed.
 export async function markPaymentReversed(
   businessId: string,
   paymentId: string,
   tx?: DbTx,
-): Promise<PaymentMade> {
+): Promise<PaymentMade | null> {
   const q = tx ?? db
   const [row] = await q
     .update(paymentsMade)
     .set({ reversedAt: new Date() })
-    .where(and(eq(paymentsMade.businessId, businessId), eq(paymentsMade.id, paymentId)))
+    .where(
+      and(
+        eq(paymentsMade.businessId, businessId),
+        eq(paymentsMade.id, paymentId),
+        isNull(paymentsMade.reversedAt),
+      ),
+    )
     .returning()
-  return row!
+  return row ?? null
 }
 
 // ─── SOA queries ──────────────────────────────────────────────────────────────

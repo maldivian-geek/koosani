@@ -66,3 +66,24 @@ export const authTokenTypeEnum = pgEnum('auth_token_type', [
 ])
 
 export const fileScanResultEnum = pgEnum('file_scan_result', ['pending', 'clean', 'infected'])
+
+// Permission model (SECURITY.md §Authorization Model, shared/src/primitives.ts)
+export const permissionResourceEnum = pgEnum('permission_resource', [
+  'customers',
+  'suppliers',
+  'items',
+  'inventory',
+  'invoices',
+  'bills',
+  'po',
+  'gst',
+  'reports',
+])
+
+export const permissionActionEnum = pgEnum('permission_action', [
+  'view',
+  'add',
+  'edit',
+  'delete',
+  'export',
+])

@@ -110,6 +110,30 @@ export async function getSession(sid: string): Promise<UserSession | undefined> 
   return rows[0]
 }
 
+// Session joined with the user's live token_version — the only source of truth
+// for stale-token rejection (requireAuth compares this against the JWT claim).
+export type SessionWithTokenVersion = {
+  userId: string
+  isActive: boolean
+  tokenVersion: number
+}
+
+export async function getSessionWithTokenVersion(
+  sid: string,
+): Promise<SessionWithTokenVersion | undefined> {
+  const rows = await db
+    .select({
+      userId: userSessions.userId,
+      isActive: userSessions.isActive,
+      tokenVersion: users.tokenVersion,
+    })
+    .from(userSessions)
+    .innerJoin(users, eq(users.id, userSessions.userId))
+    .where(eq(userSessions.id, sid))
+    .limit(1)
+  return rows[0]
+}
+
 export async function deactivateSession(sid: string): Promise<void> {
   await db.update(userSessions).set({ isActive: false }).where(eq(userSessions.id, sid))
 }

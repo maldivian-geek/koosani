@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { db } from '../../db/client.js'
+import type { DbTx } from '../../db/client.js'
 import * as repo from './repository.js'
 import * as filesService from '../files/service.js'
 import * as audit from '../audit/service.js'
@@ -85,12 +86,17 @@ export async function rateAt(
 // Throws PeriodLockedError if that period is locked (ARCHITECTURE.md §4.4).
 // Called by invoicing and purchases on issue/confirm.
 
+// `tx` is optional but should always be passed when called from inside an
+// existing transaction (invoice issue/void, bill confirm, payment reversal,
+// etc.) — otherwise period auto-creation runs in its own transaction and
+// survives a rollback of the caller's mutation (UPGRADE.md F-18).
 export async function assertPeriodOpen(
   businessId: string,
   date: string,
   ctx: AuditCtx,
+  tx?: DbTx,
 ): Promise<void> {
-  const period = await getOrCreatePeriod(businessId, date, ctx)
+  const period = await getOrCreatePeriod(businessId, date, ctx, tx)
   if (period.status === 'locked') {
     throw new PeriodLockedError(
       `GST period ${period.periodStart}–${period.periodEnd} is locked. Late entries must use today's date.`,
@@ -102,19 +108,26 @@ async function getOrCreatePeriod(
   businessId: string,
   date: string,
   ctx: AuditCtx,
+  tx?: DbTx,
 ): Promise<GstPeriod> {
-  const existing = await repo.getPeriodForDate(businessId, date)
+  const existing = await repo.getPeriodForDate(businessId, date, tx)
   if (existing) return existing
 
-  const periodType = await repo.getBusinessPeriodType(businessId)
+  const periodType = await repo.getBusinessPeriodType(businessId, tx)
   const { periodStart, periodEnd } = computePeriodBounds(date, periodType)
 
-  return db.transaction(async (tx) => {
+  if (tx) {
     return repo.upsertPeriod(
       { businessId, periodStart, periodEnd, periodType, createdBy: ctx.userId },
       tx,
     )
-  })
+  }
+  return db.transaction((innerTx) =>
+    repo.upsertPeriod(
+      { businessId, periodStart, periodEnd, periodType, createdBy: ctx.userId },
+      innerTx,
+    ),
+  )
 }
 
 // ─── getPeriodById ────────────────────────────────────────────────────────────
@@ -248,10 +261,7 @@ interface InputTaxRow {
   inputGst: string
 }
 
-function byCat(
-  rows: PeriodLineAgg[],
-  category: string,
-): { net: Decimal; gst: Decimal } {
+function byCat(rows: PeriodLineAgg[], category: string): { net: Decimal; gst: Decimal } {
   const row = rows.find((r) => r.category === category)
   return {
     net: row ? new Decimal(row.netAmount) : new Decimal(0),
@@ -401,9 +411,7 @@ export async function buildReturn(
   )
 
   const summaryJson = { mira205, mira206, inputTaxRows: itsRows }
-  const fileRefs: Array<{ kind: string; fileId: string }> = [
-    { kind: 'its', fileId: itsFile.id },
-  ]
+  const fileRefs: Array<{ kind: string; fileId: string }> = [{ kind: 'its', fileId: itsFile.id }]
 
   return db.transaction(async (tx) => {
     const gstReturn = await repo.insertGstReturn(

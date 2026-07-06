@@ -70,9 +70,9 @@ class S3Storage implements StorageBackend {
   constructor(bucket: string) {
     this.bucket = bucket
     this.client = new S3Client({
-      region: process.env['AWS_REGION'] ?? 'us-east-1',
-      ...(process.env['AWS_ENDPOINT_URL']
-        ? { endpoint: process.env['AWS_ENDPOINT_URL'], forcePathStyle: true }
+      region: config.AWS_REGION,
+      ...(config.AWS_ENDPOINT_URL
+        ? { endpoint: config.AWS_ENDPOINT_URL, forcePathStyle: true }
         : {}),
     })
   }
@@ -117,19 +117,14 @@ class S3Storage implements StorageBackend {
 // ─── Singleton ────────────────────────────────────────────────────────────────
 
 function createStorage(): StorageBackend {
-  const backend = process.env['FILES_STORAGE'] ?? 'local'
-  if (backend === 's3') {
-    const bucket = process.env['S3_BUCKET']
-    if (!bucket) {
+  if (config.FILES_STORAGE === 's3') {
+    if (!config.S3_BUCKET) {
       logger.fatal('FILES_STORAGE=s3 but S3_BUCKET is not set')
       process.exit(1)
     }
-    return new S3Storage(bucket)
+    return new S3Storage(config.S3_BUCKET)
   }
   return new LocalStorage()
 }
 
 export const storage = createStorage()
-
-// Suppress unused import warning when only local storage is used
-void config

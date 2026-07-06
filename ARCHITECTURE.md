@@ -108,20 +108,24 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
 - Invoice has `status`: `draft` → `issued` → (`paid` | `partially_paid` | `voided`).
 - Once `status = 'issued'`, the row's financial columns (lines, totals, gst_amount, customer_id, invoice_number, issue_date) are immutable. Enforced by:
   - Service-layer status guard (reject UPDATE if status ≠ `draft`).
-  - DB trigger that raises on UPDATE of frozen columns when status ≠ `draft`.
+  - DB trigger that raises on UPDATE of frozen columns when status ≠ `draft` — on the header row **and**, since Phase 20 (UPGRADE.md F-12), on `invoice_lines`/`bill_lines`/`credit_note_lines` (previously only the header was guarded; lines of an issued document could be UPDATEd/DELETEd directly at the DB level).
+  - `REVOKE DELETE` on `invoices`/`bills`/`credit_notes`/`purchase_orders` (Phase 20) — no route ever deletes these rows; the grant gap is closed regardless.
 - Corrections to an issued invoice happen via a **credit note** (separate row, references original `invoice_id`).
 - Invoice numbers come from a per-business sequence with no gaps. Allocated only on issue, never on draft create.
+- Voiding an invoice with active (non-reversed) payments is rejected — payments must be reversed first (UPGRADE.md F-14, interim policy; proper credit/refund handling is UPGRADE.md Phase 27).
 
 ### 4.3 Stock movement ledger
 
 - `stock_movements` is append-only. Every change to on-hand stock is a row: `+10` (GRN), `-3` (invoice line), `-1` (adjustment write-off), etc.
 - `items.stock_on_hand` is a _derived_ cache (`SUM(stock_movements.qty)` for that item). **Decision:** trigger-maintained column (`update_stock_on_hand()` AFTER INSERT on `stock_movements`) for read speed; nightly reconcile job verifies.
-- Negative stock is rejected by default (configurable per-business flag for back-orders).
+- Negative stock is rejected by default (configurable per-business flag for back-orders), enforced at two layers since Phase 20 (UPGRADE.md F-10): `inventory.assertAvailable` takes a `SELECT ... FOR UPDATE` row lock on the item before checking (closing a TOCTOU race between two concurrent movements), and `update_stock_on_hand()` itself raises if the resulting on-hand would go negative and the business doesn't allow backorders — the DB-level backstop this section always described but never had.
 
 ### 4.4 GST period locking
 
 - Once a GST return is generated for a period (e.g., `2026-Q1`), that period is **locked**. No new invoices, credit notes, or bills may be back-dated into a locked period. Stored in `gst_periods` table with `locked_at`, `locked_by`, `mira_return_id`.
 - Late entries that would have belonged to a locked period must be entered with today's date and noted on the next return.
+- `gst.assertPeriodOpen` takes an optional `tx` parameter (Phase 20, UPGRADE.md F-18) — every call site inside an existing transaction passes its own `tx` so period auto-creation is atomic with the mutation that triggered it, rather than committing in its own transaction that survives a rollback of the caller.
+- Payment reversal (both `invoicing.reversePayment` and `purchases.reversePayment`) now calls `assertPeriodOpen` before reversing (Phase 20, UPGRADE.md F-11) — a reversal is a financial mutation like any other and previously bypassed the lock.
 
 ### 4.5 Append-only audit log
 
@@ -134,8 +138,9 @@ These are non-negotiable. Enforced at _both_ the service layer and the DB layer.
 Detailed column lists live in Drizzle schema files. This section is the high-level relationship map.
 
 ```
-businesses ──┬── users ──── user_sessions
-             │      └────── auth_logs
+businesses ──┬── users ──┬── user_sessions
+             │           ├── auth_logs
+             │           └── user_permissions (per-user resource+action grants — SECURITY.md §Authorization Model)
              │      └────── audit_logs
              │
              ├── customers ──── customer_contacts
@@ -189,15 +194,17 @@ All tables have `business_id` (multi-tenant key), `created_at`, `updated_at`, `c
 
 Driven by **BullMQ** on Redis. One queue per job class:
 
-| Queue         | Job                                                                  |
-| ------------- | -------------------------------------------------------------------- |
-| `pdf`         | Render invoice PDF, credit note PDF, PO PDF, SOA PDF                 |
-| `email`       | Send invoice, send reset link, send invite                           |
-| `gst`         | Build MIRA 205 / 206 export bundle for a period                      |
-| `soa-extract` | Parse uploaded supplier SOA (PDF/CSV) → match to bills               |
-| `reconcile`   | Nightly: verify `items.stock_on_hand` matches `SUM(stock_movements)` |
+| Queue         | Job                                                                  | Worker registered?                                                                                                                                                                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pdf`         | Render invoice PDF, credit note PDF, PO PDF, SOA PDF                 | No consumer yet — no PDF library installed (UPGRADE.md Phase 23)                                                                                                                                                                                                                                                             |
+| `email`       | Send invoice, send reset link, send invite                           | No queue exists yet — Resend is only wired for auth emails (UPGRADE.md Phase 24)                                                                                                                                                                                                                                             |
+| `gst`         | Build MIRA 205 / 206 export bundle for a period                      | ✅ `registerGstWorker`                                                                                                                                                                                                                                                                                                       |
+| `soa-extract` | Parse uploaded supplier SOA (PDF/CSV) → match to bills               | ✅ `soaExtractWorker` (was defined but never registered until Phase 20 — UPGRADE.md F-20)                                                                                                                                                                                                                                    |
+| `reconcile`   | Nightly: verify `items.stock_on_hand` matches `SUM(stock_movements)` | ✅ `registerReconcileWorker`, scheduled nightly at 02:00 `Indian/Maldives` via `reconcileQueue.upsertJobScheduler` (Phase 20 — UPGRADE.md F-21). The scheduled job carries no `businessId` and fans out across every business (`inventory.listAllBusinessIds`); a job with an explicit `businessId` scopes to just that one. |
 
 Jobs are **idempotent**. Each takes a domain ID (e.g., `invoiceId`) and re-reads current state; never trust payload to carry mutable data.
+
+**Worker process entrypoint:** `api/src/worker.ts` — calls `registerWorkers()` (`api/src/worker/index.ts`) and stays alive with graceful shutdown on `SIGTERM`/`SIGINT`. Run via `pnpm --filter @koosani/api worker` (prod) or `pnpm dev:worker` from the repo root (dev, alongside `pnpm dev`). This entrypoint did not exist before Phase 20 — `registerWorkers()` was defined but nothing ever called it outside of tests, so no worker (including `gst` and `soa-extract`) ever ran in a real deployment.
 
 ---
 
@@ -246,9 +253,10 @@ Cursor-based pagination may be introduced for high-volume lists in a later phase
 │   ├── src/
 │   │   ├── modules/<name>/{routes,service,repository,schema}.ts
 │   │   ├── db/{schema,migrations,client}.ts
-│   │   ├── middleware/
-│   │   ├── lib/                 (money, dates, pdf, mailer, queue)
+│   │   ├── middleware/          (requireAuth, authorize — role/permission gates)
+│   │   ├── lib/                 (money, dates, mailer, queue, virusScan, rateLimiter)
 │   │   ├── worker/              (job handlers)
+│   │   ├── worker.ts            (worker process entrypoint — §8)
 │   │   └── server.ts
 │   └── package.json
 ├── web/

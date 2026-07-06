@@ -322,6 +322,78 @@ describe('purchases: confirm math', () => {
     expect(afterFull.status).toBe('paid')
   })
 
+  // UPGRADE.md F-15 — paid_amount must never exceed the bill total
+  it('rejects a payment that would exceed the outstanding balance', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const supplier = await seedSupplier(business.id, user.id)
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: 'test' }
+
+    const { createDraft, confirmBill, addPayment, getBill, ValidationError } =
+      await import('../service.js')
+
+    const draft = await createDraft(
+      business.id,
+      {
+        supplierId: supplier.id,
+        lines: [
+          { description: 'Goods', qty: '1.0000', unitCost: '200.00', gstCategory: 'general_8' },
+        ],
+      },
+      ctx,
+    )
+    await confirmBill(business.id, draft.id, ctx)
+
+    await expect(
+      addPayment(
+        business.id,
+        draft.id,
+        { amount: '999.00', method: 'bank', paidAt: '2025-05-10' },
+        ctx,
+      ),
+    ).rejects.toThrow(ValidationError)
+
+    const after = await getBill(business.id, draft.id)
+    expect(after.status).toBe('confirmed')
+    expect(after.paidAmount).toBe('0.00')
+  })
+
+  // UPGRADE.md F-11 — a reversal must respect the GST period lock like any
+  // other financial mutation
+  it('rejects reversing a payment once the period is locked', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const supplier = await seedSupplier(business.id, user.id)
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: 'test' }
+
+    const { createDraft, confirmBill, addPayment, reversePayment } = await import('../service.js')
+    const gstSvc = await import('../../gst/service.js')
+
+    const draft = await createDraft(
+      business.id,
+      {
+        supplierId: supplier.id,
+        lines: [
+          { description: 'Goods', qty: '1.0000', unitCost: '200.00', gstCategory: 'general_8' },
+        ],
+      },
+      ctx,
+    )
+    await confirmBill(business.id, draft.id, ctx)
+    const payment = await addPayment(
+      business.id,
+      draft.id,
+      { amount: '216.00', method: 'bank', paidAt: '2025-05-10' },
+      ctx,
+    )
+
+    const periods = await gstSvc.listPeriods(business.id)
+    const currentPeriod = periods.find((p) => p.status !== 'locked')
+    await gstSvc.lockPeriod(business.id, currentPeriod!.id, 'MIRA-001', ctx)
+
+    await expect(reversePayment(business.id, draft.id, payment.id, ctx)).rejects.toThrow('locked')
+  })
+
   it('cannot confirm an already-confirmed bill', async () => {
     const { business, user } = await seedBusiness()
     await seedRates(business.id, user.id)

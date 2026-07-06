@@ -268,18 +268,23 @@ export async function createGrn(
       )
     }
 
-    // Validate all lines up-front before mutating
+    // Validate all lines up-front before mutating. Locks each PO line row
+    // until this tx commits, so a concurrent GRN against the same line
+    // cannot also pass this check before either commits (UPGRADE.md F-16).
     for (const l of data.lines) {
-      const poLine = await repo.getPoLineById(businessId, l.poLineId, tx)
+      const poLine = await repo.getPoLineByIdForUpdate(businessId, l.poLineId, tx)
       if (!poLine) throw new NotFoundError(`PO line ${l.poLineId} not found`)
       if (poLine.poId !== poId)
         throw new ValidationError(`PO line ${l.poLineId} does not belong to this PO`)
 
-      const ok = await canReceive(businessId, l.poLineId, l.qtyReceived, tx)
-      if (!ok) {
-        throw new ValidationError(
-          `Over-receipt rejected for PO line ${l.poLineId}: would exceed qty ordered`,
-        )
+      const totalAfter = new Decimal(poLine.qtyReceived).plus(l.qtyReceived)
+      if (totalAfter.gt(poLine.qtyOrdered)) {
+        const overReceiptAllowed = await repo.isOverReceiptAllowed(businessId, tx)
+        if (!overReceiptAllowed) {
+          throw new ValidationError(
+            `Over-receipt rejected for PO line ${l.poLineId}: would exceed qty ordered`,
+          )
+        }
       }
     }
 

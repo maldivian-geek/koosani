@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { BillDraftCreate, BillDraftPatch, BillPaymentCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { soaExtractQueue } from '../../lib/queues.js'
 import * as svc from './service.js'
@@ -47,45 +48,55 @@ billRoutes.get('/:id', async (c) => {
 })
 
 // POST /bills
-billRoutes.post('/', zValidator('json', BillDraftCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const bill = await svc.createDraft(c.get('businessId'), data, ctx)
-    return c.json(bill, 201)
-  } catch (err) {
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    if (err instanceof svc.NotFoundError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+billRoutes.post(
+  '/',
+  requirePermission('bills', 'add'),
+  zValidator('json', BillDraftCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const bill = await svc.createDraft(c.get('businessId'), data, ctx)
+      return c.json(bill, 201)
+    } catch (err) {
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      if (err instanceof svc.NotFoundError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // PATCH /bills/:id
-billRoutes.patch('/:id', zValidator('json', BillDraftPatch), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const bill = await svc.patchDraft(c.get('businessId'), c.req.param('id'), data, ctx)
-    return c.json(bill)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+billRoutes.patch(
+  '/:id',
+  requirePermission('bills', 'edit'),
+  zValidator('json', BillDraftPatch),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const bill = await svc.patchDraft(c.get('businessId'), c.req.param('id'), data, ctx)
+      return c.json(bill)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /bills/:id/confirm
-billRoutes.post('/:id/confirm', async (c) => {
+billRoutes.post('/:id/confirm', requirePermission('bills', 'edit'), async (c) => {
   const ctx = {
     userId: c.get('userId'),
     businessId: c.get('businessId'),
@@ -103,26 +114,31 @@ billRoutes.post('/:id/confirm', async (c) => {
 })
 
 // POST /bills/:id/payments
-billRoutes.post('/:id/payments', zValidator('json', BillPaymentCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const payment = await svc.addPayment(c.get('businessId'), c.req.param('id'), data, ctx)
-    return c.json(payment, 201)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+billRoutes.post(
+  '/:id/payments',
+  requirePermission('bills', 'add'),
+  zValidator('json', BillPaymentCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const payment = await svc.addPayment(c.get('businessId'), c.req.param('id'), data, ctx)
+      return c.json(payment, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // DELETE /bills/:id/payments/:paymentId
-billRoutes.delete('/:id/payments/:paymentId', async (c) => {
+billRoutes.delete('/:id/payments/:paymentId', requirePermission('bills', 'delete'), async (c) => {
   const ctx = {
     userId: c.get('userId'),
     businessId: c.get('businessId'),
@@ -140,7 +156,7 @@ billRoutes.delete('/:id/payments/:paymentId', async (c) => {
 })
 
 // POST /bills/:id/attach — upload and attach a supplier invoice file
-billRoutes.post('/:id/attach', async (c) => {
+billRoutes.post('/:id/attach', requirePermission('bills', 'edit'), async (c) => {
   const billId = c.req.param('id')
   const formData = await c.req.formData()
   const entry = formData.get('file')
@@ -172,7 +188,7 @@ const SoaExtractBody = z.object({
 })
 
 // POST /soa-extract — multipart: file + supplierId; returns { jobId }
-billRoutes.post('/soa-extract', async (c) => {
+billRoutes.post('/soa-extract', requirePermission('bills', 'add'), async (c) => {
   const formData = await c.req.formData()
   const entry = formData.get('file')
   const supplierIdRaw = formData.get('supplierId')

@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { InventoryAdjustmentCreate, StockCountCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
@@ -47,38 +48,48 @@ inventoryRoutes.get('/on-hand', zValidator('query', OnHandQuery), async (c) => {
 })
 
 // POST /inventory/adjustments
-inventoryRoutes.post('/adjustments', zValidator('json', InventoryAdjustmentCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const movement = await svc.createAdjustment(c.get('businessId'), data, ctx)
-    return c.json(movement, 201)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+inventoryRoutes.post(
+  '/adjustments',
+  requirePermission('inventory', 'edit'),
+  zValidator('json', InventoryAdjustmentCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const movement = await svc.createAdjustment(c.get('businessId'), data, ctx)
+      return c.json(movement, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /inventory/stock-count
-inventoryRoutes.post('/stock-count', zValidator('json', StockCountCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const result = await svc.bulkStockCount(c.get('businessId'), data, ctx)
-    return c.json(result)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    throw err
-  }
-})
+inventoryRoutes.post(
+  '/stock-count',
+  requirePermission('inventory', 'edit'),
+  zValidator('json', StockCountCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const result = await svc.bulkStockCount(c.get('businessId'), data, ctx)
+      return c.json(result)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)

@@ -3,26 +3,16 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { GstRateCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requireRole, requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { gstQueue } from '../../lib/queues.js'
+import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import * as filesService from '../files/service.js'
 import type { AppEnv } from '../../types.js'
 
 // Per-business rate limit: 3 builds per 5 minutes (SECURITY.md §13.7)
-const buildWindows = new Map<string, { count: number; resetAt: number }>()
-
-function checkBuildLimit(businessId: string): boolean {
-  const now = Date.now()
-  const win = buildWindows.get(businessId)
-  if (!win || now > win.resetAt) {
-    buildWindows.set(businessId, { count: 1, resetAt: now + 5 * 60 * 1000 })
-    return true
-  }
-  if (win.count >= 3) return false
-  win.count++
-  return true
-}
+const checkBuildLimit = createRedisRateLimiter('rl:gst-build', 3, 5 * 60)
 
 const LockBody = z.object({ miraReturnRef: z.string().min(1) })
 const UnlockBody = z.object({ reason: z.string().min(1) })
@@ -37,8 +27,7 @@ gstRoutes.get('/rates', async (c) => {
 })
 
 // POST /gst/rates — admin only (FUNCTIONS.md §gst)
-gstRoutes.post('/rates', zValidator('json', GstRateCreate), async (c) => {
-  if (c.get('role') !== 'admin') return c.json({ error: 'forbidden' }, 403)
+gstRoutes.post('/rates', requireRole('admin'), zValidator('json', GstRateCreate), async (c) => {
   const data = c.req.valid('json')
   const ctx = {
     userId: c.get('userId'),
@@ -56,52 +45,69 @@ gstRoutes.get('/periods', async (c) => {
   return c.json(periods)
 })
 
-// POST /gst/periods/:id/lock
-gstRoutes.post('/periods/:id/lock', zValidator('json', LockBody), async (c) => {
-  const { miraReturnRef } = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const period = await svc.lockPeriod(c.get('businessId'), c.req.param('id'), miraReturnRef, ctx)
-    return c.json(period)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+// POST /gst/periods/:id/lock — manager+ (routine end-of-period action; SECURITY.md §Authorization Model)
+gstRoutes.post(
+  '/periods/:id/lock',
+  requirePermission('gst', 'edit'),
+  zValidator('json', LockBody),
+  async (c) => {
+    const { miraReturnRef } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const period = await svc.lockPeriod(
+        c.get('businessId'),
+        c.req.param('id'),
+        miraReturnRef,
+        ctx,
+      )
+      return c.json(period)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /gst/periods/:id/unlock — admin only, fully audited (FUNCTIONS.md §gst)
-gstRoutes.post('/periods/:id/unlock', zValidator('json', UnlockBody), async (c) => {
-  if (c.get('role') !== 'admin') return c.json({ error: 'forbidden' }, 403)
-  const { reason } = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const period = await svc.unlockPeriod(c.get('businessId'), c.req.param('id'), reason, ctx)
-    return c.json(period)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+gstRoutes.post(
+  '/periods/:id/unlock',
+  requireRole('admin'),
+  zValidator('json', UnlockBody),
+  async (c) => {
+    const { reason } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const period = await svc.unlockPeriod(c.get('businessId'), c.req.param('id'), reason, ctx)
+      return c.json(period)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /gst/periods/:id/build — enqueues GST return build (SECURITY.md §13.7: 3/5 min/business)
-gstRoutes.post('/periods/:id/build', async (c) => {
+gstRoutes.post('/periods/:id/build', requirePermission('gst', 'edit'), async (c) => {
   const businessId = c.get('businessId')
   const periodId = c.req.param('id')
 
-  if (!checkBuildLimit(businessId)) {
-    return c.json({ error: 'rate_limited', message: 'Max 3 builds per 5 minutes per business' }, 429)
+  if (!(await checkBuildLimit(businessId))) {
+    return c.json(
+      { error: 'rate_limited', message: 'Max 3 builds per 5 minutes per business' },
+      429,
+    )
   }
 
   const period = await svc.getPeriodById(businessId, periodId)

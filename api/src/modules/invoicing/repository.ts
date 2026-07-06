@@ -195,11 +195,29 @@ export async function insertPayment(data: NewPayment, tx: DbTx): Promise<Payment
 export async function getPaymentById(
   businessId: string,
   id: string,
+  tx?: DbTx,
 ): Promise<PaymentReceived | null> {
-  const [row] = await db
+  const q = tx ?? db
+  const [row] = await q
     .select()
     .from(paymentsReceived)
     .where(and(eq(paymentsReceived.businessId, businessId), eq(paymentsReceived.id, id)))
+  return row ?? null
+}
+
+// Locks the payment row until the caller's tx commits, so two concurrent
+// reversal requests for the same payment cannot both pass the reversedAt
+// check before either commits (UPGRADE.md F-17).
+export async function getPaymentByIdForUpdate(
+  businessId: string,
+  id: string,
+  tx: DbTx,
+): Promise<PaymentReceived | null> {
+  const [row] = await tx
+    .select()
+    .from(paymentsReceived)
+    .where(and(eq(paymentsReceived.businessId, businessId), eq(paymentsReceived.id, id)))
+    .for('update')
   return row ?? null
 }
 
@@ -216,11 +234,16 @@ export async function listPaymentsByInvoice(
     .orderBy(paymentsReceived.paidAt)
 }
 
-export async function markPaymentReversed(id: string, tx: DbTx): Promise<void> {
-  await tx
+// Guards on reversedAt IS NULL so a double-reversal race is a no-op update
+// rather than a second reversal (UPGRADE.md F-17). Returns false if the
+// payment was already reversed (by a concurrent request or otherwise).
+export async function markPaymentReversed(id: string, tx: DbTx): Promise<boolean> {
+  const rows = await tx
     .update(paymentsReceived)
     .set({ reversedAt: new Date(), updatedAt: new Date() })
-    .where(eq(paymentsReceived.id, id))
+    .where(and(eq(paymentsReceived.id, id), isNull(paymentsReceived.reversedAt)))
+    .returning({ id: paymentsReceived.id })
+  return rows.length > 0
 }
 
 // Recomputes invoice.paid_amount from the live sum of payment rows (including reversals).

@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { CustomerCreate, CustomerPatch, ContactCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
@@ -41,39 +42,49 @@ customerRoutes.get('/:id', async (c) => {
 })
 
 // POST /customers
-customerRoutes.post('/', zValidator('json', CustomerCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  const customer = await svc.create(c.get('businessId'), data, ctx)
-  return c.json(customer, 201)
-})
+customerRoutes.post(
+  '/',
+  requirePermission('customers', 'add'),
+  zValidator('json', CustomerCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    const customer = await svc.create(c.get('businessId'), data, ctx)
+    return c.json(customer, 201)
+  },
+)
 
 // PATCH /customers/:id
-customerRoutes.patch('/:id', zValidator('json', CustomerPatch), async (c) => {
-  const id = c.req.param('id')
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const customer = await svc.update(c.get('businessId'), id, data, ctx)
-    return c.json(customer)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    throw err
-  }
-})
+customerRoutes.patch(
+  '/:id',
+  requirePermission('customers', 'edit'),
+  zValidator('json', CustomerPatch),
+  async (c) => {
+    const id = c.req.param('id')
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const customer = await svc.update(c.get('businessId'), id, data, ctx)
+      return c.json(customer)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
 
 // DELETE /customers/:id
-customerRoutes.delete('/:id', async (c) => {
+customerRoutes.delete('/:id', requirePermission('customers', 'delete'), async (c) => {
   const id = c.req.param('id')
   const ctx = {
     userId: c.get('userId'),
@@ -110,20 +121,25 @@ customerRoutes.get('/:id/soa', async (c) => {
 })
 
 // POST /customers/:id/contacts
-customerRoutes.post('/:id/contacts', zValidator('json', ContactCreate), async (c) => {
-  const customerId = c.req.param('id')
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const contact = await svc.addContact(c.get('businessId'), customerId, data, ctx)
-    return c.json(contact, 201)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    throw err
-  }
-})
+customerRoutes.post(
+  '/:id/contacts',
+  requirePermission('customers', 'edit'),
+  zValidator('json', ContactCreate),
+  async (c) => {
+    const customerId = c.req.param('id')
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const contact = await svc.addContact(c.get('businessId'), customerId, data, ctx)
+      return c.json(contact, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)

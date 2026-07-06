@@ -1,7 +1,7 @@
 import type { Context, Next } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { verifyToken } from '../modules/auth/service.js'
-import { getSession, touchSession } from '../modules/auth/repository.js'
+import { getSessionWithTokenVersion, touchSession } from '../modules/auth/repository.js'
 import type { JwtPayload } from '../modules/auth/service.js'
 
 // 30-second in-process cache for token_version + session validity per (user_id, sid)
@@ -62,15 +62,15 @@ export async function requireAuth(c: Context, next: Next): Promise<Response | vo
     isActive = cached.isActive
     sessionUserId = cached.userId
   } else {
-    const session = await getSession(payload.sid)
+    const session = await getSessionWithTokenVersion(payload.sid)
     if (!session) return c.json({ error: 'unauthorized' }, 401)
 
-    tokenVersion = payload.tokenVersion
+    tokenVersion = session.tokenVersion
     isActive = session.isActive
     sessionUserId = session.userId
 
     sessionCache.set(key, {
-      tokenVersion: payload.tokenVersion,
+      tokenVersion: session.tokenVersion,
       isActive: session.isActive,
       userId: session.userId,
       cachedAt: now,

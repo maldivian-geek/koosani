@@ -8,9 +8,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **Phase 20 — Correctness & security hardening (UPGRADE.md Part 2/3):**
+  - **`token_version` no-op fixed (F-1):** `requireAuth` compared the JWT's `tokenVersion` claim against itself; it now joins the live `users.token_version` via `auth.getSessionWithTokenVersion` (SECURITY.md §JWT, §13.2).
+  - **Authorization layer added (F-2):** `api/src/middleware/authorize.ts` — `requireRole(minRole)` and `requirePermission(resource, action)` per SECURITY.md's rewritten §Authorization Model (admin bypasses all; `view` always allowed; manager gets add/edit/delete by default; staff needs an explicit grant in the new `user_permissions` table; `reports.export` requires an explicit grant regardless of role). Applied to every mutating route across customers/suppliers/items/inventory/invoicing/purchases/po/gst/reports. GST rate creation and period unlock are now gated by `requireRole('admin')` (previously an inline check); period lock is `requirePermission('gst','edit')` (manager+, a documented policy call — SECURITY.md §Authorization Model).
+  - **Upload hardening (F-3):** `files.uploadFile` now magic-byte-sniffs (`file-type`), strips EXIF from images (`sharp`, re-encode), and synchronously virus-scans via a hand-rolled clamd INSTREAM client (`api/src/lib/virusScan.ts`) before the file ever reaches storage — reject on infected or (outside `NODE_ENV=test`) an unreachable scanner. `docker-compose.yml` gains a `clamav` service for local dev (SECURITY.md §13.5, STACK.md).
+  - **RLS claim corrected (F-4):** SECURITY.md §13.11.4 falsely claimed Postgres RLS on the five sensitive tables; no migration ever added it. Corrected to state it's not implemented and why (would require threading `SET LOCAL` through every `db.transaction` call site — a dedicated follow-up, not bundled here).
+  - **CSRF content-type check fixed (F-5):** the first cut rejected any mutation whose Content-Type wasn't exactly `application/json`/`multipart/form-data` — including bodyless same-origin requests that omit the header entirely, which silently 415'd `POST /auth/logout-all` during verification and made a token-invalidation test falsely pass (the mutation never ran, so the "stale" session genuinely was still valid). Corrected to reject only the content types a cross-site HTML form can actually forge (`application/x-www-form-urlencoded`, `text/plain`) — `multipart/form-data` stays allowed for uploads (relying on `sameSite=strict`), and a missing Content-Type is not a CSRF vector at all (SECURITY.md §CSRF).
+  - **Domain rate limiters moved to Redis (F-7):** `createRedisRateLimiter` (`rate-limiter-flexible`, matching the pattern already used for auth) replaces the in-process `Map`-based limiters for invoice/PO PDF, GST build, and report CSV export — previously per-instance and reset on restart. Added a separate 10/hour/user bulk-export limiter (SECURITY.md §13.6, §13.7).
+  - **Config centralized (F-9):** `AWS_REGION`, `AWS_ENDPOINT_URL`, `FILES_STORAGE`, `S3_BUCKET`, `PORT`, `DATABASE_URL` moved into the validated `lib/config.ts` schema instead of scattered `process.env` reads (`storage.ts`, `server.ts`, `db/client.ts`).
+  - **Signed URL expiry corrected (F-8):** `files.getSignedUrl` now issues 5-minute URLs (was 1 hour) and refuses files whose `scan_result` isn't `'clean'`. Deleted FUNCTIONS.md's stale duplicate `files` module block describing functions that never existed.
+
+### Fixed
+
+- **Negative-stock race (F-10):** `inventory.assertAvailable` takes a `SELECT ... FOR UPDATE` lock on the item row before checking on-hand qty; `update_stock_on_hand()` (DB trigger) now also raises if the result would go negative and the business doesn't allow backorders — closing both the app-layer TOCTOU race and the missing DB-level backstop (ARCHITECTURE.md §4.3).
+- **Payment reversal skipped the GST period lock (F-11):** both `invoicing.reversePayment` and `purchases.reversePayment` now call `gst.assertPeriodOpen` before reversing, exactly like every other financial mutation (ARCHITECTURE.md §4.4).
+- **Line-table immutability (F-12):** new DB triggers guard `invoice_lines`/`bill_lines`/`credit_note_lines` against UPDATE/DELETE once the parent document leaves `draft` (previously only the header row was guarded); `REVOKE DELETE` added on `invoices`/`bills`/`credit_notes`/`purchase_orders` (ARCHITECTURE.md §4.2).
+- **`MoneyInput.vue` used `parseFloat` (F-13):** normalizes via `money.round2` (decimal.js) on blur instead, closing the one Decimal-rule violation on the money write path.
+- **Void-with-active-payments (F-14):** `invoicing.voidInvoice` now rejects voiding while any non-reversed payment exists, instead of leaving received money attached to a voided document. Interim policy pending UPGRADE.md Phase 27 (customer credits/refunds).
+- **Overpayment / zero-amount payments (F-15):** `InvoicePaymentCreate`/`BillPaymentCreate` reject non-positive amounts (was `>= 0`); both `addPayment` services now reject a payment that would push `paid_amount` past the document total.
+- **GRN over-receipt race (F-16):** `po.createGrn` takes a `FOR UPDATE` lock on each PO line before checking received-vs-ordered quantity, replacing a check-then-increment race.
+- **Double-reversal race (F-17):** `markPaymentReversed` (both invoicing and purchases repositories) now guards on `reversedAt IS NULL` in the UPDATE itself and the service reads the payment row `FOR UPDATE` first, closing the race where two concurrent reversal requests could both pass the `reversedAt` check.
+- **Period auto-creation wasn't atomic with its caller (F-18):** `gst.assertPeriodOpen`/`getOrCreatePeriod` accept an optional `tx`; every in-transaction call site (invoice issue/void/payment/reversal, credit note issue, bill confirm/payment/reversal) now threads its own `tx` through instead of the period committing in a separate transaction that would survive a rollback of the mutation that triggered it.
+- **Float leakage (F-19):** `items.hasPositiveStock` used `parseFloat`; now uses `Decimal`.
+- **SOA-extract worker never registered (F-20):** `soaExtractWorker` existed but nothing ever started it — uploads enqueued a job no consumer processed. Registered in `worker/index.ts`.
+- **Nightly stock reconcile never scheduled (F-21):** nothing ever called `reconcileQueue.upsertJobScheduler`. Now scheduled nightly at 02:00 `Indian/Maldives`; the reconcile worker fans out across every business (`inventory.listAllBusinessIds`) when triggered by the schedule (ARCHITECTURE.md §8).
+
 ### Added
 
-- `UPGRADE.md` — full codebase analysis: Zoho Invoice feature-parity matrix (17 gaps, G-1…G-17), verified flaw audit with file:line evidence and fixes (26 findings, F-1…F-26, spanning security, financial correctness, and dead plumbing), and a phased upgrade plan (Phases 20–33). Notable confirmed flaws: `token_version` middleware check is a no-op, no `requireRole`/`requirePermission` layer exists, uploads trust client MIME with no virus scan, negative-stock TOCTOU race, payment reversals skip GST period lock, SOA-extract worker never registered, and no PDF/email capability exists despite documented queues (UPGRADE.md Part 2).
+- `UPGRADE.md` — full codebase analysis: Zoho Invoice feature-parity matrix (17 gaps, G-1…G-17), verified flaw audit with file:line evidence and fixes (26 findings, F-1…F-26, spanning security, financial correctness, and dead plumbing), and a phased upgrade plan (Phases 20–33).
+- **Worker process entrypoint** (`api/src/worker.ts`) — did not exist before this phase; `registerWorkers()` was defined but nothing outside tests ever called it, so no worker (including `gst` and `soa-extract`) ran in a real deployment. New `pnpm --filter @koosani/api worker` (prod) / `dev:worker` (dev) scripts; root `pnpm dev:worker` alias (ARCHITECTURE.md §8).
+- `api/src/middleware/authorize.ts` + `api/src/db/schema/permissions.ts` (`user_permissions` table, migration `0001_phase20_permissions.sql`) — see Security section above.
+- `api/src/lib/virusScan.ts` — clamd INSTREAM client; `docker-compose.yml` `clamav` service.
+- Tests: `api/src/middleware/__tests__/authorize.test.ts` (role/permission default policy); new cases in `invoicing.test.ts` and `purchases.test.ts` for F-11, F-14, F-15, F-17.
+- `shared/src/primitives.ts` — `PermissionResource` gains `'inventory'`; `PermissionAction` gains `'export'`.
+
+### Known pre-existing issues (found during Phase 20 verification, not caused by it, not fixed)
+
+- `auth.test.ts` "locks out after 5 failures" — the per-source rate limiter (5/15min) and the DB-level lockout threshold (also 5) are numerically identical, so the 6th request is always caught by the rate limiter (429) before it can reach the DB-lockout check (401) that the test expects. Reproduces identically on pre-Phase-20 code.
+- `purchases.test.ts` "extracts SOA lines from a minimal PDF" — fails intermittently with `pdf-parse`'s bundled `pdfjs-dist` throwing "bad XRef entry" on the test's minimal hand-built PDF fixture; reproduces on pre-Phase-20 code with the same `pdf-parse@1.1.4` resolution. Unrelated to any file touched in this phase.
+
+### Changed
+
 - Root `pnpm dev` script that runs the api and web dev servers concurrently via pnpm's built-in `--parallel` (no new dependency; `dev:api` / `dev:web` retained for running either alone).
 
 ### Changed

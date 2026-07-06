@@ -24,30 +24,32 @@
 
 ## Backend (api + worker)
 
-| Package                                                         | Purpose                           | Notes                                                              |
-| --------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------ |
-| `hono`                                                          | HTTP framework                    | Node adapter (`@hono/node-server`)                                 |
-| `@hono/zod-validator`                                           | Bind Zod schemas to routes        | Use for every input                                                |
-| `zod`                                                           | Schemas                           | Shared with web via `shared/`                                      |
-| `drizzle-orm`                                                   | Queries                           | Use the query builder, not raw SQL, except in migrations           |
-| `drizzle-kit`                                                   | Migrations                        | `drizzle-kit generate` + `drizzle-kit migrate`                     |
-| `postgres` (postgres.js)                                        | DB driver                         | Drizzle's preferred Node driver                                    |
-| `pino` + `pino-http`                                            | Logging                           | JSON in prod, `pino-pretty` in dev                                 |
-| `argon2`                                                        | Password hashing                  | Per SECURITY.md                                                    |
-| `jsonwebtoken`                                                  | JWT                               | HS256, per SECURITY.md                                             |
-| `cookie`                                                        | Cookie parse/serialise            | —                                                                  |
-| `helmet` (Hono port: `hono/secure-headers`)                     | Security headers                  | Use Hono's built-in `secureHeaders` middleware                     |
-| `decimal.js`                                                    | Money math                        | Never `Number` for currency                                        |
-| `date-fns` + `date-fns-tz`                                      | Dates                             | Maldives is `Indian/Maldives` (UTC+5, no DST)                      |
-| `bullmq`                                                        | Job queue                         | Redis-backed                                                       |
-| `ioredis`                                                       | Redis client                      | BullMQ dependency                                                  |
-| `resend`                                                        | Email (transactional)             | Replaced nodemailer — TypeScript-native SDK, no SMTP config needed |
-| `pdfkit` _or_ `@react-pdf/renderer` headlessly _or_ `puppeteer` | PDF generation                    | **Pick one** — see _Open decisions_ below                          |
-| `papaparse`                                                     | CSV parse (SOA extract)           | —                                                                  |
-| `pdf-parse`                                                     | PDF text extraction (SOA extract) | —                                                                  |
-| `clamav.js` _or_ hosted scanner                                 | Virus scan uploads                | —                                                                  |
-| `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`          | Object storage                    | Works with any S3-compatible (Cloudflare R2, MinIO, AWS)           |
-| `rate-limiter-flexible`                                         | Rate limiting                     | Redis-backed for multi-instance                                    |
+| Package                                                         | Purpose                           | Notes                                                                                                                                                                                                                  |
+| --------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hono`                                                          | HTTP framework                    | Node adapter (`@hono/node-server`)                                                                                                                                                                                     |
+| `@hono/zod-validator`                                           | Bind Zod schemas to routes        | Use for every input                                                                                                                                                                                                    |
+| `zod`                                                           | Schemas                           | Shared with web via `shared/`                                                                                                                                                                                          |
+| `drizzle-orm`                                                   | Queries                           | Use the query builder, not raw SQL, except in migrations                                                                                                                                                               |
+| `drizzle-kit`                                                   | Migrations                        | `drizzle-kit generate` + `drizzle-kit migrate`                                                                                                                                                                         |
+| `postgres` (postgres.js)                                        | DB driver                         | Drizzle's preferred Node driver                                                                                                                                                                                        |
+| `pino` + `pino-http`                                            | Logging                           | JSON in prod, `pino-pretty` in dev                                                                                                                                                                                     |
+| `argon2`                                                        | Password hashing                  | Per SECURITY.md                                                                                                                                                                                                        |
+| `jsonwebtoken`                                                  | JWT                               | HS256, per SECURITY.md                                                                                                                                                                                                 |
+| `cookie`                                                        | Cookie parse/serialise            | —                                                                                                                                                                                                                      |
+| `helmet` (Hono port: `hono/secure-headers`)                     | Security headers                  | Use Hono's built-in `secureHeaders` middleware                                                                                                                                                                         |
+| `decimal.js`                                                    | Money math                        | Never `Number` for currency                                                                                                                                                                                            |
+| `date-fns` + `date-fns-tz`                                      | Dates                             | Maldives is `Indian/Maldives` (UTC+5, no DST)                                                                                                                                                                          |
+| `bullmq`                                                        | Job queue                         | Redis-backed                                                                                                                                                                                                           |
+| `ioredis`                                                       | Redis client                      | BullMQ dependency                                                                                                                                                                                                      |
+| `resend`                                                        | Email (transactional)             | Replaced nodemailer — TypeScript-native SDK, no SMTP config needed                                                                                                                                                     |
+| `pdfkit` _or_ `@react-pdf/renderer` headlessly _or_ `puppeteer` | PDF generation                    | **Pick one** — see _Open decisions_ below (still unresolved as of Phase 20; no PDF library installed yet)                                                                                                              |
+| `papaparse`                                                     | CSV parse (SOA extract)           | —                                                                                                                                                                                                                      |
+| `pdf-parse`                                                     | PDF text extraction (SOA extract) | —                                                                                                                                                                                                                      |
+| `file-type`                                                     | Magic-byte MIME sniff on uploads  | Added Phase 20 (SECURITY.md §13.5 rule 1, UPGRADE.md F-3)                                                                                                                                                              |
+| `sharp`                                                         | Strip EXIF from uploaded images   | Added Phase 20 (SECURITY.md §13.5 rule 8, UPGRADE.md F-3)                                                                                                                                                              |
+| ClamAV (`clamd`, spoken over raw TCP — no npm client)           | Virus scan uploads                | Decided Phase 20: self-hosted clamd (`docker-compose.yml`'s `clamav` service). `api/src/lib/virusScan.ts` implements clamd's INSTREAM protocol directly; no client library needed. `CLAMAV_HOST`/`CLAMAV_PORT` config. |
+| `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`          | Object storage                    | Works with any S3-compatible (Cloudflare R2, MinIO, AWS)                                                                                                                                                               |
+| `rate-limiter-flexible`                                         | Rate limiting                     | Redis-backed for multi-instance. All domain limiters (invoice/PO PDF, GST build, report CSV/bulk export) migrated to it in Phase 20 — previously in-process only (UPGRADE.md F-7)                                      |
 
 ### Dev / test
 
@@ -120,11 +122,11 @@ No runtime dependencies except `zod` and `decimal.js`. Never import Vue, Hono, o
 
 ## Open decisions (flag and pick before Phase 2)
 
-1. **PDF generator.** Three real options:
+1. **PDF generator — still open.** Three real options:
    - `pdfkit` — programmatic, fastest, hardest to style. Good for invoices that are mostly tables.
    - `puppeteer` — render an HTML template (you already have Vue), heavy memory, slow cold start.
-   - `@react-pdf/renderer` — declarative components, no headless browser. _Recommended_ unless you want pixel-identical-to-web rendering.
-2. **Virus scanning.** ClamAV sidecar (free, you operate it) vs hosted (Cloudmersive, etc.). For SME volume ClamAV is fine.
+   - `@react-pdf/renderer` — declarative components, no headless browser. _Recommended_ unless you want pixel-identical-to-web rendering. Resolve this before UPGRADE.md Phase 23.
+2. **~~Virus scanning~~ — decided Phase 20.** Self-hosted ClamAV sidecar (`clamd`), spoken directly over TCP via `api/src/lib/virusScan.ts` — no client library needed. `docker-compose.yml` runs it locally; deploy the same image alongside the API in production.
 3. **MaxMind GeoLite2** for IP→country (per SECURITY.md). Free with attribution; needs license key.
 4. **Background OCR for scanned SOAs?** If suppliers send scanned PDFs, `pdf-parse` won't help. Add `tesseract.js` only if/when needed — don't pre-optimise.
 

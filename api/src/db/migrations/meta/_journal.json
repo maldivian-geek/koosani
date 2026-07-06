@@ -8,6 +8,13 @@
       "when": 1778909210969,
       "tag": "0000_moaning_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783313471666,
+      "tag": "0001_phase20_permissions",
+      "breakpoints": true
     }
   ]
 }

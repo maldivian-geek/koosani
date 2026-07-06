@@ -59,6 +59,26 @@ app.use(
   }),
 )
 
+// CSRF mitigation #2 (SECURITY.md §CSRF): a cross-site HTML form's "simple
+// request" can only carry Content-Type application/x-www-form-urlencoded,
+// multipart/form-data, or text/plain — never application/json, and never a
+// missing header (forms always set one of the three). So the only content
+// types worth rejecting are exactly those three forgeable ones; a bodyless
+// same-origin fetch/request that omits Content-Type entirely is not a CSRF
+// vector and must not be blocked. sameSite=strict remains the primary
+// defense for the multipart exemption (file/attachment uploads need it).
+const FORGEABLE_CONTENT_TYPES = ['application/x-www-form-urlencoded', 'text/plain']
+app.use('*', async (c: Context, next: Next) => {
+  const method = c.req.method
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const contentType = c.req.header('content-type') ?? ''
+    if (FORGEABLE_CONTENT_TYPES.some((t) => contentType.startsWith(t))) {
+      return c.json({ error: 'unsupported_content_type' }, 415)
+    }
+  }
+  await next()
+})
+
 // Request logging
 app.use('*', async (c: Context, next: Next) => {
   const reqId = crypto.randomUUID()
@@ -121,10 +141,9 @@ app.notFound((c) => c.json({ error: 'not_found' }, 404))
 
 // ─── Start (only when run directly, not imported in tests) ───────────────────
 
-if (process.env.NODE_ENV !== 'test') {
-  const port = Number(process.env.PORT ?? 3000)
-  serve({ fetch: app.fetch, port }, () => {
-    logger.info({ port }, 'API server started')
+if (config.NODE_ENV !== 'test') {
+  serve({ fetch: app.fetch, port: config.PORT }, () => {
+    logger.info({ port: config.PORT }, 'API server started')
   })
 }
 

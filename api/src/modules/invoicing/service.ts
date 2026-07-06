@@ -74,6 +74,9 @@ export async function assertNotLocked(
 ): Promise<void> {
   await gst.assertPeriodOpen(businessId, date, ctx)
 }
+// Note: this standalone wrapper has no tx to thread through — callers already
+// inside a transaction should call gst.assertPeriodOpen(..., tx) directly
+// (UPGRADE.md F-18).
 
 // ─── createDraft ──────────────────────────────────────────────────────────────
 // Creates invoice + lines. Uses today's MV date for preliminary GST rate snapshot
@@ -272,7 +275,7 @@ export async function issue(
     if (invoice.status !== 'draft') throw new ValidationError('Only draft invoices can be issued')
 
     const issueDate = todayMv()
-    await gst.assertPeriodOpen(businessId, issueDate, ctx)
+    await gst.assertPeriodOpen(businessId, issueDate, ctx, tx)
 
     const lines = await repo.getLinesByInvoice(businessId, invoiceId, tx)
 
@@ -373,9 +376,18 @@ export async function voidInvoice(
     if (invoice.status !== 'issued' && invoice.status !== 'partially_paid') {
       throw new ValidationError('Only issued invoices can be voided')
     }
+    // Money already received must be reversed or reallocated before voiding —
+    // otherwise it sits against a voided document with no owner (UPGRADE.md
+    // F-14). Proper credit/refund handling lands in UPGRADE.md Phase 27; this
+    // is the interim, financially-safe policy.
+    if (new Decimal(invoice.paidAmount ?? '0').gt(0)) {
+      throw new ValidationError(
+        'Cannot void an invoice with active payments — reverse all payments first',
+      )
+    }
 
     const today = todayMv()
-    await gst.assertPeriodOpen(businessId, today, ctx)
+    await gst.assertPeriodOpen(businessId, today, ctx, tx)
 
     const lines = await repo.getLinesByInvoice(businessId, invoiceId, tx)
 
@@ -479,7 +491,17 @@ export async function addPayment(
       throw new ValidationError('Payments can only be added to issued invoices')
     }
 
-    await gst.assertPeriodOpen(businessId, data.paidAt, ctx)
+    // Reject overpayment — paid_amount must never exceed the invoice total
+    // (UPGRADE.md F-15). Customer credit/advance balances are a separate,
+    // not-yet-built feature (UPGRADE.md Phase 27).
+    const outstanding = new Decimal(invoice.total).minus(invoice.paidAmount ?? '0')
+    if (new Decimal(data.amount).gt(outstanding)) {
+      throw new ValidationError(
+        `Payment of ${data.amount} exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+      )
+    }
+
+    await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
 
     const payment = await repo.insertPayment(
       {
@@ -541,7 +563,9 @@ export async function reversePayment(
     const invoice = await repo.getById(businessId, invoiceId, tx)
     if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
 
-    const payment = await repo.getPaymentById(businessId, paymentId)
+    // Locked read: holds the row until this tx commits so a concurrent
+    // reversal of the same payment cannot also pass this check (F-17).
+    const payment = await repo.getPaymentByIdForUpdate(businessId, paymentId, tx)
     if (!payment || payment.invoiceId !== invoiceId) {
       throw new NotFoundError(`Payment ${paymentId} not found on invoice ${invoiceId}`)
     }
@@ -549,7 +573,12 @@ export async function reversePayment(
       throw new ValidationError('Payment is already reversed')
     }
 
-    await repo.markPaymentReversed(paymentId, tx)
+    // A reversal is itself a financial mutation dated as of today — it must
+    // respect the period lock like every other mutation (F-11).
+    await gst.assertPeriodOpen(businessId, todayMv(), ctx, tx)
+
+    const reversed = await repo.markPaymentReversed(paymentId, tx)
+    if (!reversed) throw new ValidationError('Payment is already reversed')
 
     const paidAmount = await repo.syncPaidAmount(businessId, invoiceId, tx)
     const paid = new Decimal(paidAmount)
@@ -691,7 +720,7 @@ export async function issueCreditNote(
     if (cn.status !== 'draft') throw new ValidationError('Only draft credit notes can be issued')
 
     const today = todayMv()
-    await gst.assertPeriodOpen(businessId, today, ctx)
+    await gst.assertPeriodOpen(businessId, today, ctx, tx)
 
     const lines = await repo.getCreditNoteLinesByCn(businessId, creditNoteId, tx)
 

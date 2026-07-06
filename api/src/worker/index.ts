@@ -1,11 +1,22 @@
 import { registerReconcileWorker } from './reconcile.js'
 import { registerGstWorker } from './gst.js'
+import { soaExtractWorker } from './soa-extract.js'
+import { reconcileQueue } from '../lib/queues.js'
+import { MV_TZ } from '@koosani/shared'
 
 // Call this from the worker entrypoint process (not the API server).
-// Phase 11 will wire scheduling via reconcileQueue.upsertJobScheduler().
-export function registerWorkers() {
+export async function registerWorkers() {
+  // Nightly at 02:00 Maldives time; the job carries no businessId, so the
+  // reconcile worker fans out across every business (UPGRADE.md F-21).
+  await reconcileQueue.upsertJobScheduler(
+    'nightly-reconcile',
+    { pattern: '0 2 * * *', tz: MV_TZ },
+    { name: 'reconcile', data: {} },
+  )
+
   return {
     reconcile: registerReconcileWorker(),
     gst: registerGstWorker(),
+    soaExtract: soaExtractWorker,
   }
 }

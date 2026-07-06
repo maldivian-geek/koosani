@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { SupplierCreate, SupplierPatch, SupplierContactCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
 import * as purchases from '../purchases/service.js'
@@ -42,39 +43,49 @@ supplierRoutes.get('/:id', async (c) => {
 })
 
 // POST /suppliers
-supplierRoutes.post('/', zValidator('json', SupplierCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  const supplier = await svc.create(c.get('businessId'), data, ctx)
-  return c.json(supplier, 201)
-})
+supplierRoutes.post(
+  '/',
+  requirePermission('suppliers', 'add'),
+  zValidator('json', SupplierCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    const supplier = await svc.create(c.get('businessId'), data, ctx)
+    return c.json(supplier, 201)
+  },
+)
 
 // PATCH /suppliers/:id
-supplierRoutes.patch('/:id', zValidator('json', SupplierPatch), async (c) => {
-  const id = c.req.param('id')
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const supplier = await svc.update(c.get('businessId'), id, data, ctx)
-    return c.json(supplier)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    throw err
-  }
-})
+supplierRoutes.patch(
+  '/:id',
+  requirePermission('suppliers', 'edit'),
+  zValidator('json', SupplierPatch),
+  async (c) => {
+    const id = c.req.param('id')
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const supplier = await svc.update(c.get('businessId'), id, data, ctx)
+      return c.json(supplier)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
 
 // DELETE /suppliers/:id
-supplierRoutes.delete('/:id', async (c) => {
+supplierRoutes.delete('/:id', requirePermission('suppliers', 'delete'), async (c) => {
   const id = c.req.param('id')
   const ctx = {
     userId: c.get('userId'),
@@ -111,20 +122,25 @@ supplierRoutes.get('/:id/soa', zValidator('query', SoaQuery), async (c) => {
 })
 
 // POST /suppliers/:id/contacts
-supplierRoutes.post('/:id/contacts', zValidator('json', SupplierContactCreate), async (c) => {
-  const supplierId = c.req.param('id')
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const contact = await svc.addContact(c.get('businessId'), supplierId, data, ctx)
-    return c.json(contact, 201)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    throw err
-  }
-})
+supplierRoutes.post(
+  '/:id/contacts',
+  requirePermission('suppliers', 'edit'),
+  zValidator('json', SupplierContactCreate),
+  async (c) => {
+    const supplierId = c.req.param('id')
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const contact = await svc.addContact(c.get('businessId'), supplierId, data, ctx)
+      return c.json(contact, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)

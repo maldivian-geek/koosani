@@ -1,4 +1,5 @@
 import { and, count, desc, eq, ilike, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm'
+import Decimal from 'decimal.js'
 import { db } from '../../db/client.js'
 import type { DbTx } from '../../db/client.js'
 import {
@@ -153,7 +154,7 @@ export async function hasPositiveStock(businessId: string, id: string): Promise<
     .from(items)
     .where(and(eq(items.businessId, businessId), eq(items.id, id)))
   const qty = row?.qty ?? '0'
-  return parseFloat(qty) > 0
+  return new Decimal(qty).gt(0)
 }
 
 export async function hasActiveReferences(businessId: string, id: string): Promise<boolean> {

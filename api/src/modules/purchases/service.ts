@@ -227,7 +227,7 @@ export async function confirmBill(
     if (bill.status !== 'draft') throw new ValidationError('Only draft bills can be confirmed')
 
     const billDate = bill.billDate ?? todayMv()
-    await gst.assertPeriodOpen(businessId, billDate, ctx)
+    await gst.assertPeriodOpen(businessId, billDate, ctx, tx)
 
     const lines = await repo.getLinesByBill(businessId, billId, tx)
 
@@ -342,7 +342,16 @@ export async function addPayment(
       throw new ValidationError('Cannot pay a draft bill — confirm first')
     if (bill.status === 'paid') throw new ValidationError('Bill is already fully paid')
 
-    await gst.assertPeriodOpen(businessId, data.paidAt, ctx)
+    // Reject overpayment — paid_amount must never exceed the bill total
+    // (UPGRADE.md F-15).
+    const outstanding = new Decimal(bill.total).minus(bill.paidAmount ?? '0')
+    if (new Decimal(data.amount).gt(outstanding)) {
+      throw new ValidationError(
+        `Payment of ${data.amount} exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+      )
+    }
+
+    await gst.assertPeriodOpen(businessId, data.paidAt, ctx, tx)
 
     const payment = await repo.insertPayment(
       {
@@ -397,12 +406,18 @@ export async function reversePayment(
     const bill = await repo.getById(businessId, billId, tx)
     if (!bill) throw new NotFoundError(`Bill ${billId} not found`)
 
-    const payment = await repo.getPaymentById(businessId, paymentId, tx)
+    // Locked read: holds the row until this tx commits (F-17).
+    const payment = await repo.getPaymentByIdForUpdate(businessId, paymentId, tx)
     if (!payment) throw new NotFoundError(`Payment ${paymentId} not found`)
     if (payment.billId !== billId) throw new ValidationError('Payment does not belong to this bill')
     if (payment.reversedAt) throw new ValidationError('Payment is already reversed')
 
-    await repo.markPaymentReversed(businessId, paymentId, tx)
+    // A reversal is itself a financial mutation — it must respect the period
+    // lock like every other mutation (UPGRADE.md F-11).
+    await gst.assertPeriodOpen(businessId, todayMv(), ctx, tx)
+
+    const reversed = await repo.markPaymentReversed(businessId, paymentId, tx)
+    if (!reversed) throw new ValidationError('Payment is already reversed')
 
     const paidAmount = await repo.sumActivePayments(businessId, billId, tx)
     const paid = new Decimal(paidAmount)

@@ -104,6 +104,24 @@ export async function getItemOnHand(
   return row?.stockOnHand ?? null
 }
 
+// Same as getItemOnHand but locks the row until the caller's transaction
+// commits — prevents two concurrent movements against the same item from
+// both reading a stale on-hand value and both passing assertAvailable
+// (UPGRADE.md F-10). Must be called inside the same tx that later inserts
+// the stock_movements row for this item.
+export async function getItemOnHandForUpdate(
+  businessId: string,
+  itemId: string,
+  tx: DbTx,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ stockOnHand: items.stockOnHand })
+    .from(items)
+    .where(and(eq(items.businessId, businessId), eq(items.id, itemId)))
+    .for('update')
+  return row?.stockOnHand ?? null
+}
+
 // Used by nightly reconcile job (ARCHITECTURE.md §8)
 export async function recomputeOnHand(
   businessId: string,
@@ -132,4 +150,11 @@ export async function listActiveItemIds(
     .select({ id: items.id, sku: items.sku, stockOnHand: items.stockOnHand })
     .from(items)
     .where(and(eq(items.businessId, businessId), isNull(items.deletedAt)))
+}
+
+// Used by the nightly reconcile scheduler to fan out one check per business
+// (UPGRADE.md F-21).
+export async function listAllBusinessIds(): Promise<string[]> {
+  const rows = await db.select({ id: businesses.id }).from(businesses)
+  return rows.map((r) => r.id)
 }

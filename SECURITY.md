@@ -63,9 +63,9 @@ Rotation procedure:
 2. Wait one `JWT_EXPIRES_IN` period (8 hours) so all old tokens expire
 3. Remove `JWT_SECRET_PREVIOUS` and redeploy
 
-**Token version:** Incremented on `logout-all` and password change. Middleware rejects any token with a stale version.
+**Token version:** Incremented on `logout-all` and password change. Middleware rejects any token with a stale version by comparing the JWT's `tokenVersion` claim against the **live** `users.token_version` column (`getSessionWithTokenVersion`, joined per request or from the 30s cache below) — fixed in Phase 20 (UPGRADE.md F-1); previously the comparison was against the same claim decoded from the token itself and could never fail.
 
-**Session ID (`sid`):** Every login/magic-link creates a row in `user_sessions`. Middleware calls `getSession(sid)` and rejects if `is_active=FALSE` **or if `session.user_id !== JWT payload id`** (prevents a stolen JWT with a swapped `sid` from passing). Single-device logout only sets that session's `is_active=FALSE` without touching the token version.
+**Session ID (`sid`):** Every login/magic-link creates a row in `user_sessions`. Middleware calls `getSessionWithTokenVersion(sid)` and rejects if `is_active=FALSE` **or if `session.user_id !== JWT payload id`** (prevents a stolen JWT with a swapped `sid` from passing). Single-device logout only sets that session's `is_active=FALSE` without touching the token version.
 
 ---
 
@@ -171,26 +171,36 @@ Magic links are only valid for accounts that already have a password set.
 
 ## Authorization Model
 
-Three layers applied in order:
+> Rewritten for this app (UPGRADE.md F-2). The previous version of this section described a departmental booking app (`guests`/`bookings`/`excursions`, `staff_permissions`/`department_default_permissions`) that predates Koosani and never matched the code — this app has no department concept.
 
-### 1. Role check (`requireRole`)
+Implemented in `api/src/middleware/authorize.ts`, applied per-route alongside `requireAuth`.
+
+### 1. Role hierarchy (`requireRole(minRole)`)
 
 ```
 admin > manager > staff
 ```
 
-Admins bypass all department scoping. Managers have elevated access within their department.
+A hard gate used only where no permission grant should ever loosen the requirement: `POST /gst/rates` (admin) and `POST /gst/periods/:id/unlock` (admin). Admins bypass every other check below.
 
-### 2. Module check (`requireBookingsModule`)
+### 2. Permission check (`requirePermission(resource, action)`)
 
-Certain route groups (bookings, items, locations, calendar) require the department to have an active module instance. Admins bypass this check.
+`Permission = { resource, action }` (shared/src/primitives.ts):
 
-### 3. Granular permission check (`requirePermission(resource, action)`)
+- Resources: `customers`, `suppliers`, `items`, `inventory`, `invoices`, `bills`, `po`, `gst`, `reports`
+- Actions: `view`, `add`, `edit`, `delete`, `export` (`export` applies only to `reports` — bulk CSV download)
 
-Resources: `guests`, `bookings`, `excursions`, `reports`
-Actions: `view`, `add`, `edit`, `delete`
+Default policy, checked in this order (`hasPermission` in `authorize.ts`):
 
-Permissions are stored in `staff_permissions` per user and `department_default_permissions` per department. User-level permissions override department defaults.
+1. **admin** — always allowed.
+2. **`view`** — always allowed for any authenticated role. There is no view-level restriction and no permission-restricted empty state implemented yet (DESIGN.md §7 describes the UI variant; it has no backing route check).
+3. **`export`** (reports bulk CSV) — requires an **explicit grant** in `user_permissions`, even for managers. Also separately rate-limited at 10/hour/user (`rl:reports-bulk-export`), distinct from the general 20/min CSV limiter (§13.6, §13.7).
+4. **manager** — allowed by default for `add`/`edit`/`delete` on every resource except the admin-only GST actions above ("elevated access").
+5. **staff** — denied unless an explicit row exists in `user_permissions` for that exact `(userId, resource, action)`.
+
+Grants are stored in `user_permissions` (`business_id`, `user_id`, `resource`, `action`, `granted_by`, unique on `(user_id, resource, action)`). There is no department-default table — grants are per-user only. Granting/revoking permissions is part of the `users` module (UPGRADE.md Phase 21); no UI exists yet.
+
+**Known gap:** report exports are documented as pure-read/no-audit (ARCHITECTURE.md §3, FUNCTIONS.md §reports), but §13.6 below calls for auditing bulk exports with filter parameters. This is unresolved — exports are currently permission-gated and rate-limited but **not** audit-logged. Track as a follow-up before relying on export audit trails.
 
 ---
 
@@ -210,8 +220,8 @@ Auth state lives entirely in the Pinia `auth` store — no `localStorage` persis
 
 No CSRF tokens are required. The combination of mitigations is sufficient:
 
-1. **`sameSite=strict` cookie** — browser will not send the session cookie on cross-site requests, including form POSTs and navigations from other origins.
-2. **JSON bodies** — all state-changing endpoints require `Content-Type: application/json`. Cross-site HTML forms cannot set this header.
+1. **`sameSite=strict` cookie** — browser will not send the session cookie on cross-site requests, including form POSTs and navigations from other origins. This is the primary defense.
+2. **Forgeable content types are rejected.** A cross-site HTML form's "simple request" can only carry `Content-Type: application/x-www-form-urlencoded`, `multipart/form-data`, or `text/plain` — never `application/json`, and never a missing header (forms always set one of the three). Global middleware in `api/src/server.ts` rejects exactly those three forgeable types on any non-GET/HEAD/OPTIONS request (UPGRADE.md F-5). A request with **no** `Content-Type` at all is allowed through — it isn't a CSRF vector (unreachable by a cross-site form) and blocking it broke legitimate bodyless same-origin calls (e.g. `POST /invoices/:id/issue` with no body) during Phase 20 verification. `multipart/form-data` is allowed for genuine file-upload routes, relying on mitigation #1 as the real defense there.
 3. **All mutations are POST / PUT / DELETE** — no GET endpoint mutates state. This was audited across all route files.
 
 **Magic-link and invite verify endpoints** (`POST /magic-link/verify`, `POST /accept-invite`) are POST endpoints initiated by the SPA after the user lands on the verify route. The `sameSite=strict` cookie is sent because the navigation originates from the same site; the SPA then makes a same-origin fetch with the token in the body.
@@ -309,7 +319,7 @@ The middleware checks `token_version` and `session.is_active` on every authentic
 - Cache hit + invalid → reject (and clear cache key).
 - Cache miss → DB lookup, populate.
 
-Invalidation is best-effort: `logout`, `logout-all`, password change, and emergency rotation all delete matching keys from the cache. Worst case is a 30-second stale acceptance after revocation — acceptable trade-off for the request-rate reduction. Document the trade-off in CHANGELOG.md > Security when this is implemented.
+Invalidation is best-effort: `logout`, `logout-all`, password change, and emergency rotation all delete matching keys from the cache. Worst case is a 30-second stale acceptance after revocation — acceptable trade-off for the request-rate reduction. Implemented in `api/src/middleware/requireAuth.ts`; `getSessionWithTokenVersion` (repository) joins `users.token_version` fresh on every cache miss (UPGRADE.md F-1).
 
 ### 13.3 Financial audit log (separate from auth log)
 
@@ -358,25 +368,24 @@ Enforce at both layers:
 
 This app accepts uploads (supplier invoice PDFs, SOA files for extraction, possibly logos). New attack surface vs. the previous app.
 
-**Rules:**
+**Rules (all implemented in `api/src/modules/files/service.ts` as of Phase 20, UPGRADE.md F-3):**
 
-1. **MIME sniff, not extension.** Verify magic bytes server-side. Reject anything that doesn't match an allow-list: `application/pdf`, `image/png`, `image/jpeg`, `image/webp`, `text/csv`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+1. **MIME sniff, not extension.** Verify magic bytes server-side via the `file-type` package. Reject anything that doesn't match an allow-list: `application/pdf`, `image/png`, `image/jpeg`, `image/webp`, `text/csv`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. `file-type` cannot magic-byte-detect plain-text formats (CSV/legacy XLS); those are allowed through only if the first 8 KB contains no NUL byte (a strong disguised-binary signal).
 2. **Size cap.** 25 MB per file by default; enforce at the proxy _and_ in the api.
-3. **Virus scan.** Synchronous ClamAV scan before the file is committed to storage. Reject on positive or scanner failure.
-4. **Never serve from api origin.** Files live in object storage. Downloads are signed URLs (5-minute expiry) generated after a permission check.
+3. **Virus scan.** Synchronous scan via `api/src/lib/virusScan.ts`, which speaks clamd's INSTREAM protocol directly over TCP to `CLAMAV_HOST:CLAMAV_PORT` (no client library). Reject on positive **or scanner unreachable** — except in `NODE_ENV=test`, where no clamd instance is provisioned and unreachability is treated as a pass (documented trade-off; a real clamd is required in every non-test environment, including local dev — see `docker-compose.yml`'s `clamav` service and STACK.md's open decision #2).
+4. **Never serve from api origin.** Files live in object storage. Downloads are signed URLs (**5-minute** expiry, corrected from a 1-hour bug — UPGRADE.md F-8) generated after a permission check, and only for files with `scan_result = 'clean'`.
 5. **Force download for user uploads.** `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` on every signed-URL response. No inline rendering of supplier-supplied PDFs (defence against PDF JavaScript).
-6. **Path is never user-controlled.** Object key is `{businessId}/{entityType}/{entityId}/{sha256}.{ext}` — generated server-side, never accepted from the client.
-7. **SHA-256 of uploaded bytes stored on the row.** Dedup + tamper evidence.
-8. **Strip EXIF from images** before storage.
+6. **Path is never user-controlled.** Object key is `{businessId}/uploads/{sha256}{ext}` — generated server-side, never accepted from the client.
+7. **SHA-256 of uploaded bytes stored on the row.** Dedup + tamper evidence. Computed over the post-EXIF-strip buffer for images.
+8. **Strip EXIF from images** before storage — re-encoded via `sharp` (which drops metadata by default), then hashed and stored.
 
 ### 13.6 PII and financial export controls
 
 Bulk exports (full customer list CSV, GST return ZIPs, GL exports) carry concentrated PII and tax data.
 
-- All bulk export endpoints require role `admin` or explicit `reports.export` permission.
-- Audit-log the export with the exact filter parameters in `after_json`.
-- Rate-limit bulk exports: 10 per hour per user.
-- Signed download URLs only; the export file is itself an object in storage, not streamed direct from the api.
+- All bulk export endpoints require role `admin` or explicit `reports.export` permission — implemented (`assertExportAllowed` in `api/src/modules/reports/routes.ts`, UPGRADE.md F-2/F-7).
+- Rate-limit bulk exports: 10 per hour per user — implemented (`rl:reports-bulk-export`, Redis-backed).
+- **Not implemented:** audit-logging the export with filter parameters, and delivering CSVs via signed object-storage URLs instead of streaming directly from the api. Both remain open — `reports.*` service functions are documented as pure-read with no writes (ARCHITECTURE.md §3, FUNCTIONS.md §reports), which conflicts with adding an audit write here; resolve that conflict before implementing.
 
 ### 13.7 PDF / report generation rate limit
 
@@ -390,8 +399,9 @@ PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. W
 | `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | pending     |
 | `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   | ✅ Phase 16 |
 | `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /reports/*?format=csv` (bulk)  | per-user     | 1 hour | 10  | ✅ Phase 20 |
 
-**Implementation:** `api/src/lib/rateLimiter.ts` provides `createRateLimiter(windowMs, max)` — an in-process sliding-window counter keyed by user or business ID. Each module instantiates its own limiter at module load time.
+**Implementation:** `api/src/lib/rateLimiter.ts` provides two limiters. `createRedisRateLimiter(keyPrefix, points, durationSec)` — Redis-backed via `rate-limiter-flexible`, correct across multiple API instances — backs every limiter in this table as of Phase 20 (UPGRADE.md F-7; previously all were in-process `Map`s that reset per instance/restart, multiplying every limit by the instance count). `createRateLimiter(windowMs, max)` (in-process) is deprecated and kept only for any call site not yet migrated.
 
 PDF jobs go through the BullMQ `pdf` queue with concurrency limited at the worker level, so even if rate limits are bypassed (internal call) the queue absorbs the spike.
 
@@ -447,7 +457,7 @@ Maldives tax law requires retention of accounting records (default 5 years from 
 1. **Every service call** receives `ctx.businessId` and includes it in the WHERE clause of every read and write. Cross-business reads must throw — no "best effort" filtering.
 2. **Repository functions take `businessId` as a required parameter.** It is never sourced from request bodies or query strings.
 3. **Integration tests** create two businesses and assert that user A cannot read or mutate business B's data via any endpoint, even with valid auth.
-4. **Row-Level Security** (Postgres RLS) on the most sensitive tables (`invoices`, `bills`, `payments_received`, `payments_made`, `audit_logs`) as defence-in-depth. The app sets `app.current_business_id` via `SET LOCAL` at the start of every transaction.
+4. **Row-Level Security — NOT implemented (UPGRADE.md F-4).** This section previously claimed RLS on `invoices`/`bills`/`payments_received`/`payments_made`/`audit_logs` with `SET LOCAL app.current_business_id`; no migration ever added it, and the claim was corrected during the Phase 20 audit. Tenant isolation currently rests entirely on controls 1–3 above, which the audit confirmed are consistently applied. Adding real RLS would require every `db.transaction(...)` call site (dozens, across every service) to `SET LOCAL` the business id at the start of the transaction — a retrofit large enough to warrant its own dedicated pass rather than a partial/unverified implementation bundled into Phase 20.
 
 ### 13.12 Network exposure / deployment topology
 

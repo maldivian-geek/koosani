@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { ItemCreate, ItemPatch, ItemCategoryCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
+import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
@@ -48,45 +49,55 @@ itemRoutes.get('/:id', async (c) => {
 })
 
 // POST /items
-itemRoutes.post('/', zValidator('json', ItemCreate), async (c) => {
-  const data = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const item = await svc.create(c.get('businessId'), data, ctx)
-    return c.json(item, 201)
-  } catch (err) {
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+itemRoutes.post(
+  '/',
+  requirePermission('items', 'add'),
+  zValidator('json', ItemCreate),
+  async (c) => {
+    const data = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const item = await svc.create(c.get('businessId'), data, ctx)
+      return c.json(item, 201)
+    } catch (err) {
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // PATCH /items/:id
-itemRoutes.patch('/:id', zValidator('json', ItemPatchRequest), async (c) => {
-  const id = c.req.param('id')
-  const { gstCategoryChangeReason, ...patch } = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  try {
-    const item = await svc.update(c.get('businessId'), id, patch, gstCategoryChangeReason, ctx)
-    return c.json(item)
-  } catch (err) {
-    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
-    if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
-    throw err
-  }
-})
+itemRoutes.patch(
+  '/:id',
+  requirePermission('items', 'edit'),
+  zValidator('json', ItemPatchRequest),
+  async (c) => {
+    const id = c.req.param('id')
+    const { gstCategoryChangeReason, ...patch } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const item = await svc.update(c.get('businessId'), id, patch, gstCategoryChangeReason, ctx)
+      return c.json(item)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // DELETE /items/:id
-itemRoutes.delete('/:id', async (c) => {
+itemRoutes.delete('/:id', requirePermission('items', 'delete'), async (c) => {
   const id = c.req.param('id')
   const ctx = {
     userId: c.get('userId'),
@@ -116,16 +127,21 @@ categoryRoutes.get('/', async (c) => {
 })
 
 // POST /item-categories
-categoryRoutes.post('/', zValidator('json', ItemCategoryCreate), async (c) => {
-  const { name, parentId } = c.req.valid('json')
-  const ctx = {
-    userId: c.get('userId'),
-    businessId: c.get('businessId'),
-    ip: getRealIp(c),
-    ua: c.req.header('user-agent'),
-  }
-  // Explicitly build the data object so parentId is absent (not undefined) when not provided
-  const data = parentId !== undefined ? { name, parentId } : { name }
-  const category = await svc.createCategory(c.get('businessId'), data, ctx)
-  return c.json(category, 201)
-})
+categoryRoutes.post(
+  '/',
+  requirePermission('items', 'edit'),
+  zValidator('json', ItemCategoryCreate),
+  async (c) => {
+    const { name, parentId } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    // Explicitly build the data object so parentId is absent (not undefined) when not provided
+    const data = parentId !== undefined ? { name, parentId } : { name }
+    const category = await svc.createCategory(c.get('businessId'), data, ctx)
+    return c.json(category, 201)
+  },
+)

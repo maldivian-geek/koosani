@@ -29,6 +29,7 @@ export const PermissionResource = z.enum([
   'customers',
   'suppliers',
   'items',
+  'inventory',
   'invoices',
   'bills',
   'po',
@@ -37,7 +38,8 @@ export const PermissionResource = z.enum([
 ])
 export type PermissionResource = z.infer<typeof PermissionResource>
 
-export const PermissionAction = z.enum(['view', 'add', 'edit', 'delete'])
+// 'export' only applies to the `reports` resource (bulk CSV export, SECURITY.md §13.6)
+export const PermissionAction = z.enum(['view', 'add', 'edit', 'delete', 'export'])
 export type PermissionAction = z.infer<typeof PermissionAction>
 
 export const Permission = z.object({

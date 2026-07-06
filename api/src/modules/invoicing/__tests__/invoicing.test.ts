@@ -512,6 +512,37 @@ describe('voidInvoice', () => {
       'Only issued',
     )
   })
+
+  // UPGRADE.md F-14 — money already received must be reversed before voiding
+  it('rejects voiding an invoice with active payments', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const { todayMv } = await import('@koosani/shared')
+
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '100.00', gstCategory: 'general_8' }],
+      },
+      ctx,
+    )
+    const issued = await svc.issue(business.id, draft.id, ctx)
+    await svc.addPayment(
+      business.id,
+      issued.id,
+      { amount: '50.00', method: 'cash', paidAt: todayMv() },
+      ctx,
+    )
+
+    await expect(svc.voidInvoice(business.id, issued.id, 'reason', ctx)).rejects.toThrow(
+      'active payments',
+    )
+  })
 })
 
 describe('addPayment / reversePayment', () => {
@@ -587,6 +618,108 @@ describe('addPayment / reversePayment', () => {
     const after = await svc.getInvoice(business.id, issued.id)
     expect(after.status).toBe('partially_paid')
     expect(after.paidAmount).toBe('50.00')
+  })
+
+  // UPGRADE.md F-15 — paid_amount must never exceed the invoice total
+  it('rejects a payment that would exceed the outstanding balance', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const { todayMv } = await import('@koosani/shared')
+
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '100.00', gstCategory: 'general_8' }],
+      },
+      ctx,
+    )
+    const issued = await svc.issue(business.id, draft.id, ctx)
+
+    await expect(
+      svc.addPayment(
+        business.id,
+        issued.id,
+        { amount: '999.00', method: 'cash', paidAt: todayMv() },
+        ctx,
+      ),
+    ).rejects.toThrow(svc.ValidationError)
+
+    const after = await svc.getInvoice(business.id, issued.id)
+    expect(after.status).toBe('issued')
+    expect(after.paidAmount).toBe('0.00')
+  })
+
+  // UPGRADE.md F-17 — a payment cannot be reversed twice
+  it('rejects reversing an already-reversed payment', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const { todayMv } = await import('@koosani/shared')
+
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '100.00', gstCategory: 'general_8' }],
+      },
+      ctx,
+    )
+    const issued = await svc.issue(business.id, draft.id, ctx)
+    const payment = await svc.addPayment(
+      business.id,
+      issued.id,
+      { amount: '108.00', method: 'cash', paidAt: todayMv() },
+      ctx,
+    )
+
+    await svc.reversePayment(business.id, issued.id, payment.id, ctx)
+    await expect(svc.reversePayment(business.id, issued.id, payment.id, ctx)).rejects.toThrow(
+      svc.ValidationError,
+    )
+  })
+
+  // UPGRADE.md F-11 — a reversal is a financial mutation like any other and
+  // must respect the GST period lock
+  it('rejects reversing a payment once the period is locked', async () => {
+    const { business, user } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const gstSvc = await import('../../gst/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const { todayMv } = await import('@koosani/shared')
+
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '100.00', gstCategory: 'general_8' }],
+      },
+      ctx,
+    )
+    const issued = await svc.issue(business.id, draft.id, ctx)
+    const payment = await svc.addPayment(
+      business.id,
+      issued.id,
+      { amount: '108.00', method: 'cash', paidAt: todayMv() },
+      ctx,
+    )
+
+    const periods = await gstSvc.listPeriods(business.id)
+    await gstSvc.lockPeriod(business.id, periods[0]!.id, 'MIRA-001', ctx)
+
+    await expect(svc.reversePayment(business.id, issued.id, payment.id, ctx)).rejects.toThrow(
+      'locked',
+    )
   })
 })
 

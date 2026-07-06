@@ -27,6 +27,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # File upload virus scanning (SECURITY.md §13.5, STACK.md "open decision" #2).
+  # Set CLAMAV_HOST=localhost CLAMAV_PORT=3311 in api/.env to use it locally.
+  # Freshclam takes a few minutes to pull virus definitions on first start.
+  clamav:
+    image: clamav/clamav:1.4-stable
+    ports:
+      - '3311:3310'
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
 volumes:
   postgres_data:
   redis_data:
+  clamav_data:
