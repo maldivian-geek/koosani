@@ -183,3 +183,60 @@ describe('pdf worker — invoice PDF end-to-end', () => {
     expect(rows[0]?.scanResult).toBe('clean')
   }, 30_000)
 })
+
+describe('pdf worker — estimate PDF end-to-end', () => {
+  it('renders a real estimate PDF via the queue and returns a working signed URL', async () => {
+    const { app } = await import('../../server.js')
+    const { business, user, token, customer } = await (async () => {
+      const seeded = await seedBusinessWithInvoice()
+      const { db: appDb } = await import('../../db/client.js')
+      const schema = await import('../../db/schema/index.js')
+      const { eq } = await import('drizzle-orm')
+      const [customerRow] = await appDb
+        .select()
+        .from(schema.customers)
+        .where(eq(schema.customers.businessId, seeded.business.id))
+      return { ...seeded, customer: customerRow! }
+    })()
+
+    const estimatesSvc = await import('../../modules/estimates/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await estimatesSvc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [
+          {
+            description: 'Quoted widget',
+            qty: '1.0000',
+            unitPrice: '50.00',
+            gstCategory: 'general_8',
+          },
+        ],
+      },
+      ctx,
+    )
+    await estimatesSvc.send(business.id, draft.id, ctx)
+
+    const res = await app.request(`/estimates/${draft.id}/pdf`, { headers: authHeaders(token) })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { url: string }
+    expect(body.url).toBeTruthy()
+
+    const { db: appDb } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { and, eq } = await import('drizzle-orm')
+    const rows = await appDb
+      .select()
+      .from(schema.files)
+      .where(
+        and(
+          eq(schema.files.businessId, business.id),
+          eq(schema.files.entityType, 'estimate'),
+          eq(schema.files.entityId, draft.id),
+        ),
+      )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.mimeType).toBe('application/pdf')
+  }, 30_000)
+})

@@ -299,3 +299,100 @@ describe('reminders — opt-out and scan idempotency', () => {
     expect(rows).toHaveLength(1)
   }, 30_000)
 })
+
+describe('reminders — estimate expiry sweep', () => {
+  it('expires a sent estimate whose expiryDate has passed', async () => {
+    const { business, user } = await seedBusinessWithInvoice('2026-08-01')
+
+    const { db: appDb } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { eq } = await import('drizzle-orm')
+    const [customer] = await appDb
+      .select()
+      .from(schema.customers)
+      .where(eq(schema.customers.businessId, business.id))
+
+    const estimatesSvc = await import('../../modules/estimates/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await estimatesSvc.createDraft(
+      business.id,
+      {
+        customerId: customer!.id,
+        expiryDate: '2020-01-01', // long past
+        lines: [
+          { description: 'Old quote', qty: '1.0000', unitPrice: '10.00', gstCategory: 'general_8' },
+        ],
+      },
+      ctx,
+    )
+    await estimatesSvc.send(business.id, draft.id, ctx)
+
+    const { remindersQueue } = await import('../../lib/queues.js')
+    const job = await remindersQueue.add('reminders', { businessId: business.id })
+    const start = Date.now()
+    while (Date.now() - start < 10_000) {
+      const state = await job.getState()
+      if (state === 'completed' || state === 'failed') break
+      await new Promise((r) => setTimeout(r, 100))
+    }
+
+    const updated = await estimatesSvc.getEstimate(business.id, draft.id)
+    expect(updated.status).toBe('expired')
+  }, 20_000)
+})
+
+describe('email — estimate send', () => {
+  it('POST /estimates/:id/send enqueues and the worker logs a sent email', async () => {
+    const { app } = await import('../../server.js')
+    const { business, token } = await seedBusinessWithInvoice('2026-08-01')
+
+    const { db: appDb } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { eq, and } = await import('drizzle-orm')
+    const [customer] = await appDb
+      .select()
+      .from(schema.customers)
+      .where(eq(schema.customers.businessId, business.id))
+
+    const draftRes = await app.request('/estimates', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        customerId: customer!.id,
+        lines: [
+          {
+            description: 'Quoted widget',
+            qty: '1.0000',
+            unitPrice: '50.00',
+            gstCategory: 'general_8',
+          },
+        ],
+      }),
+    })
+    expect(draftRes.status).toBe(201)
+    const draft = (await draftRes.json()) as { id: string }
+
+    const sendRes = await app.request(`/estimates/${draft.id}/send`, {
+      method: 'POST',
+      headers: authHeaders(token),
+    })
+    expect(sendRes.status).toBe(200)
+
+    const rows = await pollUntil(
+      () =>
+        appDb
+          .select()
+          .from(schema.emailLogs)
+          .where(
+            and(
+              eq(schema.emailLogs.businessId, business.id),
+              eq(schema.emailLogs.entityId, draft.id),
+              eq(schema.emailLogs.kind, 'estimate'),
+            ),
+          ),
+      (r) => r.length > 0,
+    )
+    expect(rows[0]?.status).toBe('sent')
+    expect(rows[0]?.toEmail).toBe('customer@example.com')
+  }, 20_000)
+})

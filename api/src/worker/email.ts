@@ -3,9 +3,15 @@ import { redis } from '../lib/redis.js'
 import { logger } from '../lib/logger.js'
 import * as invoicing from '../modules/invoicing/service.js'
 import * as customers from '../modules/customers/service.js'
+import * as estimates from '../modules/estimates/service.js'
 import * as emailLogs from '../modules/emailLogs/service.js'
 import * as mailer from '../lib/mailer.js'
-import { renderInvoicePdf, renderCustomerSoaPdf, businessInfo } from '../lib/pdf/build.js'
+import {
+  renderInvoicePdf,
+  renderCustomerSoaPdf,
+  renderEstimatePdf,
+  businessInfo,
+} from '../lib/pdf/build.js'
 
 export type EmailJobData =
   | { kind: 'invoice'; businessId: string; invoiceId: string; userId: string }
@@ -19,6 +25,7 @@ export type EmailJobData =
       to: string
       userId: string
     }
+  | { kind: 'estimate'; businessId: string; estimateId: string; userId: string }
 
 export function registerEmailWorker(): Worker<EmailJobData> {
   return new Worker<EmailJobData>(
@@ -119,6 +126,27 @@ export function registerEmailWorker(): Worker<EmailJobData> {
             subject = opts.subject
             entityType = 'customer_soa'
             entityId = data.customerId
+            await mailer.sendEmail(opts)
+            break
+          }
+          case 'estimate': {
+            const estimate = await estimates.getEstimate(businessId, data.estimateId)
+            const customer = await customers.assertExists(estimate.customerId, businessId)
+            if (!customer.email) throw new Error('Customer has no email on file')
+            const business = await businessInfo(businessId)
+            const pdf = await renderEstimatePdf(businessId, data.estimateId)
+            const opts = mailer.estimateEmail({
+              to: customer.email,
+              businessName: business.name,
+              estimateNumber: estimate.estimateNumber ?? '(draft)',
+              total: estimate.total,
+              expiryDate: estimate.expiryDate,
+              pdf,
+            })
+            toEmail = opts.to
+            subject = opts.subject
+            entityType = 'estimate'
+            entityId = data.estimateId
             await mailer.sendEmail(opts)
             break
           }

@@ -87,6 +87,27 @@ export const router = createRouter({
           component: () => import('../modules/invoicing/views/InvoiceEditorView.vue'),
           meta: { requiresAuth: true, title: 'Edit Invoice' },
         },
+        // Estimates (Phase 25)
+        {
+          path: 'estimates',
+          component: () => import('../modules/estimates/views/EstimateListView.vue'),
+          meta: { requiresAuth: true, title: 'Estimates' },
+        },
+        {
+          path: 'estimates/new',
+          component: () => import('../modules/estimates/views/EstimateEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Estimate' },
+        },
+        {
+          path: 'estimates/:id',
+          component: () => import('../modules/estimates/views/EstimateDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Estimate' },
+        },
+        {
+          path: 'estimates/:id/edit',
+          component: () => import('../modules/estimates/views/EstimateEditorView.vue'),
+          meta: { requiresAuth: true, title: 'Edit Estimate' },
+        },
         // Bills
         {
           path: 'bills',

@@ -40,6 +40,10 @@ export const invoices = pgTable(
     // Per-invoice opt-out for the reminders cron (Phase 24, UPGRADE.md G-4).
     // Not in guard_invoice_frozen()'s frozen-column tuple — updatable post-issue.
     remindersEnabled: boolean('reminders_enabled').default(true).notNull(),
+    // Traceability back to the estimate this was converted from, if any
+    // (Phase 25, UPGRADE.md G-5). No FK to estimates here to avoid a circular
+    // module reference at the schema level; enforced at the service layer.
+    estimateId: uuid('estimate_id'),
     ...timestamps,
     ...auditedBy,
   },

@@ -8,9 +8,11 @@ import * as customers from '../../modules/customers/service.js'
 import * as suppliers from '../../modules/suppliers/service.js'
 import * as purchases from '../../modules/purchases/service.js'
 import * as settings from '../../modules/settings/service.js'
+import * as estimatesService from '../../modules/estimates/service.js'
 import { InvoiceDocument } from './InvoiceDocument.js'
 import { PoDocument } from './PoDocument.js'
 import { SoaDocument } from './SoaDocument.js'
+import { EstimateDocument } from './EstimateDocument.js'
 import { renderPdfBuffer } from './render.js'
 import type { BusinessInfo } from './types.js'
 
@@ -142,6 +144,35 @@ export async function renderSupplierSoaPdf(
       balance: e.balance,
     })),
     closingBalance: soa.closingBalance,
+  })
+  return renderPdfBuffer(element)
+}
+
+export async function renderEstimatePdf(businessId: string, estimateId: string): Promise<Buffer> {
+  const [business, estimate] = await Promise.all([
+    businessInfo(businessId),
+    estimatesService.getEstimate(businessId, estimateId),
+  ])
+  const customer = await customers.assertExists(estimate.customerId, businessId)
+
+  const element = EstimateDocument({
+    business,
+    number: estimate.estimateNumber ?? '(draft)',
+    issueDate: estimate.issueDate ?? '',
+    expiryDate: estimate.expiryDate,
+    billTo: { name: customer.name, tin: customer.tin, address: customer.address },
+    lines: estimate.lines.map((l) => ({
+      description: l.description,
+      qty: l.qty,
+      rate: l.unitPrice,
+      gstRate: l.gstRate,
+      gstAmount: l.gstAmount,
+      lineTotal: l.lineTotal,
+    })),
+    subtotal: estimate.subtotal,
+    gstAmount: estimate.gstAmount,
+    total: estimate.total,
+    notes: estimate.notes,
   })
   return renderPdfBuffer(element)
 }

@@ -130,35 +130,65 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 
 ## Module: `invoicing`
 
-| Kind  | Name                                 | Signature                                           | Purpose                                                                                   |
-| ----- | ------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| route | `GET    /invoices`                   | `?status&customerId&from&to&q&page` → `Invoice[]`   | —                                                                                         |
-| route | `GET    /invoices/:id`               | → `Invoice & { lines, payments, creditNotes }`      | —                                                                                         |
-| route | `POST   /invoices`                   | `InvoiceDraftCreate` → `Invoice`                    | Creates draft, no number, no stock movement                                               |
-| route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                     | Drafts only                                                                               |
-| route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                    | Allocates number, commits stock, locks row                                                |
-| route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                            | Issued only; creates reversing credit note                                                |
-| route | `GET    /invoices/:id/pdf`           | → `{ url }` (signed URL)                            | Renders via `pdf` queue (Phase 23, UPGRADE.md)                                            |
-| route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`      | Also enqueues a `receipt` email (Phase 24)                                                |
-| route | `DELETE /invoices/:id/payments/:pid` | → `204`                                             | Reverses payment                                                                          |
-| route | `POST   /invoices/:id/send`          | → `{ queued: true }` (202)                          | Emails the invoice PDF to the customer on file; 20/min/user (Phase 24, UPGRADE.md G-3)    |
-| route | `PATCH  /invoices/:id/reminders`     | `InvoiceRemindersPatch { enabled }` → `Invoice`     | Per-invoice dunning opt-out (Phase 24, UPGRADE.md G-4)                                    |
-| route | `GET    /invoices/:id/emails`        | → `EmailLog[]`                                      | Delivery history — sends, receipts, reminders (Phase 24)                                  |
-| route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`              | —                                                                                         |
-| route | `POST   /credit-notes`               | `CreditNoteCreate` → `CreditNote`                   | References an issued invoice                                                              |
-| route | `POST   /credit-notes/:id/issue`     | `{}` → `CreditNote`                                 | Allocates number, reverses stock                                                          |
-| svc   | `invoicing.createDraft`              | `(businessId, data, ctx) → Invoice & { lines }`     | Creates draft; GST rates preliminary                                                      |
-| svc   | `invoicing.patchDraft`               | `(businessId, id, data, ctx) → Invoice & { lines }` | Drafts only; replaces lines if provided                                                   |
-| svc   | `invoicing.issue`                    | `(businessId, invoiceId, ctx) → Invoice`            | Number, stock, GST snapshot, audit                                                        |
-| svc   | `invoicing.voidInvoice`              | `(businessId, invoiceId, reason, ctx) → Invoice`    | Auto-issues reversing CN; reverses stock                                                  |
-| svc   | `invoicing.addPayment`               | `(businessId, invoiceId, data, ctx) → Payment`      | Syncs paidAmount, derives status; enqueues a `receipt` email after commit (Phase 24)      |
-| svc   | `invoicing.listReminderCandidates`   | `(businessId) → Invoice[]`                          | Issued/partially-paid, opted-in, has a due date — used by the reminders worker (Phase 24) |
-| svc   | `invoicing.setRemindersEnabled`      | `(businessId, invoiceId, enabled, ctx) → Invoice`   | Backs `PATCH /invoices/:id/reminders`; audited as `invoice.reminders_toggled`             |
-| svc   | `invoicing.reversePayment`           | `(businessId, invoiceId, paymentId, ctx) → void`    | Marks reversed, re-syncs paidAmount                                                       |
-| svc   | `invoicing.createCreditNote`         | `(businessId, data, ctx) → CreditNote & { lines }`  | Draft CN against issued invoice                                                           |
-| svc   | `invoicing.issueCreditNote`          | `(businessId, creditNoteId, ctx) → CreditNote`      | Allocates CN number, reverses stock                                                       |
-| svc   | `invoicing.computeTotals`            | `(lines) → Totals`                                  | Pure function — see ARCHITECTURE.md §4.1                                                  |
-| svc   | `invoicing.assertNotLocked`          | `(businessId, date, ctx) → void`                    | Rejects if `date` falls in a locked GST period                                            |
+| Kind  | Name                                 | Signature                                           | Purpose                                                                                              |
+| ----- | ------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| route | `GET    /invoices`                   | `?status&customerId&from&to&q&page` → `Invoice[]`   | —                                                                                                    |
+| route | `GET    /invoices/:id`               | → `Invoice & { lines, payments, creditNotes }`      | —                                                                                                    |
+| route | `POST   /invoices`                   | `InvoiceDraftCreate` → `Invoice`                    | Creates draft, no number, no stock movement                                                          |
+| route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                     | Drafts only                                                                                          |
+| route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                    | Allocates number, commits stock, locks row                                                           |
+| route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                            | Issued only; creates reversing credit note                                                           |
+| route | `GET    /invoices/:id/pdf`           | → `{ url }` (signed URL)                            | Renders via `pdf` queue (Phase 23, UPGRADE.md)                                                       |
+| route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`      | Also enqueues a `receipt` email (Phase 24)                                                           |
+| route | `DELETE /invoices/:id/payments/:pid` | → `204`                                             | Reverses payment                                                                                     |
+| route | `POST   /invoices/:id/send`          | → `{ queued: true }` (202)                          | Emails the invoice PDF to the customer on file; 20/min/user (Phase 24, UPGRADE.md G-3)               |
+| route | `PATCH  /invoices/:id/reminders`     | `InvoiceRemindersPatch { enabled }` → `Invoice`     | Per-invoice dunning opt-out (Phase 24, UPGRADE.md G-4)                                               |
+| route | `GET    /invoices/:id/emails`        | → `EmailLog[]`                                      | Delivery history — sends, receipts, reminders (Phase 24)                                             |
+| route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`              | —                                                                                                    |
+| route | `POST   /credit-notes`               | `CreditNoteCreate` → `CreditNote`                   | References an issued invoice                                                                         |
+| route | `POST   /credit-notes/:id/issue`     | `{}` → `CreditNote`                                 | Allocates number, reverses stock                                                                     |
+| svc   | `invoicing.createDraft`              | `(businessId, data, ctx) → Invoice & { lines }`     | Creates draft; GST rates preliminary                                                                 |
+| svc   | `invoicing.patchDraft`               | `(businessId, id, data, ctx) → Invoice & { lines }` | Drafts only; replaces lines if provided                                                              |
+| svc   | `invoicing.issue`                    | `(businessId, invoiceId, ctx) → Invoice`            | Number, stock, GST snapshot, audit                                                                   |
+| svc   | `invoicing.voidInvoice`              | `(businessId, invoiceId, reason, ctx) → Invoice`    | Auto-issues reversing CN; reverses stock                                                             |
+| svc   | `invoicing.addPayment`               | `(businessId, invoiceId, data, ctx) → Payment`      | Syncs paidAmount, derives status; enqueues a `receipt` email after commit (Phase 24)                 |
+| svc   | `invoicing.listReminderCandidates`   | `(businessId) → Invoice[]`                          | Issued/partially-paid, opted-in, has a due date — used by the reminders worker (Phase 24)            |
+| svc   | `invoicing.setRemindersEnabled`      | `(businessId, invoiceId, enabled, ctx) → Invoice`   | Backs `PATCH /invoices/:id/reminders`; audited as `invoice.reminders_toggled`                        |
+| svc   | `invoicing.reversePayment`           | `(businessId, invoiceId, paymentId, ctx) → void`    | Marks reversed, re-syncs paidAmount                                                                  |
+| svc   | `invoicing.createCreditNote`         | `(businessId, data, ctx) → CreditNote & { lines }`  | Draft CN against issued invoice                                                                      |
+| svc   | `invoicing.issueCreditNote`          | `(businessId, creditNoteId, ctx) → CreditNote`      | Allocates CN number, reverses stock                                                                  |
+| svc   | `invoicing.computeTotals`            | `(lines) → Totals`                                  | Pure function — see ARCHITECTURE.md §4.1                                                             |
+| svc   | `invoicing.assertNotLocked`          | `(businessId, date, ctx) → void`                    | Rejects if `date` falls in a locked GST period                                                       |
+| svc   | `invoicing.setEstimateLink`          | `(businessId, invoiceId, estimateId, tx) → void`    | Sets `invoices.estimate_id`; used only by `estimates.convertToInvoice`, inside its own tx (Phase 25) |
+
+`Invoice` gains `estimateId: string \| null` (Phase 25, UPGRADE.md G-5) — traces back to the estimate this invoice was converted from, if any.
+
+---
+
+## Module: `estimates`
+
+Mirrors `invoicing`'s draft pattern (Phase 25, UPGRADE.md G-5): draft → sent → accepted/declined/expired. No stock reservation, no GST period lock at any status — see ARCHITECTURE.md §4.6.
+
+| Kind  | Name                                                      | Signature                                                                | Purpose                                                                                                                                                                           |
+| ----- | --------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /estimates`                                       | `?status&customerId&from&to&q&page` → `{ items, total, page, pageSize }` | Joined with `customers` for `customerName`                                                                                                                                        |
+| route | `GET    /estimates/:id`                                   | → `Estimate & { lines, customerName }`                                   | —                                                                                                                                                                                 |
+| route | `POST   /estimates`                                       | `EstimateDraftCreate` → `Estimate & { lines }`                           | Creates draft, no number                                                                                                                                                          |
+| route | `PATCH  /estimates/:id`                                   | `EstimateDraftPatch` → `Estimate & { lines }`                            | Drafts only                                                                                                                                                                       |
+| route | `POST   /estimates/:id/send`                              | `{}` → `Estimate`                                                        | Allocates number, transitions to `sent`, enqueues an `estimate` email (PDF attached)                                                                                              |
+| route | `POST   /estimates/:id/accept`                            | `{}` → `Estimate`                                                        | Staff-recorded — no customer-facing accept surface until Phase 28                                                                                                                 |
+| route | `POST   /estimates/:id/decline`                           | `{}` → `Estimate`                                                        | Staff-recorded                                                                                                                                                                    |
+| route | `POST   /estimates/:id/convert`                           | `{}` → `{ estimate, invoiceId }` (201)                                   | Copies lines into a new draft invoice; rejects if already converted or not sent/accepted                                                                                          |
+| route | `GET    /estimates/:id/pdf`                               | → `{ url }` (signed URL)                                                 | Renders via `pdf` queue, 20/min/user                                                                                                                                              |
+| route | `GET    /estimates/:id/emails`                            | → `EmailLog[]`                                                           | Delivery history                                                                                                                                                                  |
+| svc   | `estimates.createDraft`                                   | `(businessId, data, ctx) → Estimate & { lines }`                         | GST computed for display only (no `gst.assertPeriodOpen`); `expiryDate` defaults to `businesses.defaultEstimateValidityDays`                                                      |
+| svc   | `estimates.patchDraft`                                    | `(businessId, id, data, ctx) → Estimate & { lines }`                     | Drafts only; replaces lines if provided                                                                                                                                           |
+| svc   | `estimates.send`                                          | `(businessId, id, ctx) → Estimate`                                       | Advisory-locked number allocation (`estimate_number_prefix`, default `EST-`), then enqueues email                                                                                 |
+| svc   | `estimates.markAccepted` / `markDeclined` / `markExpired` | `(businessId, id, ctx) → Estimate`                                       | Only from `sent`; each audits its own action name                                                                                                                                 |
+| svc   | `estimates.convertToInvoice`                              | `(businessId, id, ctx) → { estimate, invoiceId }`                        | Re-prices lines via a fresh `invoicing.createDraft` call (does not copy stale GST snapshots); sets `estimates.converted_at` (blocks double-conversion) and `invoices.estimate_id` |
+| svc   | `estimates.listExpiryCandidates`                          | `(businessId) → Estimate[]`                                              | `sent` estimates — the reminders worker filters by `expiryDate < today`                                                                                                           |
+
+`EstimateDraftCreate`/`EstimateDraftPatch` (`shared/src/estimates.ts`) mirror `InvoiceDraftCreate`/`InvoiceDraftPatch`. `PermissionResource` gains `'estimates'` (shared/src/primitives.ts; also added to `UserDrawer.vue`'s permission grid).
 
 ---
 

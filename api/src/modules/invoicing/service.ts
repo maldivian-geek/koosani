@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { db } from '../../db/client.js'
+import type { DbTx } from '../../db/client.js'
 import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
 import * as gst from '../gst/service.js'
@@ -185,6 +186,18 @@ export async function listInvoices(
 
 export async function listReminderCandidates(businessId: string): Promise<Invoice[]> {
   return repo.listReminderCandidates(businessId)
+}
+
+// Sets the traceability link back to the estimate this invoice was converted
+// from (Phase 25, UPGRADE.md G-5). Callers must supply their own transaction —
+// used exclusively by estimates.convertToInvoice, inside its own tx.
+export async function setEstimateLink(
+  businessId: string,
+  invoiceId: string,
+  estimateId: string,
+  tx: DbTx,
+): Promise<void> {
+  await repo.updateInvoice(businessId, invoiceId, { estimateId }, tx)
 }
 
 export async function setRemindersEnabled(

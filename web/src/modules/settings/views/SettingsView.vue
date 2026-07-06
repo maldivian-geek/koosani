@@ -24,6 +24,8 @@ interface BusinessSettings {
   creditNoteNumberPrefix: string
   billNumberPrefix: string
   poNumberPrefix: string
+  estimateNumberPrefix: string
+  defaultEstimateValidityDays: number
   logoUrl: string | null
 }
 
@@ -53,6 +55,8 @@ interface FormState {
   creditNoteNumberPrefix: string
   billNumberPrefix: string
   poNumberPrefix: string
+  estimateNumberPrefix: string
+  defaultEstimateValidityDays: number
 }
 
 const form = ref<FormState>({
@@ -69,6 +73,8 @@ const form = ref<FormState>({
   creditNoteNumberPrefix: '',
   billNumberPrefix: '',
   poNumberPrefix: '',
+  estimateNumberPrefix: '',
+  defaultEstimateValidityDays: 30,
 })
 const errors = ref<Partial<Record<keyof FormState, string>>>({})
 
@@ -90,6 +96,8 @@ async function load() {
       creditNoteNumberPrefix: s.creditNoteNumberPrefix,
       billNumberPrefix: s.billNumberPrefix,
       poNumberPrefix: s.poNumberPrefix,
+      estimateNumberPrefix: s.estimateNumberPrefix,
+      defaultEstimateValidityDays: s.defaultEstimateValidityDays,
     }
     logoUrl.value = s.logoUrl
   } catch {
@@ -120,6 +128,8 @@ async function onSave() {
     creditNoteNumberPrefix: form.value.creditNoteNumberPrefix,
     billNumberPrefix: form.value.billNumberPrefix,
     poNumberPrefix: form.value.poNumberPrefix,
+    estimateNumberPrefix: form.value.estimateNumberPrefix,
+    defaultEstimateValidityDays: form.value.defaultEstimateValidityDays,
   }
 
   const result = BusinessSettingsPatch.safeParse(payload)
@@ -297,6 +307,17 @@ onMounted(() => void load())
             fluid
           />
         </div>
+
+        <div class="flex flex-col gap-1">
+          <label class="font-medium text-sm">Default estimate validity (days)</label>
+          <InputNumber
+            v-model="form.defaultEstimateValidityDays"
+            :min="0"
+            :max="365"
+            show-buttons
+            class="w-40"
+          />
+        </div>
       </div>
 
       <!-- Numbering -->
@@ -330,6 +351,14 @@ onMounted(() => void load())
           <div class="flex flex-col gap-1">
             <label class="font-medium text-sm">Purchase order prefix</label>
             <InputText v-model="form.poNumberPrefix" :invalid="!!errors.poNumberPrefix" fluid />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="font-medium text-sm">Estimate prefix</label>
+            <InputText
+              v-model="form.estimateNumberPrefix"
+              :invalid="!!errors.estimateNumberPrefix"
+              fluid
+            />
           </div>
         </div>
       </div>

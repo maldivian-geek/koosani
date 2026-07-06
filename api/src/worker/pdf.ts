@@ -7,6 +7,7 @@ import {
   renderPoPdf,
   renderCustomerSoaPdf,
   renderSupplierSoaPdf,
+  renderEstimatePdf,
 } from '../lib/pdf/build.js'
 
 export type PdfJobData =
@@ -28,6 +29,7 @@ export type PdfJobData =
       to: string
       userId: string
     }
+  | { kind: 'estimate'; businessId: string; estimateId: string; userId: string }
 
 export function registerPdfWorker(): Worker<PdfJobData> {
   return new Worker<PdfJobData>(
@@ -75,6 +77,12 @@ export function registerPdfWorker(): Worker<PdfJobData> {
           filename = `supplier-soa-${job.data.supplierId}-${job.data.from}-${job.data.to}.pdf`
           entityType = 'supplier_soa'
           entityId = job.data.supplierId
+          break
+        case 'estimate':
+          buffer = await renderEstimatePdf(businessId, job.data.estimateId)
+          filename = `estimate-${job.data.estimateId}.pdf`
+          entityType = 'estimate'
+          entityId = job.data.estimateId
           break
       }
 

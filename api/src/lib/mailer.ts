@@ -139,3 +139,23 @@ export function statementEmail(opts: {
     attachments: [{ filename: `statement-${opts.from}-to-${opts.to_}.pdf`, content: opts.pdf }],
   }
 }
+
+// Phase 25, UPGRADE.md G-5
+
+export function estimateEmail(opts: {
+  to: string
+  businessName: string
+  estimateNumber: string
+  total: string
+  expiryDate: string | null
+  pdf: Buffer
+}): SendOpts {
+  const expiryLine = opts.expiryDate ? ` This estimate is valid until ${opts.expiryDate}.` : ''
+  return {
+    to: opts.to,
+    subject: `Estimate ${opts.estimateNumber} from ${opts.businessName}`,
+    text: `Please find attached estimate ${opts.estimateNumber} for MVR ${opts.total}.${expiryLine}`,
+    html: `<p>Please find attached estimate <strong>${opts.estimateNumber}</strong> for MVR ${opts.total}.${expiryLine}</p>`,
+    attachments: [{ filename: `${opts.estimateNumber}.pdf`, content: opts.pdf }],
+  }
+}

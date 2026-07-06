@@ -78,6 +78,7 @@ export const permissionResourceEnum = pgEnum('permission_resource', [
   'po',
   'gst',
   'reports',
+  'estimates',
 ])
 
 export const permissionActionEnum = pgEnum('permission_action', [
@@ -89,5 +90,20 @@ export const permissionActionEnum = pgEnum('permission_action', [
 ])
 
 // Outbound email log (Phase 24, UPGRADE.md G-3/G-4)
-export const emailKindEnum = pgEnum('email_kind', ['invoice', 'receipt', 'reminder', 'statement'])
+export const emailKindEnum = pgEnum('email_kind', [
+  'invoice',
+  'receipt',
+  'reminder',
+  'statement',
+  'estimate',
+])
 export const emailStatusEnum = pgEnum('email_status', ['sent', 'failed'])
+
+// Estimates / quotes (Phase 25, UPGRADE.md G-5)
+export const estimateStatusEnum = pgEnum('estimate_status', [
+  'draft',
+  'sent',
+  'accepted',
+  'declined',
+  'expired',
+])

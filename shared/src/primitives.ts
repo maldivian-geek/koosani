@@ -35,6 +35,7 @@ export const PermissionResource = z.enum([
   'po',
   'gst',
   'reports',
+  'estimates',
 ])
 export type PermissionResource = z.infer<typeof PermissionResource>
 
