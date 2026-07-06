@@ -5,8 +5,14 @@ import { CustomerCreate, CustomerPatch, ContactCreate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
+import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
+import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-user: 10 SOA PDF requests per minute (SECURITY.md §13.7)
+const soaPdfLimiter = createRedisRateLimiter('rl:customer-soa-pdf', 10, 60)
 
 const ListQuery = z.object({
   q: z.string().optional(),
@@ -107,12 +113,32 @@ customerRoutes.get('/:id/soa', async (c) => {
   const from = c.req.query('from')
   const to = c.req.query('to')
   const format = c.req.query('format') ?? 'json'
+  const customerId = c.req.param('id')
 
   if (!from || !to) return c.json({ error: 'from and to are required' }, 422)
-  if (format === 'pdf') return c.json({ error: 'pdf_not_implemented' }, 501)
+
+  if (format === 'pdf') {
+    if (!(await soaPdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+    try {
+      await svc.assertExists(customerId, c.get('businessId'))
+      const fileId = await renderAndWaitForFile({
+        kind: 'customer-soa',
+        businessId: c.get('businessId'),
+        customerId,
+        from,
+        to,
+        userId: c.get('userId'),
+      })
+      const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+      return c.json({ url })
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  }
 
   try {
-    const soa = await svc.buildSoa(c.get('businessId'), c.req.param('id'), from, to)
+    const soa = await svc.buildSoa(c.get('businessId'), customerId, from, to)
     return c.json(soa)
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)

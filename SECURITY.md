@@ -395,17 +395,15 @@ PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. W
 | ----------------------------------- | ------------ | ------ | --- | ----------- |
 | `GET /invoices/:id/pdf`             | per-user     | 1 min  | 20  | ✅ Phase 18 |
 | `GET /pos/:id/pdf`                  | per-user     | 1 min  | 20  | ✅ Phase 18 |
-| `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | pending     |
-| `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | pending     |
+| `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
+| `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
 | `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   | ✅ Phase 16 |
 | `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  | ✅ Phase 18 |
 | `GET /reports/*?format=csv` (bulk)  | per-user     | 1 hour | 10  | ✅ Phase 20 |
 
 **Implementation:** `api/src/lib/rateLimiter.ts` provides two limiters. `createRedisRateLimiter(keyPrefix, points, durationSec)` — Redis-backed via `rate-limiter-flexible`, correct across multiple API instances — backs every limiter in this table as of Phase 20 (UPGRADE.md F-7; previously all were in-process `Map`s that reset per instance/restart, multiplying every limit by the instance count). `createRateLimiter(windowMs, max)` (in-process) is deprecated and kept only for any call site not yet migrated.
 
-PDF jobs go through the BullMQ `pdf` queue with concurrency limited at the worker level, so even if rate limits are bypassed (internal call) the queue absorbs the spike.
-
-**Pending:** SOA PDF endpoints (`/customers/:id/soa?format=pdf`, `/suppliers/:id/soa?format=pdf`) will gain rate limiting when the PDF worker renders them.
+PDF jobs go through the BullMQ `pdf` queue, rendered by `registerPdfWorker` (Phase 23) with concurrency limited at the worker level, so even if rate limits are bypassed (internal call) the queue absorbs the spike. Routes enqueue and synchronously await completion (`lib/pdfClient.ts`, 20s timeout) rather than polling — the CPU-heavy work still happens in the worker process, not the API's event loop.
 
 ### 13.8 CSP — explicit directives
 

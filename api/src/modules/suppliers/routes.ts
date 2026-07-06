@@ -5,9 +5,15 @@ import { SupplierCreate, SupplierPatch, SupplierContactCreate } from '@koosani/s
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
+import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
+import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import * as purchases from '../purchases/service.js'
 import type { AppEnv } from '../../types.js'
+
+// Per-user: 10 SOA PDF requests per minute (SECURITY.md §13.7)
+const soaPdfLimiter = createRedisRateLimiter('rl:supplier-soa-pdf', 10, 60)
 
 const ListQuery = z.object({
   q: z.string().optional(),
@@ -107,11 +113,33 @@ supplierRoutes.delete('/:id', requirePermission('suppliers', 'delete'), async (c
 const SoaQuery = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
+  format: z.enum(['json', 'pdf']).default('json'),
 })
 
 supplierRoutes.get('/:id/soa', zValidator('query', SoaQuery), async (c) => {
-  const { from, to } = c.req.valid('query')
+  const { from, to, format } = c.req.valid('query')
   const supplierId = c.req.param('id')
+
+  if (format === 'pdf') {
+    if (!(await soaPdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+    try {
+      await svc.getById(c.get('businessId'), supplierId)
+      const fileId = await renderAndWaitForFile({
+        kind: 'supplier-soa',
+        businessId: c.get('businessId'),
+        supplierId,
+        from,
+        to,
+        userId: c.get('userId'),
+      })
+      const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+      return c.json({ url })
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  }
+
   try {
     const soa = await purchases.buildSupplierSoa(c.get('businessId'), supplierId, from, to)
     return c.json(soa)

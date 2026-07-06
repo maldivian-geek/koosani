@@ -12,6 +12,8 @@ import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
+import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 
@@ -155,16 +157,24 @@ invoiceRoutes.post(
   },
 )
 
-// GET /invoices/:id/pdf — stub (PDF worker is a later phase)
+// GET /invoices/:id/pdf — renders via the pdf worker queue (Phase 23, UPGRADE.md)
 invoiceRoutes.get('/:id/pdf', async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const invoiceId = c.req.param('id')
   try {
-    await svc.getInvoice(c.get('businessId'), c.req.param('id'))
+    await svc.getInvoice(c.get('businessId'), invoiceId)
+    const fileId = await renderAndWaitForFile({
+      kind: 'invoice',
+      businessId: c.get('businessId'),
+      invoiceId,
+      userId: c.get('userId'),
+    })
+    const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+    return c.json({ url })
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     throw err
   }
-  return c.json({ error: 'pdf_not_implemented' }, 501)
 })
 
 // POST /invoices/:id/payments

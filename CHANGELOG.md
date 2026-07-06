@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 23 — PDF engine (UPGRADE.md Part 3):** Real invoice, purchase order, and customer/supplier statement-of-account PDFs, replacing the `501`/stub responses on `GET /invoices/:id/pdf`, `GET /pos/:id/pdf`, and `GET /customers|suppliers/:id/soa?format=pdf`.
+  - **Stack decision resolved** (STACK.md's Phase-20-era open item): `@react-pdf/renderer`. Templates in `api/src/lib/pdf/` (`InvoiceDocument`, `PoDocument`, `SoaDocument` — the latter shared by customer and supplier statements) are built with `React.createElement` rather than JSX, so no `jsx` tsconfig option was needed in the backend package.
+  - Rendering happens in the worker process via the `pdf` BullMQ queue (`registerPdfWorker`, ARCHITECTURE.md §8), preserving the CPU-isolation goal SECURITY.md §13.7 already assumed. Routes enqueue and synchronously await completion (`lib/pdfClient.ts`'s `renderAndWaitForFile`, 20s timeout) so the API still returns `{ url }` directly instead of a job id to poll.
+  - `GET /suppliers/:id/soa` gains `format=pdf` support and a 10/min/user rate limit — it previously had no `format` param at all (UPGRADE.md F-23).
+  - Tests: `api/src/worker/__tests__/pdf.test.ts` runs the pdf worker in-process for a genuine end-to-end check (HTTP route → queue → worker renders and uploads → route resolves a real signed URL), not just a mocked render call.
+
+### Fixed
+
+- **`po.approvePo` enqueued a malformed job onto the same `pdf` queue this phase now consumes.** A pre-existing `pdfQueue.add('po-pdf', { businessId, poId })` call (dead code — nothing had ever consumed the `pdf` queue) didn't match the `PdfJobData` shape the new worker expects, so every PO approval would have produced a guaranteed-to-fail job once a real consumer existed. Removed; PO PDFs are rendered on demand by `GET /pos/:id/pdf` instead of pre-generated on approval.
+
 - **Phase 22 — Business settings & branding (UPGRADE.md G-2/G-15):**
   - **`settings` module** (`api/src/modules/settings/{repository,service,routes}.ts`) — `GET /settings` (any authenticated role), `PATCH /settings` (admin only), `POST /settings/logo` (admin only, multipart — routes through `files.uploadFile` for the same magic-byte sniff / EXIF strip / virus scan as any other upload, SECURITY.md §13.5).
   - **`businesses` gains**: `logoFileId`, `defaultCreditTermsDays` (30), `defaultInvoiceNotes`, and per-document-type numbering prefixes `invoiceNumberPrefix` ('INV-'), `creditNoteNumberPrefix` ('CN-'), `billNumberPrefix` ('BILL-'), `poNumberPrefix` ('PO-') — all defaulted to match the previously hard-coded values, so existing installs see no behavior change until an admin edits them (migration `0002_phase22_business_settings.sql`).

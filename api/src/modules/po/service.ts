@@ -5,7 +5,6 @@ import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
 import * as inventory from '../inventory/service.js'
 import * as purchases from '../purchases/service.js'
-import { pdfQueue } from '../../lib/queues.js'
 import type { AuditCtx } from '../audit/service.js'
 import type { PurchaseOrder, PoLine, Grn, GrnLine, ListPoParams } from './repository.js'
 import type { PoDraftCreate, PoDraftPatch, GrnCreate } from '@koosani/shared'
@@ -187,9 +186,6 @@ export async function approvePo(
 
     return result
   })
-
-  // Enqueue PDF generation after transaction commits
-  await pdfQueue.add('po-pdf', { businessId, poId: approved.id }, { attempts: 3 })
 
   return approved
 }

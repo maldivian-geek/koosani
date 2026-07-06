@@ -1,6 +1,7 @@
 import { registerReconcileWorker } from './reconcile.js'
 import { registerGstWorker } from './gst.js'
 import { soaExtractWorker } from './soa-extract.js'
+import { registerPdfWorker } from './pdf.js'
 import { reconcileQueue } from '../lib/queues.js'
 import { MV_TZ } from '@koosani/shared'
 
@@ -18,5 +19,6 @@ export async function registerWorkers() {
     reconcile: registerReconcileWorker(),
     gst: registerGstWorker(),
     soaExtract: soaExtractWorker,
+    pdf: registerPdfWorker(),
   }
 }

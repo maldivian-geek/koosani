@@ -6,6 +6,8 @@ import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
+import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 
@@ -135,13 +137,20 @@ poRoutes.post(
   },
 )
 
-// GET /pos/:id/pdf — PDF enqueued on approve; return job status
+// GET /pos/:id/pdf — renders via the pdf worker queue (Phase 23, UPGRADE.md)
 poRoutes.get('/:id/pdf', async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const poId = c.req.param('id')
   try {
-    await svc.getPo(c.get('businessId'), c.req.param('id'))
-    // PDF generation handled by the worker; return 501 until Phase 12 renders PDFs
-    return c.json({ error: 'pdf_not_yet_generated' }, 501)
+    await svc.getPo(c.get('businessId'), poId)
+    const fileId = await renderAndWaitForFile({
+      kind: 'po',
+      businessId: c.get('businessId'),
+      poId,
+      userId: c.get('userId'),
+    })
+    const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+    return c.json({ url })
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     throw err

@@ -74,7 +74,7 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 | route | `POST   /customers`              | `CustomerCreate` → `Customer`                                              | —                                                                               |
 | route | `PATCH  /customers/:id`          | `CustomerPatch` → `Customer`                                               | —                                                                               |
 | route | `DELETE /customers/:id`          | → `204`                                                                    | Soft delete (must have zero balance + no draft invoices)                        |
-| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| PDF`                                 | Statement of account (json implemented; pdf stub — Phase 8)                     |
+| route | `GET    /customers/:id/soa`      | `?from&to&format=json\|pdf` → `Soa \| { url }`                             | Statement of account; pdf rate-limited 10/min/user (Phase 23, UPGRADE.md)       |
 | route | `POST   /customers/:id/contacts` | `Contact` → `Contact`                                                      | —                                                                               |
 | svc   | `customers.assertExists`         | `(id, businessId) → Customer`                                              | Throws if not in `business_id`                                                  |
 | svc   | `customers.outstandingBalance`   | `(id, businessId) → Decimal`                                               | Sum of issued invoices − payments                                               |
@@ -84,17 +84,17 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 
 ## Module: `suppliers`
 
-| Kind  | Name                             | Signature                                  | Purpose                                               |
-| ----- | -------------------------------- | ------------------------------------------ | ----------------------------------------------------- |
-| route | `GET    /suppliers`              | `?q&page&active` → `Supplier[]`            | —                                                     |
-| route | `GET    /suppliers/:id`          | → `Supplier & { contacts, balance }`       | —                                                     |
-| route | `POST   /suppliers`              | `SupplierCreate` → `Supplier`              | —                                                     |
-| route | `PATCH  /suppliers/:id`          | `SupplierPatch` → `Supplier`               | —                                                     |
-| route | `DELETE /suppliers/:id`          | → `204`                                    | Soft delete (must have zero balance + no draft bills) |
-| route | `GET    /suppliers/:id/soa`      | `?from&to` → `{ entries, closingBalance }` | Delegates to `purchases.buildSupplierSoa`             |
-| route | `POST   /suppliers/:id/contacts` | `Contact` → `Contact`                      | —                                                     |
-| svc   | `suppliers.outstandingBalance`   | `(id) → Decimal`                           | Sum of bills − payments made                          |
-| svc   | `suppliers.buildSoa`             | `(id, from, to) → Soa`                     | —                                                     |
+| Kind  | Name                             | Signature                                                              | Purpose                                                                                                                            |
+| ----- | -------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /suppliers`              | `?q&page&active` → `Supplier[]`                                        | —                                                                                                                                  |
+| route | `GET    /suppliers/:id`          | → `Supplier & { contacts, balance }`                                   | —                                                                                                                                  |
+| route | `POST   /suppliers`              | `SupplierCreate` → `Supplier`                                          | —                                                                                                                                  |
+| route | `PATCH  /suppliers/:id`          | `SupplierPatch` → `Supplier`                                           | —                                                                                                                                  |
+| route | `DELETE /suppliers/:id`          | → `204`                                                                | Soft delete (must have zero balance + no draft bills)                                                                              |
+| route | `GET    /suppliers/:id/soa`      | `?from&to&format=json\|pdf` → `{ entries, closingBalance } \| { url }` | Delegates to `purchases.buildSupplierSoa`; pdf rate-limited 10/min/user (Phase 23, UPGRADE.md — `format` was previously json-only) |
+| route | `POST   /suppliers/:id/contacts` | `Contact` → `Contact`                                                  | —                                                                                                                                  |
+| svc   | `suppliers.outstandingBalance`   | `(id) → Decimal`                                                       | Sum of bills − payments made                                                                                                       |
+| svc   | `suppliers.buildSoa`             | `(id, from, to) → Soa`                                                 | —                                                                                                                                  |
 
 ---
 
@@ -137,7 +137,7 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 | route | `PATCH  /invoices/:id`               | `InvoiceDraftPatch` → `Invoice`                     | Drafts only                                    |
 | route | `POST   /invoices/:id/issue`         | `{}` → `Invoice`                                    | Allocates number, commits stock, locks row     |
 | route | `POST   /invoices/:id/void`          | `{ reason }` → `Invoice`                            | Issued only; creates reversing credit note     |
-| route | `GET    /invoices/:id/pdf`           | → `PDF` (signed URL)                                | —                                              |
+| route | `GET    /invoices/:id/pdf`           | → `{ url }` (signed URL)                            | Renders via `pdf` queue (Phase 23, UPGRADE.md) |
 | route | `POST   /invoices/:id/payments`      | `{ amount, method, ref?, paidAt }` → `Payment`      | —                                              |
 | route | `DELETE /invoices/:id/payments/:pid` | → `204`                                             | Reverses payment                               |
 | route | `GET    /credit-notes`               | `?customerId&from&to` → `CreditNote[]`              | —                                              |
@@ -194,25 +194,25 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 
 ## Module: `po`
 
-| Kind  | Name                      | Signature                                                                    | Purpose                                                           |
-| ----- | ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| route | `GET    /pos`             | `?status&supplierId&from&to&page` → `{ items: Po[], total, page, pageSize }` | —                                                                 |
-| route | `GET    /pos/:id`         | → `Po & { lines, grns }`                                                     | —                                                                 |
-| route | `POST   /pos`             | `PoDraftCreate` → `Po & { lines }`                                           | Draft                                                             |
-| route | `PATCH  /pos/:id`         | `PoDraftPatch` → `Po & { lines }`                                            | Drafts only; replaces lines if provided                           |
-| route | `POST   /pos/:id/approve` | `{}` → `Po`                                                                  | Allocates number, enqueues PDF job                                |
-| route | `POST   /pos/:id/cancel`  | `{ reason }` → `Po`                                                          | Blocked if any GRN exists                                         |
-| route | `GET    /pos/:id/pdf`     | → `501` (stub — Phase 12)                                                    | —                                                                 |
-| route | `POST   /pos/:id/grns`    | `GrnCreate` → `Grn & { lines }`                                              | Receive goods; commits stock via `inventory.applyMovement`        |
-| route | `POST   /pos/:id/bill`    | `{}` → `Bill & { lines, poId }`                                              | Create draft bill pre-filled from GRN-received quantities         |
-| route | `GET    /grns/:id`        | → `Grn & { lines }`                                                          | —                                                                 |
-| svc   | `po.createDraft`          | `(businessId, data, ctx) → Po & { lines }`                                   | Subtotal = Σ qty×cost (no GST on POs)                             |
-| svc   | `po.patchDraft`           | `(businessId, id, data, ctx) → Po & { lines }`                               | Drafts only; replaces lines if provided                           |
-| svc   | `po.approvePo`            | `(businessId, poId, ctx) → Po`                                               | Advisory-locked number, enqueues `pdf` job                        |
-| svc   | `po.cancelPo`             | `(businessId, poId, reason, ctx) → Po`                                       | Blocked if GRNs exist                                             |
-| svc   | `po.canReceive`           | `(businessId, poLineId, qty, tx?) → bool`                                    | Checks qtyReceived + qty ≤ qtyOrdered, respects `allowBackorders` |
-| svc   | `po.createGrn`            | `(businessId, poId, data, ctx) → Grn & { lines }`                            | Commits stock, increments `po_line.qty_received`, derives status  |
-| svc   | `po.createBillFromPo`     | `(businessId, poId, ctx) → Bill & { poId }`                                  | Aggregates GRN qty per PO line, calls `purchases.createDraft`     |
+| Kind  | Name                      | Signature                                                                    | Purpose                                                                                                                                                                                                                                 |
+| ----- | ------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /pos`             | `?status&supplierId&from&to&page` → `{ items: Po[], total, page, pageSize }` | —                                                                                                                                                                                                                                       |
+| route | `GET    /pos/:id`         | → `Po & { lines, grns }`                                                     | —                                                                                                                                                                                                                                       |
+| route | `POST   /pos`             | `PoDraftCreate` → `Po & { lines }`                                           | Draft                                                                                                                                                                                                                                   |
+| route | `PATCH  /pos/:id`         | `PoDraftPatch` → `Po & { lines }`                                            | Drafts only; replaces lines if provided                                                                                                                                                                                                 |
+| route | `POST   /pos/:id/approve` | `{}` → `Po`                                                                  | Allocates number, enqueues PDF job                                                                                                                                                                                                      |
+| route | `POST   /pos/:id/cancel`  | `{ reason }` → `Po`                                                          | Blocked if any GRN exists                                                                                                                                                                                                               |
+| route | `GET    /pos/:id/pdf`     | → `{ url }` (signed URL)                                                     | Renders via `pdf` queue (Phase 23, UPGRADE.md)                                                                                                                                                                                          |
+| route | `POST   /pos/:id/grns`    | `GrnCreate` → `Grn & { lines }`                                              | Receive goods; commits stock via `inventory.applyMovement`                                                                                                                                                                              |
+| route | `POST   /pos/:id/bill`    | `{}` → `Bill & { lines, poId }`                                              | Create draft bill pre-filled from GRN-received quantities                                                                                                                                                                               |
+| route | `GET    /grns/:id`        | → `Grn & { lines }`                                                          | —                                                                                                                                                                                                                                       |
+| svc   | `po.createDraft`          | `(businessId, data, ctx) → Po & { lines }`                                   | Subtotal = Σ qty×cost (no GST on POs)                                                                                                                                                                                                   |
+| svc   | `po.patchDraft`           | `(businessId, id, data, ctx) → Po & { lines }`                               | Drafts only; replaces lines if provided                                                                                                                                                                                                 |
+| svc   | `po.approvePo`            | `(businessId, poId, ctx) → Po`                                               | Advisory-locked number allocation. Removed a stray pre-Phase-23 `pdfQueue.add('po-pdf', ...)` call whose job data never matched any consumer's shape — PDFs are rendered on demand by `GET /pos/:id/pdf` instead (Phase 23, UPGRADE.md) |
+| svc   | `po.cancelPo`             | `(businessId, poId, reason, ctx) → Po`                                       | Blocked if GRNs exist                                                                                                                                                                                                                   |
+| svc   | `po.canReceive`           | `(businessId, poLineId, qty, tx?) → bool`                                    | Checks qtyReceived + qty ≤ qtyOrdered, respects `allowBackorders`                                                                                                                                                                       |
+| svc   | `po.createGrn`            | `(businessId, poId, data, ctx) → Grn & { lines }`                            | Commits stock, increments `po_line.qty_received`, derives status                                                                                                                                                                        |
+| svc   | `po.createBillFromPo`     | `(businessId, poId, ctx) → Bill & { poId }`                                  | Aggregates GRN qty per PO line, calls `purchases.createDraft`                                                                                                                                                                           |
 
 ---
 

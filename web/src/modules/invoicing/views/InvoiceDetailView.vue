@@ -257,17 +257,17 @@ async function downloadPdf() {
       window.open(result.url, '_blank')
     } else {
       toast.add({
-        severity: 'warn',
-        summary: 'Not available',
-        detail: 'PDF generation is not yet enabled.',
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to generate PDF. Please try again.',
         life: 4000,
       })
     }
   } catch {
     toast.add({
-      severity: 'warn',
-      summary: 'Not available',
-      detail: 'PDF generation is not yet enabled.',
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to generate PDF. Please try again.',
       life: 4000,
     })
   } finally {
