@@ -200,6 +200,17 @@ export async function setEstimateLink(
   await repo.updateInvoice(businessId, invoiceId, { estimateId }, tx)
 }
 
+// Sets the traceability link back to the recurrence profile that generated
+// this invoice (Phase 26, UPGRADE.md G-6). Same pattern as setEstimateLink.
+export async function setRecurrenceLink(
+  businessId: string,
+  invoiceId: string,
+  recurrenceProfileId: string,
+  tx: DbTx,
+): Promise<void> {
+  await repo.updateInvoice(businessId, invoiceId, { recurrenceProfileId }, tx)
+}
+
 export async function setRemindersEnabled(
   businessId: string,
   invoiceId: string,

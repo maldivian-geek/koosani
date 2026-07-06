@@ -9,6 +9,9 @@ import {
   startOfMvMonth,
   endOfMvMonth,
   addDays,
+  daysBetween,
+  addMonths,
+  advanceByFrequency,
   MV_TZ,
 } from './dates.js'
 
@@ -130,5 +133,55 @@ describe('addDays', () => {
 
   it('zero days returns same date', () => {
     expect(addDays('2026-05-16', 0)).toBe('2026-05-16')
+  })
+})
+
+describe('daysBetween', () => {
+  it('is positive when to is after from (overdue case)', () => {
+    expect(daysBetween('2026-05-01', '2026-05-08')).toBe(7)
+  })
+
+  it('is negative when to is before from', () => {
+    expect(daysBetween('2026-05-08', '2026-05-01')).toBe(-7)
+  })
+
+  it('is zero for the same date', () => {
+    expect(daysBetween('2026-05-16', '2026-05-16')).toBe(0)
+  })
+
+  it('crosses a month boundary correctly', () => {
+    expect(daysBetween('2026-05-30', '2026-06-02')).toBe(3)
+  })
+})
+
+describe('addMonths', () => {
+  it('adds whole months within a year', () => {
+    expect(addMonths('2026-03-15', 2)).toBe('2026-05-15')
+  })
+
+  it('rolls over year boundary', () => {
+    expect(addMonths('2026-11-15', 3)).toBe('2027-02-15')
+  })
+
+  it('subtracts months with a negative n', () => {
+    expect(addMonths('2026-03-15', -1)).toBe('2026-02-15')
+  })
+})
+
+describe('advanceByFrequency', () => {
+  it('weekly adds 7 days', () => {
+    expect(advanceByFrequency('2026-05-16', 'weekly')).toBe('2026-05-23')
+  })
+
+  it('monthly adds 1 month', () => {
+    expect(advanceByFrequency('2026-05-16', 'monthly')).toBe('2026-06-16')
+  })
+
+  it('quarterly adds 3 months', () => {
+    expect(advanceByFrequency('2026-05-16', 'quarterly')).toBe('2026-08-16')
+  })
+
+  it('yearly adds 12 months', () => {
+    expect(advanceByFrequency('2026-05-16', 'yearly')).toBe('2027-05-16')
   })
 })

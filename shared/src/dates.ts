@@ -94,3 +94,34 @@ export function daysBetween(from: string, to: string): number {
   const b = parseMvDate(to).getTime()
   return Math.round((b - a) / 86_400_000)
 }
+
+/**
+ * Add `n` months to a YYYY-MM-DD string. Uses JS Date's native month rollover
+ * (e.g. 31 Jan + 1 month = 3 Mar, not clamped to 28/29 Feb) — acceptable for
+ * recurrence scheduling (Phase 26, UPGRADE.md G-6), where drifting a couple
+ * of days in short months is a known, accepted trade-off of naive month math.
+ */
+export function addMonths(isoDate: string, n: number): string {
+  const d = parseMvDate(isoDate)
+  d.setUTCMonth(d.getUTCMonth() + n)
+  return formatMvDate(d)
+}
+
+export type RecurrenceFrequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
+/**
+ * Advance a YYYY-MM-DD date by one cycle of the given recurrence frequency
+ * (Phase 26, UPGRADE.md G-6).
+ */
+export function advanceByFrequency(isoDate: string, frequency: RecurrenceFrequency): string {
+  switch (frequency) {
+    case 'weekly':
+      return addDays(isoDate, 7)
+    case 'monthly':
+      return addMonths(isoDate, 1)
+    case 'quarterly':
+      return addMonths(isoDate, 3)
+    case 'yearly':
+      return addMonths(isoDate, 12)
+  }
+}

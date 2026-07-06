@@ -153,8 +153,8 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 ### Phase 26 — Recurring invoices & late fees — G-6, G-4b
 
-- Recurrence profiles (frequency, start/end, template lines); worker cron generates drafts (or auto-issues, per-profile flag) — respects GST period locks by construction (always dated today).
-- Optional late-fee rule per business (flat/%, grace days) applied as a generated line on reminders — owner decision; MIRA GST treatment of late fees must be confirmed before enabling.
+- ✅ Done: Recurrence profiles (frequency, start/end, template lines); worker cron generates drafts (or auto-issues, per-profile flag) — respects GST period locks by construction (always dated today). See ARCHITECTURE.md §4.7, CHANGELOG.md.
+- ⏸ Deferred: optional late-fee rule per business (flat/%, grace days) applied as a generated line on reminders — owner decision; MIRA GST treatment of late fees must be confirmed before enabling. No schema or logic for this exists yet.
 
 ### Phase 27 — Customer credits, advances & write-offs — G-7 (properly fixes F-14, F-15)
 

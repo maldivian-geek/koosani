@@ -4,15 +4,17 @@ import { logger } from '../lib/logger.js'
 import { todayMv, daysBetween } from '@koosani/shared'
 import * as invoicing from '../modules/invoicing/service.js'
 import * as estimates from '../modules/estimates/service.js'
+import * as recurrence from '../modules/recurrence/service.js'
 import * as settings from '../modules/settings/service.js'
 import * as emailLogsRepo from '../modules/emailLogs/repository.js'
 import * as invRepo from '../modules/inventory/repository.js'
 import { emailQueue } from '../lib/queues.js'
 
-// Daily cron (08:00 Maldives time — worker/index.ts). Two independent scans
-// share this schedule since both are simple daily date-comparisons over the
-// same per-business fan-out: payment reminders (Phase 24, UPGRADE.md G-4)
-// and estimate expiry (Phase 25, UPGRADE.md G-5).
+// Daily cron (08:00 Maldives time — worker/index.ts). Three independent scans
+// share this schedule since all are simple daily date-comparisons over the
+// same per-business fan-out: payment reminders (Phase 24, UPGRADE.md G-4),
+// estimate expiry (Phase 25, UPGRADE.md G-5), and recurring invoice
+// generation (Phase 26, UPGRADE.md G-6).
 
 // For each business's reminderScheduleDays (e.g. -3/0/7/14 relative to due
 // date), find invoices whose day-offset matches exactly today, and fire a
@@ -67,6 +69,29 @@ async function scanEstimateExpiry(businessId: string): Promise<number> {
   return expired
 }
 
+// Generates one invoice per due recurrence profile (nextRunDate <= today,
+// active, within its date range). generateFromProfile advances nextRunDate
+// under a row lock before creating anything, so a duplicate scan (or two
+// concurrent cron ticks) can't double-generate — see service.ts's comment.
+// Same "attribute to the profile's own creator" choice as estimate expiry.
+async function scanRecurrence(businessId: string): Promise<number> {
+  const today = todayMv()
+  const candidates = await recurrence.listDueProfiles(businessId, today)
+
+  let generated = 0
+  for (const profile of candidates) {
+    const ctx = {
+      userId: profile.createdBy,
+      businessId,
+      ip: '127.0.0.1',
+      ua: 'reminders-worker',
+    }
+    const result = await recurrence.generateFromProfile(businessId, profile.id, ctx)
+    if (result) generated++
+  }
+  return generated
+}
+
 export function registerRemindersWorker(): Worker {
   return new Worker(
     'reminders',
@@ -76,9 +101,11 @@ export function registerRemindersWorker(): Worker {
 
       let totalFired = 0
       let totalExpired = 0
+      let totalGenerated = 0
       for (const bid of businessIds) {
         totalFired += await scanReminders(bid)
         totalExpired += await scanEstimateExpiry(bid)
+        totalGenerated += await scanRecurrence(bid)
       }
 
       logger.info(
@@ -86,13 +113,15 @@ export function registerRemindersWorker(): Worker {
           businessesScanned: businessIds.length,
           remindersFired: totalFired,
           estimatesExpired: totalExpired,
+          invoicesGenerated: totalGenerated,
         },
-        'Reminders/expiry scan complete',
+        'Reminders/expiry/recurrence scan complete',
       )
       return {
         businessesScanned: businessIds.length,
         remindersFired: totalFired,
         estimatesExpired: totalExpired,
+        invoicesGenerated: totalGenerated,
       }
     },
     { connection: redis },

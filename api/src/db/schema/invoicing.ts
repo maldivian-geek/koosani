@@ -44,6 +44,9 @@ export const invoices = pgTable(
     // (Phase 25, UPGRADE.md G-5). No FK to estimates here to avoid a circular
     // module reference at the schema level; enforced at the service layer.
     estimateId: uuid('estimate_id'),
+    // Traceability back to the recurrence profile that generated this invoice,
+    // if any (Phase 26, UPGRADE.md G-6). Same no-FK rationale as estimateId.
+    recurrenceProfileId: uuid('recurrence_profile_id'),
     ...timestamps,
     ...auditedBy,
   },

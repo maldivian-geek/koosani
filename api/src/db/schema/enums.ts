@@ -79,6 +79,7 @@ export const permissionResourceEnum = pgEnum('permission_resource', [
   'gst',
   'reports',
   'estimates',
+  'recurring',
 ])
 
 export const permissionActionEnum = pgEnum('permission_action', [
@@ -106,4 +107,14 @@ export const estimateStatusEnum = pgEnum('estimate_status', [
   'accepted',
   'declined',
   'expired',
+])
+
+// Recurring invoices (Phase 26, UPGRADE.md G-6). Late fees are explicitly
+// NOT modeled here — MIRA GST treatment of late fees needs owner confirmation
+// before that part of G-6/G-4b is built (see UPGRADE.md).
+export const recurrenceFrequencyEnum = pgEnum('recurrence_frequency', [
+  'weekly',
+  'monthly',
+  'quarterly',
+  'yearly',
 ])

@@ -108,6 +108,27 @@ export const router = createRouter({
           component: () => import('../modules/estimates/views/EstimateEditorView.vue'),
           meta: { requiresAuth: true, title: 'Edit Estimate' },
         },
+        // Recurring invoices (Phase 26)
+        {
+          path: 'recurring',
+          component: () => import('../modules/recurrence/views/RecurrenceListView.vue'),
+          meta: { requiresAuth: true, title: 'Recurring Invoices' },
+        },
+        {
+          path: 'recurring/new',
+          component: () => import('../modules/recurrence/views/RecurrenceEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Recurring Profile' },
+        },
+        {
+          path: 'recurring/:id',
+          component: () => import('../modules/recurrence/views/RecurrenceDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Recurring Profile' },
+        },
+        {
+          path: 'recurring/:id/edit',
+          component: () => import('../modules/recurrence/views/RecurrenceEditorView.vue'),
+          meta: { requiresAuth: true, title: 'Edit Recurring Profile' },
+        },
         // Bills
         {
           path: 'bills',

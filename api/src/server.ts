@@ -21,6 +21,7 @@ import { userRoutes } from './modules/users/routes.js'
 import { auditRoutes } from './modules/audit/routes.js'
 import { settingsRoutes } from './modules/settings/routes.js'
 import { estimateRoutes } from './modules/estimates/routes.js'
+import { recurrenceRoutes } from './modules/recurrence/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -137,6 +138,7 @@ app.route('/users', userRoutes)
 app.route('/audit', auditRoutes)
 app.route('/settings', settingsRoutes)
 app.route('/estimates', estimateRoutes)
+app.route('/recurrence-profiles', recurrenceRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

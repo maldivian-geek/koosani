@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 26 — Recurring invoices (UPGRADE.md G-6):** A new `recurrence` module — profiles (customer, frequency, start/end date, template lines) that generate invoices on a schedule (ARCHITECTURE.md §4.7).
+  - Daily cron (piggybacking on the existing `worker/reminders.ts` schedule, alongside Phase 24's dunning scan and Phase 25's estimate expiry) generates one invoice per due profile. Generated invoices are always dated today, so they can never land in an already-locked GST period by construction — no special-case period check needed, unlike `invoicing.issue`.
+  - **Advance-then-generate ordering**: `next_run_date` is advanced under a row lock _before_ the invoice is created, so a crash mid-generation skips that cycle rather than risking a duplicate invoice on retry — a deliberate skip-over-duplicate bias for a financial-document generator.
+  - Two modes per profile: `autoIssue: false` (default) creates a draft for staff review; `autoIssue: true` calls `invoicing.issue` immediately (stock commit, number allocation, no human in the loop) — kept as an explicit per-profile opt-in rather than a business-wide default, since it's a meaningfully bigger trust decision than auto-drafting.
+  - `invoices.recurrence_profile_id` traces a generated invoice back to its profile (same pattern as Phase 25's `estimates` → `invoices.estimate_id`).
+  - `PermissionResource` gains `'recurring'`. New date helpers in `shared/src/dates.ts`: `addMonths`, `advanceByFrequency` (and tests for both, plus the previously-untested `daysBetween` from Phase 24).
+  - Web: `RecurrenceListView`, `RecurrenceEditorView` (mirrors `EstimateEditorView`), `RecurrenceDetailView` (pause/resume, "Generate Now" manual trigger), sidebar entry, router routes.
+  - Tests: `api/src/modules/recurrence/__tests__/recurrence.test.ts` (7 cases — profile CRUD, date validation, not-yet-due no-op, draft generation with correct line/total copy, auto-issue, and a same-cycle double-generate guard).
+  - **Late fees are explicitly NOT implemented in this phase.** UPGRADE.md flags that MIRA's GST treatment of late fees needs owner confirmation before that half of G-6/G-4b is built — no late-fee schema, columns, or generated lines exist anywhere. This is a deliberate scope boundary, not an oversight; see `api/src/db/schema/enums.ts`'s comment.
+
 - **Phase 25 — Estimates / quotes (UPGRADE.md G-5):** A new `estimates` module mirroring `invoicing`'s draft pattern (ARCHITECTURE.md §4.6).
   - Lifecycle `draft → sent → accepted/declined/expired`, numbered only on send (`estimate_number_prefix`, default `EST-`, same advisory-lock/no-gap mechanism as invoices). No stock reservation and no GST period lock at any status — GST on estimate lines is computed for display only.
   - **Convert to invoice** (`POST /estimates/:id/convert`): copies lines into a brand-new `invoicing.createDraft` call — re-prices at current GST rates rather than copying the estimate's (possibly stale) snapshot. The result is a draft invoice; issuing it is a separate step. `invoices.estimate_id` traces back to the source; `estimates.converted_at` blocks converting the same estimate twice.

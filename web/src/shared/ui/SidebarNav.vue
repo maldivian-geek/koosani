@@ -9,6 +9,7 @@ import {
   FileText,
   FileMinus,
   FileSpreadsheet,
+  Repeat,
   Receipt,
   ShoppingCart,
   Percent,
@@ -46,6 +47,7 @@ const BASE_GROUPS: NavGroup[] = [
       { label: 'Estimates', to: '/estimates', icon: markRaw(FileSpreadsheet) },
       { label: 'Invoices', to: '/invoices', icon: markRaw(FileText) },
       { label: 'Credit Notes', to: '/credit-notes', icon: markRaw(FileMinus) },
+      { label: 'Recurring Invoices', to: '/recurring', icon: markRaw(Repeat) },
     ],
   },
   {
