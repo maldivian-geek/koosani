@@ -12,6 +12,7 @@ import {
   Repeat,
   Receipt,
   Banknote,
+  FolderKanban,
   ShoppingCart,
   Percent,
   BarChart2,
@@ -55,6 +56,7 @@ const BASE_GROUPS: NavGroup[] = [
     items: [
       { label: 'Bills', to: '/bills', icon: markRaw(Receipt) },
       { label: 'Expenses', to: '/expenses', icon: markRaw(Banknote) },
+      { label: 'Projects', to: '/projects', icon: markRaw(FolderKanban) },
       { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart) },
     ],
   },

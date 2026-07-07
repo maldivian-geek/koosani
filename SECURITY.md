@@ -189,7 +189,7 @@ A hard gate used only where no permission grant should ever loosen the requireme
 
 `Permission = { resource, action }` (shared/src/primitives.ts):
 
-- Resources: `customers`, `suppliers`, `items`, `inventory`, `invoices`, `bills`, `po`, `gst`, `reports`, `estimates` (Phase 25), `recurring` (Phase 26), `expenses` (Phase 31)
+- Resources: `customers`, `suppliers`, `items`, `inventory`, `invoices`, `bills`, `po`, `gst`, `reports`, `estimates` (Phase 25), `recurring` (Phase 26), `expenses` (Phase 31), `projects` (Phase 32 — covers projects, tasks, and time entries together)
 - Actions: `view`, `add`, `edit`, `delete`, `export` (`export` applies only to `reports` — bulk CSV download)
 
 Default policy, checked in this order (`hasPermission` in `authorize.ts`):

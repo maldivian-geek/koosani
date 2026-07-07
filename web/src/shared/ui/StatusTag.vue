@@ -25,6 +25,11 @@ const severityMap: Record<string, Severity> = {
   received: 'success',
   partially_received: 'warn',
   cancelled: 'danger',
+  // Projects / tasks (Phase 32)
+  active: 'success',
+  completed: 'contrast',
+  archived: 'secondary',
+  done: 'success',
 }
 
 const severity = computed<Severity>(() => severityMap[props.status] ?? 'secondary')

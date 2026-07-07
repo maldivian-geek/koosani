@@ -186,7 +186,8 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 ### Phase 32 (optional) — Projects & time tracking — G-12
 
-- Projects, tasks, timesheets, billable rates → invoice generation. Only if the customer base is service businesses; otherwise skip — this is the least-fitting Zoho Invoice feature for an inventory-centric SME product.
+- ✅ Done: Projects, tasks, time entries, billable rates → invoice generation — see ARCHITECTURE.md §4.12. Built for completeness of the phased plan despite being flagged as the least-fitting feature; skip using it if the customer base isn't service businesses.
+- Reuses the exact billable-to-invoice-line pattern built for expenses in Phase 31, kept as a deliberately separate code path (not a shared generic abstraction — the two have different snapshot fields).
 
 ### Phase 33 — Parity odds & ends — G-13, G-14, F-24 remainder
 

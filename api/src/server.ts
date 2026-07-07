@@ -27,6 +27,7 @@ import { portalAuthRoutes } from './modules/portalAuth/routes.js'
 import { portalRoutes } from './modules/portal/routes.js'
 import { exchangeRateRoutes } from './modules/exchangeRates/routes.js'
 import { expenseRoutes } from './modules/expenses/routes.js'
+import { projectRoutes, taskRoutes, timeEntryRoutes } from './modules/projects/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -162,6 +163,11 @@ app.route('/exchange-rates', exchangeRateRoutes)
 
 // Expenses (Phase 31, UPGRADE.md G-11)
 app.route('/expenses', expenseRoutes)
+
+// Projects & time tracking (Phase 32, UPGRADE.md G-12)
+app.route('/projects', projectRoutes)
+app.route('/tasks', taskRoutes)
+app.route('/time-entries', timeEntryRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

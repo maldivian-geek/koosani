@@ -282,6 +282,36 @@ Lightweight expense capture (Phase 31, UPGRADE.md G-11) — see ARCHITECTURE.md 
 
 ---
 
+## Module: `projects`
+
+Projects, tasks, and time entries — optional, service-business-oriented feature (Phase 32, UPGRADE.md G-12) — see ARCHITECTURE.md §4.12. Mounted at `/projects`, `/tasks`, `/time-entries` (three route groups, one module).
+
+| Kind  | Name                                           | Signature                                                                                      | Purpose                                                                                                           |
+| ----- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /projects`                             | `?customerId&status&page` → `{ items, total, page, pageSize }`                                 | —                                                                                                                 |
+| route | `GET    /projects/:id`                         | → `Project & { tasks: Task[] }`                                                                | —                                                                                                                 |
+| route | `POST   /projects`                             | `ProjectCreate` → `Project` (201)                                                              | —                                                                                                                 |
+| route | `PATCH  /projects/:id`                         | `ProjectPatch` → `Project`                                                                     | —                                                                                                                 |
+| route | `POST   /projects/:id/tasks`                   | `TaskCreate` → `Task` (201)                                                                    | —                                                                                                                 |
+| route | `POST   /projects/:id/time-entries`            | `TimeEntryCreate` → `TimeEntry` (201)                                                          | Snapshots rate/GST from the task (falling back to the project default); 422 if billable with no rate resolvable   |
+| route | `PATCH  /tasks/:id`                            | `TaskPatch` → `Task`                                                                           | —                                                                                                                 |
+| route | `GET    /time-entries`                         | `?projectId&taskId&userId&billable&invoiced&from&to&page` → `{ items, total, page, pageSize }` | —                                                                                                                 |
+| route | `GET    /time-entries/billable`                | `?customerId` → `{ items: TimeEntry[] }`                                                       | Uninvoiced billable time entries for a customer (joins through the entry's project) — prefills the invoice editor |
+| route | `GET    /time-entries/:id`                     | → `TimeEntry`                                                                                  | —                                                                                                                 |
+| route | `PATCH  /time-entries/:id`                     | `TimeEntryPatch` → `TimeEntry`                                                                 | Rejects (422) once `invoicedAt` is set                                                                            |
+| route | `DELETE /time-entries/:id`                     | → `204`                                                                                        | Rejects (422) once `invoicedAt` is set                                                                            |
+| route | `POST   /time-entries/mark-invoiced`           | `TimeEntryMarkInvoiced { timeEntryIds, invoiceId }` → `204`                                    | Called by the web client after creating an invoice draft from selected billable time entries                      |
+| svc   | `projects.createProject` / `updateProject`     | `(businessId, [id,] data, ctx) → Project`                                                      | —                                                                                                                 |
+| svc   | `projects.createTask` / `updateTask`           | `(businessId, [projectId,] [id,] data, ctx) → Task`                                            | —                                                                                                                 |
+| svc   | `projects.createTimeEntry`                     | `(businessId, projectId, data, ctx) → TimeEntry`                                               | Resolves rate/GST: entry override → task → project default; throws `ValidationError` if billable with none        |
+| svc   | `projects.updateTimeEntry` / `deleteTimeEntry` | `(businessId, id, [data,] ctx) → …`                                                            | Throws `ValidationError` once invoiced                                                                            |
+| svc   | `projects.listUninvoicedBillable`              | `(businessId, customerId) → TimeEntry[]`                                                       | Backs `GET /time-entries/billable`                                                                                |
+| svc   | `projects.markInvoiced`                        | `(businessId, timeEntryIds, invoiceId, ctx) → void`                                            | `FOR UPDATE` locks the rows; throws if any entry is already invoiced or not billable                              |
+
+`PermissionResource` gains `'projects'` (covers projects, tasks, and time entries as one resource — mirrors how `'invoices'` covers invoices and credit notes together; `shared/src/primitives.ts`, also added to `UserDrawer.vue`'s permission grid).
+
+---
+
 ## Module: `files`
 
 | Kind  | Name                    | Signature                                                     | Purpose                                                                                                |

@@ -166,6 +166,17 @@ export const router = createRouter({
           component: () => import('../modules/expenses/views/ExpensesView.vue'),
           meta: { requiresAuth: true, title: 'Expenses' },
         },
+        // Projects & time tracking (Phase 32, UPGRADE.md G-12)
+        {
+          path: 'projects',
+          component: () => import('../modules/projects/views/ProjectsView.vue'),
+          meta: { requiresAuth: true, title: 'Projects' },
+        },
+        {
+          path: 'projects/:id',
+          component: () => import('../modules/projects/views/ProjectDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Project' },
+        },
         // Purchase Orders
         {
           path: 'pos',

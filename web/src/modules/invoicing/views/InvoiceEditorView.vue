@@ -69,6 +69,7 @@ const currencyOptions = [
 function onCustomerSelect(option: CustomerOption) {
   if (!isEdit.value) currency.value = option.currency ?? 'MVR'
   void loadBillableExpenses(option.id)
+  void loadBillableTimeEntries(option.id)
 }
 
 // ─── Billable expenses → invoice line (Phase 31, UPGRADE.md G-11) ────────────
@@ -111,6 +112,46 @@ function addExpenseAsLine(expense: BillableExpense) {
     sortOrder: lines.value.length,
   })
   addedExpenseIds.value.add(expense.id)
+}
+
+// ─── Billable time entries → invoice line (Phase 32, UPGRADE.md G-12) ───────
+// Same pattern as billable expenses above — create-only.
+interface BillableTimeEntry {
+  id: string
+  entryDate: string
+  hours: string
+  description: string | null
+  billableRate: string
+  gstCategory: string
+}
+const billableTimeEntries = ref<BillableTimeEntry[]>([])
+const addedTimeEntryIds = ref<Set<string>>(new Set())
+
+async function loadBillableTimeEntries(customerId: string) {
+  billableTimeEntries.value = []
+  addedTimeEntryIds.value = new Set()
+  if (isEdit.value) return
+  try {
+    const data = await apiFetch<{ items: BillableTimeEntry[] }>(
+      `/time-entries/billable?customerId=${customerId}`,
+    )
+    billableTimeEntries.value = data.items
+  } catch {
+    billableTimeEntries.value = []
+  }
+}
+
+function addTimeEntryAsLine(entry: BillableTimeEntry) {
+  lines.value.push({
+    _key: lineKey++,
+    itemId: null,
+    description: entry.description || `Time: ${entry.entryDate}`,
+    qty: entry.hours,
+    unitPrice: entry.billableRate,
+    gstCategory: entry.gstCategory,
+    sortOrder: lines.value.length,
+  })
+  addedTimeEntryIds.value.add(entry.id)
 }
 
 let lineKey = 0
@@ -367,6 +408,20 @@ async function save() {
           })
         })
       }
+      if (addedTimeEntryIds.value.size > 0) {
+        await apiFetch('/time-entries/mark-invoiced', {
+          method: 'POST',
+          body: JSON.stringify({ timeEntryIds: [...addedTimeEntryIds.value], invoiceId: inv.id }),
+        }).catch(() => {
+          toast.add({
+            severity: 'warn',
+            summary: 'Note',
+            detail:
+              "The invoice was created, but couldn't mark the linked time entries as invoiced.",
+            life: 6000,
+          })
+        })
+      }
       toast.add({
         severity: 'success',
         summary: 'Created',
@@ -510,6 +565,42 @@ async function save() {
                 severity="secondary"
                 :disabled="addedExpenseIds.has(expense.id)"
                 @click="addExpenseAsLine(expense)"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billable time entries (Phase 32, UPGRADE.md G-12) -->
+      <div v-if="billableTimeEntries.length > 0" class="card p-6 space-y-3">
+        <h3 class="text-base font-medium text-surface-700 dark:text-surface-300">
+          Billable Time for this Customer
+        </h3>
+        <p class="text-xs text-surface-500 -mt-1">
+          Add any of these as a line item on this invoice. Once added, a time entry can't be added
+          again.
+        </p>
+        <div class="space-y-2">
+          <div
+            v-for="entry in billableTimeEntries"
+            :key="entry.id"
+            class="flex items-center justify-between text-sm px-3 py-2 rounded-lg bg-surface-50 dark:bg-surface-800"
+          >
+            <div>
+              <span class="font-medium">{{ entry.hours }} hrs</span>
+              <span v-if="entry.description" class="text-surface-500">
+                — {{ entry.description }}</span
+              >
+              <span class="text-surface-400 text-xs ml-2">{{ entry.entryDate }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <MoneyCell :amount="entry.billableRate" />
+              <Button
+                :label="addedTimeEntryIds.has(entry.id) ? 'Added' : 'Add'"
+                size="small"
+                severity="secondary"
+                :disabled="addedTimeEntryIds.has(entry.id)"
+                @click="addTimeEntryAsLine(entry)"
               />
             </div>
           </div>

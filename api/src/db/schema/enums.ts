@@ -81,6 +81,7 @@ export const permissionResourceEnum = pgEnum('permission_resource', [
   'estimates',
   'recurring',
   'expenses',
+  'projects',
 ])
 
 export const permissionActionEnum = pgEnum('permission_action', [
@@ -136,3 +137,8 @@ export const creditLedgerKindEnum = pgEnum('credit_ledger_kind', [
 // is always a valid document currency alongside these. Starter set for the
 // Maldives SME market — extend as customers request more.
 export const currencyCodeEnum = pgEnum('currency_code', ['MVR', 'USD', 'EUR', 'GBP'])
+
+// Projects & time tracking (Phase 32, UPGRADE.md G-12) — optional, service-
+// business-oriented feature; see ARCHITECTURE.md §4.12.
+export const projectStatusEnum = pgEnum('project_status', ['active', 'completed', 'archived'])
+export const taskStatusEnum = pgEnum('task_status', ['open', 'done'])
