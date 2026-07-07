@@ -184,8 +184,56 @@ export const paymentsReceived = pgTable('payments_received', {
   ...auditedBy,
 })
 
+// Delivery notes / packing slips (Phase 33, UPGRADE.md G-13/F-24) — generated
+// from an issued invoice, immutable once created (no draft state; there's
+// nothing to approve, it's a snapshot of what's being physically delivered).
+// No prices — see ARCHITECTURE.md §4.14.
+export const deliveryNotes = pgTable(
+  'delivery_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id),
+    customerId: uuid('customer_id')
+      .notNull()
+      .references(() => customers.id),
+    deliveryNoteNumber: text('delivery_note_number').notNull(),
+    issueDate: date('issue_date').notNull(),
+    notes: text('notes'),
+    ...timestamps,
+    ...auditedBy,
+  },
+  (table) => [
+    uniqueIndex('delivery_notes_business_number_unique').on(
+      table.businessId,
+      table.deliveryNoteNumber,
+    ),
+  ],
+)
+
+export const deliveryNoteLines = pgTable('delivery_note_lines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id')
+    .notNull()
+    .references(() => businesses.id),
+  deliveryNoteId: uuid('delivery_note_id')
+    .notNull()
+    .references(() => deliveryNotes.id),
+  itemId: uuid('item_id').references(() => items.id),
+  description: text('description').notNull(),
+  qty: numeric('qty', { precision: 15, scale: 4 }).notNull(),
+  sortOrder: integer('sort_order').default(0).notNull(),
+  ...timestamps,
+})
+
 export type Invoice = typeof invoices.$inferSelect
 export type NewInvoice = typeof invoices.$inferInsert
 export type InvoiceLine = typeof invoiceLines.$inferSelect
 export type CreditNote = typeof creditNotes.$inferSelect
+export type DeliveryNote = typeof deliveryNotes.$inferSelect
+export type DeliveryNoteLine = typeof deliveryNoteLines.$inferSelect
 export type PaymentReceived = typeof paymentsReceived.$inferSelect

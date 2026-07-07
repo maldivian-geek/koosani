@@ -12,7 +12,7 @@ import { supplierRoutes } from './modules/suppliers/routes.js'
 import { itemRoutes, categoryRoutes } from './modules/items/routes.js'
 import { inventoryRoutes } from './modules/inventory/routes.js'
 import { gstRoutes } from './modules/gst/routes.js'
-import { invoiceRoutes, creditNoteRoutes } from './modules/invoicing/routes.js'
+import { invoiceRoutes, creditNoteRoutes, deliveryNoteRoutes } from './modules/invoicing/routes.js'
 import { billRoutes } from './modules/purchases/routes.js'
 import { fileRoutes } from './modules/files/routes.js'
 import { poRoutes, grnRoutes } from './modules/po/routes.js'
@@ -141,6 +141,7 @@ app.route('/inventory', inventoryRoutes)
 app.route('/gst', gstRoutes)
 app.route('/invoices', invoiceRoutes)
 app.route('/credit-notes', creditNoteRoutes)
+app.route('/delivery-notes', deliveryNoteRoutes)
 app.route('/bills', billRoutes)
 app.route('/files', fileRoutes)
 app.route('/pos', poRoutes)

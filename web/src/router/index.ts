@@ -122,6 +122,17 @@ export const router = createRouter({
           component: () => import('../modules/invoicing/views/CreditNoteDetailView.vue'),
           meta: { requiresAuth: true, title: 'Credit Note' },
         },
+        // Delivery notes / packing slips (Phase 33, UPGRADE.md G-13/F-24)
+        {
+          path: 'delivery-notes',
+          component: () => import('../modules/invoicing/views/DeliveryNoteListView.vue'),
+          meta: { requiresAuth: true, title: 'Delivery Notes' },
+        },
+        {
+          path: 'delivery-notes/:id',
+          component: () => import('../modules/invoicing/views/DeliveryNoteDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Delivery Note' },
+        },
         // Estimates (Phase 25)
         {
           path: 'estimates',

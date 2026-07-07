@@ -14,6 +14,7 @@ import { PoDocument } from './PoDocument.js'
 import { SoaDocument } from './SoaDocument.js'
 import { EstimateDocument } from './EstimateDocument.js'
 import { CreditNoteDocument } from './CreditNoteDocument.js'
+import { DeliveryNoteDocument } from './DeliveryNoteDocument.js'
 import { renderPdfBuffer } from './render.js'
 import type { BusinessInfo } from './types.js'
 
@@ -209,6 +210,31 @@ export async function renderCreditNotePdf(
     gstAmount: cn.gstAmount,
     total: cn.total,
     reason: cn.reason ?? '',
+  })
+  return renderPdfBuffer(element)
+}
+
+export async function renderDeliveryNotePdf(
+  businessId: string,
+  deliveryNoteId: string,
+): Promise<Buffer> {
+  const [business, dn] = await Promise.all([
+    businessInfo(businessId),
+    invoicing.getDeliveryNote(businessId, deliveryNoteId),
+  ])
+  const [customer, invoice] = await Promise.all([
+    customers.assertExists(dn.customerId, businessId),
+    invoicing.getInvoice(businessId, dn.invoiceId),
+  ])
+
+  const element = DeliveryNoteDocument({
+    business,
+    number: dn.deliveryNoteNumber,
+    issueDate: dn.issueDate,
+    againstInvoiceNumber: invoice.invoiceNumber ?? '—',
+    deliverTo: { name: customer.name, tin: customer.tin, address: customer.address },
+    lines: dn.lines.map((l) => ({ description: l.description, qty: l.qty })),
+    notes: dn.notes,
   })
   return renderPdfBuffer(element)
 }

@@ -27,6 +27,7 @@ export const businesses = pgTable('businesses', {
   billNumberPrefix: text('bill_number_prefix').default('BILL-').notNull(),
   poNumberPrefix: text('po_number_prefix').default('PO-').notNull(),
   estimateNumberPrefix: text('estimate_number_prefix').default('EST-').notNull(),
+  deliveryNoteNumberPrefix: text('delivery_note_number_prefix').default('DN-').notNull(),
   // Payment reminder dunning schedule, in days relative to due date (negative
   // = before due, 0 = on due date, positive = overdue). Phase 24, UPGRADE.md
   // G-4. Per-invoice opt-out is `invoices.remindersEnabled`.

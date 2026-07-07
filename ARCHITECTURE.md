@@ -221,6 +221,17 @@ Phase 33 found several APIs from earlier phases with no web UI: inventory (movem
 - **`invoicing.listCreditNotes` now joins `customers` for `customerName`** (`CreditNoteWithCustomer`), matching what a list view needs. Note: `invoicing.listInvoices` does **not** do this despite `InvoiceListView.vue` declaring a `customerName` field — that's a pre-existing gap outside Phase 33's scope, left as-is rather than silently fixed alongside unrelated work; worth a follow-up.
 - **CN creation UX**: `CreditNoteCreate` takes fresh line items, not references to original invoice line IDs, so the editor fetches the source invoice's lines and pre-fills them as editable credit lines (supports partial credits by adjusting qty/price or removing lines) rather than requiring the user to retype them.
 
+### 4.14 Delivery notes / packing slips — physical document, no prices, no draft state (Phase 33, UPGRADE.md G-13/F-24)
+
+New feature, entirely additive to `invoicing` (not a separate module — lives in `invoicing/repository.ts`/`service.ts`/`routes.ts` alongside credit notes, same as CNs live alongside invoices).
+
+- **No prices anywhere in the schema or PDF.** `delivery_note_lines` carries only `itemId`/`description`/`qty` — a delivery note documents what physically left the warehouse, not what it's worth. Deliberately distinct from `api/src/lib/pdf/types.ts`'s shared `DocumentLine` (which requires `rate`/`lineTotal`, used by every priced document's PDF); `DeliveryNoteDocument.ts` defines its own minimal `DeliveryNoteLineData` type instead of forcing a price-less document to satisfy a price-shaped interface.
+- **No draft state.** Unlike invoices/estimates/CNs, a delivery note is generated once, directly from an issued invoice (`POST /invoices/:id/delivery-note`), and is immediately complete — there's nothing to approve or issue. Lines are copied verbatim from the invoice's lines at generation time (qty/description/itemId only, prices dropped) and never change afterward.
+- **Only issuable against an issued invoice** (`status !== 'draft'` check in `invoicing.createDeliveryNote`) — generating a packing slip for goods that haven't been formally invoiced yet isn't a supported flow.
+- **New numbering sequence**, `businesses.deliveryNoteNumberPrefix` (default `DN-`), same advisory-lock `allocateDocumentNumber` mechanism (`api/src/db/numbering.ts`) as invoices/CNs/bills/POs/estimates — configurable in the Settings screen alongside the other prefixes.
+- **Reuses the `'invoices'` `PermissionResource`** — no new permission gate; generating/viewing a delivery note is invoice-adjacent, not a distinct authorization concern.
+- **PDF follows the same queue-and-wait pattern** as every other document type (§8) — `DeliveryNoteDocument.ts`, `renderDeliveryNotePdf`, a `'delivery-note'` pdf-worker job kind, `GET /delivery-notes/:id/pdf`.
+
 ---
 
 ## 5. Database schema (overview)

@@ -8,6 +8,8 @@ import {
   paymentsReceived,
   creditNotes,
   creditNoteLines,
+  deliveryNotes,
+  deliveryNoteLines,
   customers,
 } from '../../db/schema/index.js'
 import type {
@@ -16,9 +18,11 @@ import type {
   InvoiceLine,
   PaymentReceived,
   CreditNote,
+  DeliveryNote,
+  DeliveryNoteLine,
 } from '../../db/schema/index.js'
 
-export type { Invoice, InvoiceLine, PaymentReceived, CreditNote }
+export type { Invoice, InvoiceLine, PaymentReceived, CreditNote, DeliveryNote, DeliveryNoteLine }
 export type CreditNoteLine = typeof creditNoteLines.$inferSelect
 
 // ─── Invoice reads ────────────────────────────────────────────────────────────
@@ -524,4 +528,127 @@ export async function allocateCreditNoteNumber(businessId: string, tx: DbTx): Pr
     'credit_note_number',
     'credit_note_number_prefix',
   )
+}
+
+// ─── Delivery notes (Phase 33, UPGRADE.md G-13/F-24) ─────────────────────────
+
+export async function allocateDeliveryNoteNumber(businessId: string, tx: DbTx): Promise<string> {
+  return allocateDocumentNumber(
+    tx,
+    businessId,
+    ':dn',
+    'delivery_notes',
+    'delivery_note_number',
+    'delivery_note_number_prefix',
+  )
+}
+
+type NewDeliveryNote = {
+  businessId: string
+  invoiceId: string
+  customerId: string
+  deliveryNoteNumber: string
+  issueDate: string
+  notes?: string | null
+  createdBy: string
+}
+
+export async function insertDeliveryNote(data: NewDeliveryNote, tx: DbTx): Promise<DeliveryNote> {
+  const [row] = await tx
+    .insert(deliveryNotes)
+    .values({ ...data, updatedBy: data.createdBy })
+    .returning()
+  if (!row) throw new Error('insertDeliveryNote: no row returned')
+  return row
+}
+
+type NewDeliveryNoteLine = {
+  businessId: string
+  deliveryNoteId: string
+  itemId?: string | null
+  description: string
+  qty: string
+  sortOrder?: number
+}
+
+export async function insertDeliveryNoteLines(
+  lines: NewDeliveryNoteLine[],
+  tx: DbTx,
+): Promise<DeliveryNoteLine[]> {
+  if (lines.length === 0) return []
+  return tx.insert(deliveryNoteLines).values(lines).returning()
+}
+
+export async function getDeliveryNoteById(
+  businessId: string,
+  id: string,
+  tx?: DbTx,
+): Promise<DeliveryNote | null> {
+  const q = tx ?? db
+  const [row] = await q
+    .select()
+    .from(deliveryNotes)
+    .where(and(eq(deliveryNotes.businessId, businessId), eq(deliveryNotes.id, id)))
+  return row ?? null
+}
+
+export async function getDeliveryNoteLinesByDn(
+  businessId: string,
+  deliveryNoteId: string,
+  tx?: DbTx,
+): Promise<DeliveryNoteLine[]> {
+  const q = tx ?? db
+  return q
+    .select()
+    .from(deliveryNoteLines)
+    .where(
+      and(
+        eq(deliveryNoteLines.businessId, businessId),
+        eq(deliveryNoteLines.deliveryNoteId, deliveryNoteId),
+      ),
+    )
+    .orderBy(deliveryNoteLines.sortOrder)
+}
+
+export type DeliveryNoteWithCustomer = DeliveryNote & { customerName: string }
+
+export async function listDeliveryNotes(
+  businessId: string,
+  params: { customerId: string | undefined },
+): Promise<DeliveryNoteWithCustomer[]> {
+  return db
+    .select({
+      id: deliveryNotes.id,
+      businessId: deliveryNotes.businessId,
+      invoiceId: deliveryNotes.invoiceId,
+      customerId: deliveryNotes.customerId,
+      customerName: customers.name,
+      deliveryNoteNumber: deliveryNotes.deliveryNoteNumber,
+      issueDate: deliveryNotes.issueDate,
+      notes: deliveryNotes.notes,
+      createdAt: deliveryNotes.createdAt,
+      updatedAt: deliveryNotes.updatedAt,
+      createdBy: deliveryNotes.createdBy,
+      updatedBy: deliveryNotes.updatedBy,
+    })
+    .from(deliveryNotes)
+    .innerJoin(customers, eq(deliveryNotes.customerId, customers.id))
+    .where(
+      and(
+        eq(deliveryNotes.businessId, businessId),
+        params.customerId ? eq(deliveryNotes.customerId, params.customerId) : undefined,
+      ),
+    )
+    .orderBy(desc(deliveryNotes.createdAt))
+}
+
+export async function listDeliveryNotesByInvoice(
+  businessId: string,
+  invoiceId: string,
+): Promise<DeliveryNote[]> {
+  return db
+    .select()
+    .from(deliveryNotes)
+    .where(and(eq(deliveryNotes.businessId, businessId), eq(deliveryNotes.invoiceId, invoiceId)))
+    .orderBy(desc(deliveryNotes.createdAt))
 }

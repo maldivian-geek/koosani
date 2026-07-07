@@ -65,6 +65,15 @@ export const CreditNoteCreate = z.object({
 })
 export type CreditNoteCreate = z.infer<typeof CreditNoteCreate>
 
+// ─── Delivery note (Phase 33, UPGRADE.md G-13/F-24) ──────────────────────────
+// Lines are always copied from the source invoice, not user-supplied — this
+// body only carries the one optional free-text field.
+
+export const DeliveryNoteCreate = z.object({
+  notes: z.string().max(2000).optional(),
+})
+export type DeliveryNoteCreate = z.infer<typeof DeliveryNoteCreate>
+
 // ─── Reminders opt-out (Phase 24, UPGRADE.md G-4) ────────────────────────────
 
 export const InvoiceRemindersPatch = z.object({

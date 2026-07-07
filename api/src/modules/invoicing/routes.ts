@@ -9,6 +9,7 @@ import {
   CreditNoteCreate,
   InvoiceRemindersPatch,
   ApplyCreditBody,
+  DeliveryNoteCreate,
 } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
@@ -184,6 +185,31 @@ invoiceRoutes.get('/:id/pdf', async (c) => {
     throw err
   }
 })
+
+// POST /invoices/:id/delivery-note — generates a delivery note/packing slip
+// from an issued invoice (Phase 33, UPGRADE.md G-13/F-24)
+invoiceRoutes.post(
+  '/:id/delivery-note',
+  requirePermission('invoices', 'add'),
+  zValidator('json', DeliveryNoteCreate),
+  async (c) => {
+    const { notes } = c.req.valid('json')
+    const ctx = {
+      userId: c.get('userId'),
+      businessId: c.get('businessId'),
+      ip: getRealIp(c),
+      ua: c.req.header('user-agent'),
+    }
+    try {
+      const dn = await svc.createDeliveryNote(c.get('businessId'), c.req.param('id'), notes, ctx)
+      return c.json(dn, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+      throw err
+    }
+  },
+)
 
 // POST /invoices/:id/payments
 invoiceRoutes.post(
@@ -423,6 +449,55 @@ creditNoteRoutes.get('/:id/pdf', async (c) => {
       kind: 'credit-note',
       businessId: c.get('businessId'),
       creditNoteId,
+      userId: c.get('userId'),
+    })
+    const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+    return c.json({ url })
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
+// ─── Delivery note routes (Phase 33, UPGRADE.md G-13/F-24) ───────────────────
+// Creation happens via POST /invoices/:id/delivery-note above; this group is
+// read-only (list/detail/pdf) — reuses the 'invoices' permission resource.
+
+export const deliveryNoteRoutes = new Hono<AppEnv>()
+deliveryNoteRoutes.use('*', requireAuth)
+
+const ListDeliveryNotesQuery = z.object({
+  customerId: z.string().uuid().optional(),
+})
+
+// GET /delivery-notes
+deliveryNoteRoutes.get('/', zValidator('query', ListDeliveryNotesQuery), async (c) => {
+  const { customerId } = c.req.valid('query')
+  const notes = await svc.listDeliveryNotes(c.get('businessId'), { customerId })
+  return c.json(notes)
+})
+
+// GET /delivery-notes/:id
+deliveryNoteRoutes.get('/:id', async (c) => {
+  try {
+    const dn = await svc.getDeliveryNote(c.get('businessId'), c.req.param('id'))
+    return c.json(dn)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
+// GET /delivery-notes/:id/pdf
+deliveryNoteRoutes.get('/:id/pdf', async (c) => {
+  if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const deliveryNoteId = c.req.param('id')
+  try {
+    await svc.getDeliveryNote(c.get('businessId'), deliveryNoteId)
+    const fileId = await renderAndWaitForFile({
+      kind: 'delivery-note',
+      businessId: c.get('businessId'),
+      deliveryNoteId,
       userId: c.get('userId'),
     })
     const url = await filesService.getSignedUrl(c.get('businessId'), fileId)

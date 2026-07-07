@@ -17,6 +17,9 @@ import type {
   CreditNote,
   CreditNoteLine,
   CreditNoteWithCustomer,
+  DeliveryNote,
+  DeliveryNoteLine,
+  DeliveryNoteWithCustomer,
   ListInvoiceParams,
 } from './repository.js'
 import type {
@@ -36,6 +39,9 @@ export type {
   CreditNote,
   CreditNoteLine,
   CreditNoteWithCustomer,
+  DeliveryNote,
+  DeliveryNoteLine,
+  DeliveryNoteWithCustomer,
 }
 
 // ─── Error types ──────────────────────────────────────────────────────────────
@@ -1159,4 +1165,79 @@ export async function issueCreditNote(
 
     return issued
   })
+}
+
+// ─── Delivery notes (Phase 33, UPGRADE.md G-13/F-24) ─────────────────────────
+// Generated directly from an issued invoice — no draft state, no prices
+// (physical delivery document, not a financial one). See ARCHITECTURE.md §4.14.
+
+export async function createDeliveryNote(
+  businessId: string,
+  invoiceId: string,
+  notes: string | undefined,
+  ctx: AuditCtx,
+): Promise<DeliveryNote & { lines: DeliveryNoteLine[] }> {
+  const invoice = await repo.getById(businessId, invoiceId)
+  if (!invoice) throw new NotFoundError(`Invoice ${invoiceId} not found`)
+  if (invoice.status === 'draft') {
+    throw new ValidationError('A delivery note can only be generated from an issued invoice')
+  }
+
+  return db.transaction(async (tx) => {
+    const dnNumber = await repo.allocateDeliveryNoteNumber(businessId, tx)
+    const dn = await repo.insertDeliveryNote(
+      {
+        businessId,
+        invoiceId,
+        customerId: invoice.customerId,
+        deliveryNoteNumber: dnNumber,
+        issueDate: todayMv(),
+        notes: notes ?? null,
+        createdBy: ctx.userId,
+      },
+      tx,
+    )
+
+    const invoiceLines = await repo.getLinesByInvoice(businessId, invoiceId)
+    const lines = await repo.insertDeliveryNoteLines(
+      invoiceLines.map((l, idx) => ({
+        businessId,
+        deliveryNoteId: dn.id,
+        itemId: l.itemId,
+        description: l.description,
+        qty: l.qty,
+        sortOrder: idx,
+      })),
+      tx,
+    )
+
+    await audit.record(
+      'delivery_note.created',
+      'delivery_note',
+      dn.id,
+      null,
+      { invoiceId, deliveryNoteNumber: dnNumber, lineCount: lines.length },
+      ctx,
+      tx,
+    )
+
+    return { ...dn, lines }
+  })
+}
+
+export async function getDeliveryNote(
+  businessId: string,
+  id: string,
+): Promise<DeliveryNote & { lines: DeliveryNoteLine[] }> {
+  const dn = await repo.getDeliveryNoteById(businessId, id)
+  if (!dn) throw new NotFoundError(`Delivery note ${id} not found`)
+  const lines = await repo.getDeliveryNoteLinesByDn(businessId, id)
+  return { ...dn, lines }
+}
+
+export async function listDeliveryNotes(
+  businessId: string,
+  params: { customerId: string | undefined },
+): Promise<DeliveryNoteWithCustomer[]> {
+  return repo.listDeliveryNotes(businessId, params)
 }

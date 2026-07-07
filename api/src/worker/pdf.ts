@@ -9,6 +9,7 @@ import {
   renderSupplierSoaPdf,
   renderEstimatePdf,
   renderCreditNotePdf,
+  renderDeliveryNotePdf,
 } from '../lib/pdf/build.js'
 
 export type PdfJobData =
@@ -32,6 +33,7 @@ export type PdfJobData =
     }
   | { kind: 'estimate'; businessId: string; estimateId: string; userId: string }
   | { kind: 'credit-note'; businessId: string; creditNoteId: string; userId: string }
+  | { kind: 'delivery-note'; businessId: string; deliveryNoteId: string; userId: string }
 
 export function registerPdfWorker(): Worker<PdfJobData> {
   return new Worker<PdfJobData>(
@@ -91,6 +93,12 @@ export function registerPdfWorker(): Worker<PdfJobData> {
           filename = `credit-note-${job.data.creditNoteId}.pdf`
           entityType = 'credit_note'
           entityId = job.data.creditNoteId
+          break
+        case 'delivery-note':
+          buffer = await renderDeliveryNotePdf(businessId, job.data.deliveryNoteId)
+          filename = `delivery-note-${job.data.deliveryNoteId}.pdf`
+          entityType = 'delivery_note'
+          entityId = job.data.deliveryNoteId
           break
       }
 

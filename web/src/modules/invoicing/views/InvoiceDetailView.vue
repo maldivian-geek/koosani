@@ -22,6 +22,7 @@ import {
   Trash2,
   Ban,
   Wallet,
+  Truck,
 } from 'lucide-vue-next'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
@@ -392,6 +393,35 @@ async function downloadPdf() {
   }
 }
 
+// ─── Delivery note (Phase 33, UPGRADE.md G-13/F-24) ──────────────────────────
+const generatingDeliveryNote = ref(false)
+
+async function generateDeliveryNote() {
+  generatingDeliveryNote.value = true
+  try {
+    const dn = await apiFetch<{ id: string }>(`/invoices/${invoiceId.value}/delivery-note`, {
+      method: 'POST',
+      body: '{}',
+    })
+    toast.add({
+      severity: 'success',
+      summary: 'Generated',
+      detail: 'Delivery note generated.',
+      life: 3000,
+    })
+    void router.push(`/delivery-notes/${dn.id}`)
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: "Couldn't generate the delivery note. Please try again.",
+      life: 5000,
+    })
+  } finally {
+    generatingDeliveryNote.value = false
+  }
+}
+
 // ─── Send email ───────────────────────────────────────────────────────────────
 const sending = ref(false)
 
@@ -529,6 +559,18 @@ const activePayments = computed(() => invoice.value?.payments.filter((p) => !p.r
         >
           <Mail class="w-4 h-4" />
           Email
+        </Button>
+
+        <!-- Delivery note (issued documents only, Phase 33, UPGRADE.md G-13/F-24) -->
+        <Button
+          v-if="invoice && invoice.status !== 'draft'"
+          severity="secondary"
+          outlined
+          :loading="generatingDeliveryNote"
+          @click="generateDeliveryNote"
+        >
+          <Truck class="w-4 h-4" />
+          Delivery Note
         </Button>
       </div>
     </div>

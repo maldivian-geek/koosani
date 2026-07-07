@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 33b — Delivery notes / packing slips (UPGRADE.md G-13/F-24):** new feature — see ARCHITECTURE.md §4.14.
+  - New `delivery_notes`/`delivery_note_lines` tables (in the `invoicing` schema file, alongside credit notes) — no prices, just item/description/qty; no draft state, generated once directly from an issued invoice.
+  - New `POST /invoices/:id/delivery-note` (only from an issued invoice; lines copied from the invoice with prices dropped), `GET /delivery-notes`, `GET /delivery-notes/:id`, `GET /delivery-notes/:id/pdf`. Reuses the `'invoices'` `PermissionResource` — no new permission gate.
+  - New numbering sequence: `businesses.deliveryNoteNumberPrefix` (default `DN-`), configurable in Settings alongside the other document prefixes.
+  - New `DeliveryNoteDocument.ts` PDF template (no prices, a "received by" signature line) + `renderDeliveryNotePdf` + a `'delivery-note'` pdf-worker job kind — same queue-and-wait pattern as every other document type.
+  - Web: a Delivery Notes list/detail view, and a "Delivery Note" action on the invoice detail page (issued invoices only) that generates one and navigates to it.
+
 - **Phase 33a — Inventory UI + standalone credit-note UI/PDF (UPGRADE.md G-13/F-24):** closes two UI gaps behind APIs that already existed — see ARCHITECTURE.md §4.13.
   - New Inventory web module: on-hand view (with a below-reorder filter), a movement ledger view, and dialogs for manual stock adjustments and bulk stock counts. No backend changes beyond a display join — `inventory.listMovements` now returns `itemSku`/`itemName` alongside each movement.
   - New standalone credit-note web module: list, a create flow (pick an issued invoice, its lines are pulled in as editable credit lines for full or partial credits), and a detail view with issue/PDF actions. The SidebarNav link to `/credit-notes` previously pointed at a route that didn't exist.

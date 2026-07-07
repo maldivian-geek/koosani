@@ -193,7 +193,7 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 - ✅ Done (33a): Inventory UI (adjustments, stock counts, movement ledger) — see ARCHITECTURE.md §4.13.
 - ✅ Done (33a): Standalone credit-note UI + credit-note PDF — see ARCHITECTURE.md §4.13.
-- Pending (33b): Delivery notes/packing slips (from issued invoices).
+- ✅ Done (33b): Delivery notes/packing slips (from issued invoices) — see ARCHITECTURE.md §4.14.
 - Pending (33c): Custom fields (typed key-value per doc type, shown on PDFs).
 
 ---

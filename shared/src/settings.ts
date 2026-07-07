@@ -19,5 +19,6 @@ export const BusinessSettingsPatch = z.object({
   poNumberPrefix: z.string().min(1).max(20).optional(),
   estimateNumberPrefix: z.string().min(1).max(20).optional(),
   defaultEstimateValidityDays: z.number().int().min(0).max(365).optional(),
+  deliveryNoteNumberPrefix: z.string().min(1).max(20).optional(),
 })
 export type BusinessSettingsPatch = z.infer<typeof BusinessSettingsPatch>

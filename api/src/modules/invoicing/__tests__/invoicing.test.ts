@@ -1173,6 +1173,89 @@ describe('credit notes', () => {
   })
 })
 
+describe('delivery notes', () => {
+  it('generates a delivery note from an issued invoice, copying lines without prices', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, user, token } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [
+          { description: 'Widget A', qty: '3.0000', unitPrice: '25.00', gstCategory: 'zero' },
+          { description: 'Widget B', qty: '1.0000', unitPrice: '99.00', gstCategory: 'zero' },
+        ],
+      },
+      ctx,
+    )
+    await svc.issue(business.id, draft.id, ctx)
+
+    const res = await app.request(`/invoices/${draft.id}/delivery-note`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ notes: 'Deliver to loading dock' }),
+    })
+    expect(res.status).toBe(201)
+    const dn = (await res.json()) as Record<string, unknown>
+    expect(typeof dn['deliveryNoteNumber']).toBe('string')
+    expect((dn['deliveryNoteNumber'] as string).startsWith('DN-')).toBe(true)
+    const lines = dn['lines'] as Array<Record<string, unknown>>
+    expect(lines).toHaveLength(2)
+    expect(lines[0]!['description']).toBe('Widget A')
+    expect(lines[0]!['qty']).toBe('3.0000')
+    expect(lines[0]!['unitPrice']).toBeUndefined() // no prices on a delivery note
+
+    const getRes = await app.request(`/delivery-notes/${dn['id']}`, { headers: authHeaders(token) })
+    expect(getRes.status).toBe(200)
+
+    const listRes = await app.request(`/delivery-notes?customerId=${customer.id}`, {
+      headers: authHeaders(token),
+    })
+    const listBody = (await listRes.json()) as Array<Record<string, unknown>>
+    expect(listBody.length).toBeGreaterThan(0)
+    expect(listBody[0]!['customerName']).toBe(customer.name)
+  })
+
+  it('rejects generating a delivery note from a draft invoice', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, user, token } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '10.00', gstCategory: 'zero' }],
+      },
+      ctx,
+    )
+
+    const res = await app.request(`/invoices/${draft.id}/delivery-note`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('404s for an unknown delivery note id', async () => {
+    const { app } = await import('../../../server.js')
+    const { token } = await seedBusiness()
+    const res = await app.request(`/delivery-notes/${crypto.randomUUID()}`, {
+      headers: authHeaders(token),
+    })
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('immutability after issue', () => {
   it('PATCH on an issued invoice returns 422', async () => {
     const { app } = await import('../../../server.js')

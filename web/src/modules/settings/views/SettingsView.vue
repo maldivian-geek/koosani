@@ -26,6 +26,7 @@ interface BusinessSettings {
   poNumberPrefix: string
   estimateNumberPrefix: string
   defaultEstimateValidityDays: number
+  deliveryNoteNumberPrefix: string
   logoUrl: string | null
 }
 
@@ -57,6 +58,7 @@ interface FormState {
   poNumberPrefix: string
   estimateNumberPrefix: string
   defaultEstimateValidityDays: number
+  deliveryNoteNumberPrefix: string
 }
 
 const form = ref<FormState>({
@@ -75,6 +77,7 @@ const form = ref<FormState>({
   poNumberPrefix: '',
   estimateNumberPrefix: '',
   defaultEstimateValidityDays: 30,
+  deliveryNoteNumberPrefix: '',
 })
 const errors = ref<Partial<Record<keyof FormState, string>>>({})
 
@@ -98,6 +101,7 @@ async function load() {
       poNumberPrefix: s.poNumberPrefix,
       estimateNumberPrefix: s.estimateNumberPrefix,
       defaultEstimateValidityDays: s.defaultEstimateValidityDays,
+      deliveryNoteNumberPrefix: s.deliveryNoteNumberPrefix,
     }
     logoUrl.value = s.logoUrl
   } catch {
@@ -130,6 +134,7 @@ async function onSave() {
     poNumberPrefix: form.value.poNumberPrefix,
     estimateNumberPrefix: form.value.estimateNumberPrefix,
     defaultEstimateValidityDays: form.value.defaultEstimateValidityDays,
+    deliveryNoteNumberPrefix: form.value.deliveryNoteNumberPrefix,
   }
 
   const result = BusinessSettingsPatch.safeParse(payload)
@@ -365,6 +370,14 @@ onMounted(() => void load())
             <InputText
               v-model="form.estimateNumberPrefix"
               :invalid="!!errors.estimateNumberPrefix"
+              fluid
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="font-medium text-sm">Delivery note prefix</label>
+            <InputText
+              v-model="form.deliveryNoteNumberPrefix"
+              :invalid="!!errors.deliveryNoteNumberPrefix"
               fluid
             />
           </div>
