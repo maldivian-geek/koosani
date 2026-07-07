@@ -62,6 +62,18 @@ export const router = createRouter({
           component: () => import('../modules/items/views/ItemsView.vue'),
           meta: { requiresAuth: true, title: 'Items' },
         },
+        // Inventory UI (Phase 33, UPGRADE.md G-13/F-24 — API existed since
+        // earlier phases, this closes the missing-UI gap)
+        {
+          path: 'inventory',
+          component: () => import('../modules/inventory/views/InventoryView.vue'),
+          meta: { requiresAuth: true, title: 'Inventory' },
+        },
+        {
+          path: 'inventory/movements',
+          component: () => import('../modules/inventory/views/InventoryMovementsView.vue'),
+          meta: { requiresAuth: true, title: 'Movement Ledger' },
+        },
         {
           path: 'customers/:id/soa',
           component: () => import('../modules/customers/views/CustomerSoaView.vue'),
@@ -91,6 +103,24 @@ export const router = createRouter({
           path: 'invoices/:id/edit',
           component: () => import('../modules/invoicing/views/InvoiceEditorView.vue'),
           meta: { requiresAuth: true, title: 'Edit Invoice' },
+        },
+        // Standalone credit-note UI (Phase 33, UPGRADE.md G-13/F-24 — the
+        // API existed since Phase 6, this closes the missing-UI gap; the
+        // SidebarNav link to /credit-notes was previously dead)
+        {
+          path: 'credit-notes',
+          component: () => import('../modules/invoicing/views/CreditNoteListView.vue'),
+          meta: { requiresAuth: true, title: 'Credit Notes' },
+        },
+        {
+          path: 'credit-notes/new',
+          component: () => import('../modules/invoicing/views/CreditNoteEditorView.vue'),
+          meta: { requiresAuth: true, title: 'New Credit Note' },
+        },
+        {
+          path: 'credit-notes/:id',
+          component: () => import('../modules/invoicing/views/CreditNoteDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Credit Note' },
         },
         // Estimates (Phase 25)
         {

@@ -24,6 +24,11 @@ export type OnHandRow = {
   reorderPoint: string | null
 }
 
+// Joined with items for display — a bare item UUID isn't useful in a ledger
+// view (added for Phase 33's inventory UI, UPGRADE.md G-13/F-24; the on-hand
+// query already joins for the same reason).
+export type MovementRow = StockMovement & { itemSku: string; itemName: string }
+
 // ─── Movements ────────────────────────────────────────────────────────────────
 
 export async function insertMovement(
@@ -38,7 +43,7 @@ export async function insertMovement(
 export async function listMovements(
   businessId: string,
   { itemId, from, to, page, pageSize }: ListMovementsParams,
-): Promise<{ rows: StockMovement[]; total: number }> {
+): Promise<{ rows: MovementRow[]; total: number }> {
   const where = and(
     eq(stockMovements.businessId, businessId),
     itemId ? eq(stockMovements.itemId, itemId) : undefined,
@@ -49,8 +54,22 @@ export async function listMovements(
   const [totalRow, rows] = await Promise.all([
     db.select({ total: count() }).from(stockMovements).where(where),
     db
-      .select()
+      .select({
+        id: stockMovements.id,
+        businessId: stockMovements.businessId,
+        itemId: stockMovements.itemId,
+        qty: stockMovements.qty,
+        source: stockMovements.source,
+        sourceId: stockMovements.sourceId,
+        reason: stockMovements.reason,
+        movedAt: stockMovements.movedAt,
+        createdAt: stockMovements.createdAt,
+        createdBy: stockMovements.createdBy,
+        itemSku: items.sku,
+        itemName: items.name,
+      })
       .from(stockMovements)
+      .innerJoin(items, eq(stockMovements.itemId, items.id))
       .where(where)
       .orderBy(desc(stockMovements.movedAt))
       .limit(pageSize)

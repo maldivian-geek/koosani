@@ -211,6 +211,16 @@ Optional, service-business-oriented feature — UPGRADE.md itself flags it as th
 - **Editable/deletable only until invoiced**, same rule and same rationale as expenses.
 - **One `PermissionResource` (`'projects'`) covers projects, tasks, and time entries together** — mirrors how `'invoices'` already covers both invoices and credit notes as one resource, rather than fragmenting into three granular permissions for one feature area.
 
+### 4.13 Parity odds & ends — closing UI gaps behind already-built APIs (Phase 33, UPGRADE.md G-13/F-24)
+
+Phase 33 found several APIs from earlier phases with no web UI: inventory (movements/on-hand/adjustments/stock-count existed since the base inventory module) and standalone credit notes (existed since the initial invoicing module; the SidebarNav link was dead — pointed at a route that didn't exist). No new `PermissionResource` was needed for either — both reuse the existing `'inventory'`/`'invoices'` gates.
+
+- **Inventory UI added with no backend changes beyond a display join.** `inventory.listMovements` now joins `items` for `itemSku`/`itemName` (`MovementRow`, `api/src/modules/inventory/repository.ts`) — the raw `stock_movements` row only carries `itemId`, which isn't usable in a ledger list. Same "join for display" reasoning as `listOnHand` already used.
+- **Credit notes previously had no single-record read.** `GET /credit-notes/:id` (`invoicing.getCreditNote`) was added to back the new detail view and the PDF route — before Phase 33 the only way to read a CN was the unpaginated list endpoint or as a nested array on its parent invoice.
+- **Credit notes previously had no PDF.** `CreditNoteDocument.ts` + `build.ts`'s `renderCreditNotePdf` + a `'credit-note'` job kind in the pdf worker follow the exact same queue-and-wait pattern as invoices/estimates/POs (§8) — no new pipeline, just a new document template plumbed into the existing one.
+- **`invoicing.listCreditNotes` now joins `customers` for `customerName`** (`CreditNoteWithCustomer`), matching what a list view needs. Note: `invoicing.listInvoices` does **not** do this despite `InvoiceListView.vue` declaring a `customerName` field — that's a pre-existing gap outside Phase 33's scope, left as-is rather than silently fixed alongside unrelated work; worth a follow-up.
+- **CN creation UX**: `CreditNoteCreate` takes fresh line items, not references to original invoice line IDs, so the editor fetches the source invoice's lines and pre-fills them as editable credit lines (supports partial credits by adjusting qty/price or removing lines) rather than requiring the user to retype them.
+
 ---
 
 ## 5. Database schema (overview)

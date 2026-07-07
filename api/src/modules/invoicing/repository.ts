@@ -8,6 +8,7 @@ import {
   paymentsReceived,
   creditNotes,
   creditNoteLines,
+  customers,
 } from '../../db/schema/index.js'
 import type {
   Invoice,
@@ -406,13 +407,40 @@ export async function listCreditNotesByInvoice(
     .orderBy(creditNotes.createdAt)
 }
 
+// Joined with customers for display (Phase 33's standalone CN list UI,
+// UPGRADE.md G-13/F-24) — a bare customerId isn't useful in a list view.
+export type CreditNoteWithCustomer = CreditNote & { customerName: string }
+
 export async function listCreditNotes(
   businessId: string,
   params: { customerId: string | undefined; from: string | undefined; to: string | undefined },
-): Promise<CreditNote[]> {
+): Promise<CreditNoteWithCustomer[]> {
   return db
-    .select()
+    .select({
+      id: creditNotes.id,
+      businessId: creditNotes.businessId,
+      invoiceId: creditNotes.invoiceId,
+      customerId: creditNotes.customerId,
+      customerName: customers.name,
+      creditNoteNumber: creditNotes.creditNoteNumber,
+      status: creditNotes.status,
+      issueDate: creditNotes.issueDate,
+      subtotal: creditNotes.subtotal,
+      gstAmount: creditNotes.gstAmount,
+      total: creditNotes.total,
+      currency: creditNotes.currency,
+      exchangeRate: creditNotes.exchangeRate,
+      subtotalMvr: creditNotes.subtotalMvr,
+      gstAmountMvr: creditNotes.gstAmountMvr,
+      totalMvr: creditNotes.totalMvr,
+      reason: creditNotes.reason,
+      createdAt: creditNotes.createdAt,
+      updatedAt: creditNotes.updatedAt,
+      createdBy: creditNotes.createdBy,
+      updatedBy: creditNotes.updatedBy,
+    })
     .from(creditNotes)
+    .innerJoin(customers, eq(creditNotes.customerId, customers.id))
     .where(
       and(
         eq(creditNotes.businessId, businessId),

@@ -13,6 +13,7 @@ import { InvoiceDocument } from './InvoiceDocument.js'
 import { PoDocument } from './PoDocument.js'
 import { SoaDocument } from './SoaDocument.js'
 import { EstimateDocument } from './EstimateDocument.js'
+import { CreditNoteDocument } from './CreditNoteDocument.js'
 import { renderPdfBuffer } from './render.js'
 import type { BusinessInfo } from './types.js'
 
@@ -173,6 +174,41 @@ export async function renderEstimatePdf(businessId: string, estimateId: string):
     gstAmount: estimate.gstAmount,
     total: estimate.total,
     notes: estimate.notes,
+  })
+  return renderPdfBuffer(element)
+}
+
+export async function renderCreditNotePdf(
+  businessId: string,
+  creditNoteId: string,
+): Promise<Buffer> {
+  const [business, cn] = await Promise.all([
+    businessInfo(businessId),
+    invoicing.getCreditNote(businessId, creditNoteId),
+  ])
+  const [customer, invoice] = await Promise.all([
+    customers.assertExists(cn.customerId, businessId),
+    cn.invoiceId ? invoicing.getInvoice(businessId, cn.invoiceId) : null,
+  ])
+
+  const element = CreditNoteDocument({
+    business,
+    number: cn.creditNoteNumber ?? '(draft)',
+    issueDate: cn.issueDate ?? '',
+    againstInvoiceNumber: invoice?.invoiceNumber ?? '—',
+    billTo: { name: customer.name, tin: customer.tin, address: customer.address },
+    lines: cn.lines.map((l) => ({
+      description: l.description,
+      qty: l.qty,
+      rate: l.unitPrice,
+      gstRate: l.gstRate,
+      gstAmount: l.gstAmount,
+      lineTotal: l.lineTotal,
+    })),
+    subtotal: cn.subtotal,
+    gstAmount: cn.gstAmount,
+    total: cn.total,
+    reason: cn.reason ?? '',
   })
   return renderPdfBuffer(element)
 }

@@ -6,6 +6,7 @@ import {
   Users,
   Building2,
   Package,
+  Boxes,
   FileText,
   FileMinus,
   FileSpreadsheet,
@@ -42,6 +43,7 @@ const BASE_GROUPS: NavGroup[] = [
       { label: 'Customers', to: '/customers', icon: markRaw(Users) },
       { label: 'Suppliers', to: '/suppliers', icon: markRaw(Building2) },
       { label: 'Items', to: '/items', icon: markRaw(Package) },
+      { label: 'Inventory', to: '/inventory', icon: markRaw(Boxes) },
     ],
   },
   {

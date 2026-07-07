@@ -359,6 +359,17 @@ creditNoteRoutes.get('/', zValidator('query', ListCreditNotesQuery), async (c) =
   return c.json(notes)
 })
 
+// GET /credit-notes/:id
+creditNoteRoutes.get('/:id', async (c) => {
+  try {
+    const cn = await svc.getCreditNote(c.get('businessId'), c.req.param('id'))
+    return c.json(cn)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
 // POST /credit-notes
 creditNoteRoutes.post(
   '/',
@@ -397,6 +408,27 @@ creditNoteRoutes.post('/:id/issue', requirePermission('invoices', 'edit'), async
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     if (err instanceof svc.ValidationError) return c.json({ error: err.message }, 422)
+    throw err
+  }
+})
+
+// GET /credit-notes/:id/pdf — renders via the pdf worker queue (Phase 33,
+// UPGRADE.md G-13/F-24 — credit notes had no PDF support before)
+creditNoteRoutes.get('/:id/pdf', async (c) => {
+  if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const creditNoteId = c.req.param('id')
+  try {
+    await svc.getCreditNote(c.get('businessId'), creditNoteId)
+    const fileId = await renderAndWaitForFile({
+      kind: 'credit-note',
+      businessId: c.get('businessId'),
+      creditNoteId,
+      userId: c.get('userId'),
+    })
+    const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+    return c.json({ url })
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     throw err
   }
 })

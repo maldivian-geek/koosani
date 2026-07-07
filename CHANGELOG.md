@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 33a — Inventory UI + standalone credit-note UI/PDF (UPGRADE.md G-13/F-24):** closes two UI gaps behind APIs that already existed — see ARCHITECTURE.md §4.13.
+  - New Inventory web module: on-hand view (with a below-reorder filter), a movement ledger view, and dialogs for manual stock adjustments and bulk stock counts. No backend changes beyond a display join — `inventory.listMovements` now returns `itemSku`/`itemName` alongside each movement.
+  - New standalone credit-note web module: list, a create flow (pick an issued invoice, its lines are pulled in as editable credit lines for full or partial credits), and a detail view with issue/PDF actions. The SidebarNav link to `/credit-notes` previously pointed at a route that didn't exist.
+  - New `GET /credit-notes/:id` route/service (`invoicing.getCreditNote`) — no single-CN read existed before.
+  - New credit-note PDF support: `CreditNoteDocument.ts` template, `renderCreditNotePdf`, a `'credit-note'` pdf-worker job kind, and `GET /credit-notes/:id/pdf` — following the exact same queue-and-wait pattern as invoices/estimates/POs.
+  - `invoicing.listCreditNotes` now joins `customers` for `customerName`. Noted but left unfixed as out of scope: `invoicing.listInvoices` has the same gap despite the frontend type declaring the field.
+
 - **Phase 32 — Projects & time tracking (UPGRADE.md G-12, optional):** projects, tasks, and time entries with a billable-to-invoice flow — see ARCHITECTURE.md §4.12. UPGRADE.md itself flags this as the least-fitting Zoho Invoice feature for an inventory-centric SME product; built for completeness of the phased plan.
   - New `projects` module: a project has an optional customer, status, default billable rate, and default GST category; tasks belong to a project and may override the rate; time entries belong to a project (optionally a task) and snapshot their rate/GST/billable flag at creation (entry override → task → project default), never recomputed later.
   - **Billable → invoice line**, deliberately mirroring the expenses pattern from Phase 31 rather than a shared abstraction: `GET /time-entries/billable?customerId=` lists a customer's uninvoiced billable time entries (joining through the entry's project), the invoice editor (create mode) lets staff add any as a line item, then calls `POST /time-entries/mark-invoiced`. `time_entries.invoice_id` has no FK, same traceability-without-a-circular-reference pattern as `expenses.invoice_id`/`invoices.estimate_id`.

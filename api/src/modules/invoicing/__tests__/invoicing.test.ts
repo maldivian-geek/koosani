@@ -1064,6 +1064,85 @@ describe('credit notes', () => {
     expect(Array.isArray(body)).toBe(true)
   })
 
+  it('GET /credit-notes/:id returns the credit note with its lines', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, user, token } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '2.0000', unitPrice: '100.00', gstCategory: 'zero' }],
+      },
+      ctx,
+    )
+    await svc.issue(business.id, draft.id, ctx)
+
+    const createRes = await app.request('/credit-notes', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        invoiceId: draft.id,
+        reason: 'Damaged goods',
+        lines: [
+          { description: 'Damaged item', qty: '1.0000', unitPrice: '100.00', gstCategory: 'zero' },
+        ],
+      }),
+    })
+    const cn = (await createRes.json()) as Record<string, unknown>
+
+    const getRes = await app.request(`/credit-notes/${cn['id']}`, { headers: authHeaders(token) })
+    expect(getRes.status).toBe(200)
+    const body = (await getRes.json()) as Record<string, unknown>
+    expect(body['id']).toBe(cn['id'])
+    expect(Array.isArray(body['lines'])).toBe(true)
+    expect((body['lines'] as unknown[]).length).toBe(1)
+
+    const notFoundRes = await app.request(`/credit-notes/${crypto.randomUUID()}`, {
+      headers: authHeaders(token),
+    })
+    expect(notFoundRes.status).toBe(404)
+  })
+
+  it('GET /credit-notes list includes the customer name', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, user, token } = await seedBusiness()
+    await seedRates(business.id, user.id)
+    const customer = await seedCustomer(business.id, user.id)
+
+    const svc = await import('../service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await svc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '50.00', gstCategory: 'zero' }],
+      },
+      ctx,
+    )
+    await svc.issue(business.id, draft.id, ctx)
+    await app.request('/credit-notes', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        invoiceId: draft.id,
+        reason: 'Test',
+        lines: [{ description: 'X', qty: '1.0000', unitPrice: '50.00', gstCategory: 'zero' }],
+      }),
+    })
+
+    const res = await app.request(`/credit-notes?customerId=${customer.id}`, {
+      headers: authHeaders(token),
+    })
+    const body = (await res.json()) as Array<Record<string, unknown>>
+    expect(body.length).toBeGreaterThan(0)
+    expect(body[0]!['customerName']).toBe(customer.name)
+  })
+
   it('rejects CN against draft invoice', async () => {
     const { app } = await import('../../../server.js')
     const { business, user, token } = await seedBusiness()

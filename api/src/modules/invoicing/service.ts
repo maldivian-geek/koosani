@@ -16,6 +16,7 @@ import type {
   PaymentReceived,
   CreditNote,
   CreditNoteLine,
+  CreditNoteWithCustomer,
   ListInvoiceParams,
 } from './repository.js'
 import type {
@@ -27,7 +28,15 @@ import type {
 } from '@koosani/shared'
 import { gstFor, sumGstLines, todayMv, money, exchangeRate } from '@koosani/shared'
 
-export type { AuditCtx, Invoice, InvoiceLine, PaymentReceived, CreditNote, CreditNoteLine }
+export type {
+  AuditCtx,
+  Invoice,
+  InvoiceLine,
+  PaymentReceived,
+  CreditNote,
+  CreditNoteLine,
+  CreditNoteWithCustomer,
+}
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 
@@ -1079,8 +1088,20 @@ export async function createCreditNote(
 export async function listCreditNotes(
   businessId: string,
   params: { customerId: string | undefined; from: string | undefined; to: string | undefined },
-): Promise<CreditNote[]> {
+): Promise<CreditNoteWithCustomer[]> {
   return repo.listCreditNotes(businessId, params)
+}
+
+// Backs the standalone credit-note detail view and PDF route (Phase 33,
+// UPGRADE.md G-13/F-24 — the CN detail/download UI didn't exist before).
+export async function getCreditNote(
+  businessId: string,
+  id: string,
+): Promise<CreditNote & { lines: CreditNoteLine[] }> {
+  const cn = await repo.getCreditNoteById(businessId, id)
+  if (!cn) throw new NotFoundError(`Credit note ${id} not found`)
+  const lines = await repo.getCreditNoteLinesByCn(businessId, id)
+  return { ...cn, lines }
 }
 
 // ─── issueCreditNote ──────────────────────────────────────────────────────────

@@ -191,7 +191,10 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 ### Phase 33 — Parity odds & ends — G-13, G-14, F-24 remainder
 
-- Delivery notes/packing slips (from issued invoices), custom fields (typed key-value per doc type, shown on PDFs), inventory UI (adjustments, stock counts, movement ledger), standalone credit-note UI.
+- ✅ Done (33a): Inventory UI (adjustments, stock counts, movement ledger) — see ARCHITECTURE.md §4.13.
+- ✅ Done (33a): Standalone credit-note UI + credit-note PDF — see ARCHITECTURE.md §4.13.
+- Pending (33b): Delivery notes/packing slips (from issued invoices).
+- Pending (33c): Custom fields (typed key-value per doc type, shown on PDFs).
 
 ---
 

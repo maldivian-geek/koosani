@@ -4,12 +4,12 @@ import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
 import type { AuditCtx } from '../audit/service.js'
 import type { InventoryAdjustmentCreate, StockCountCreate } from '@koosani/shared'
-import type { StockMovement, OnHandRow } from './repository.js'
+import type { StockMovement, MovementRow, OnHandRow } from './repository.js'
 import type { NewStockMovement } from '../../db/schema/index.js'
 import type { DbTx } from '../../db/client.js'
 
 export type { AuditCtx }
-export type { OnHandRow }
+export type { OnHandRow, MovementRow }
 
 const PAGE_SIZE_DEFAULT = 50
 const PAGE_SIZE_MAX = 200
@@ -179,7 +179,7 @@ export async function listMovements(
     page: number | undefined
     pageSize: number | undefined
   },
-): Promise<{ items: StockMovement[]; total: number; page: number; pageSize: number }> {
+): Promise<{ items: MovementRow[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, params.page ?? 1)
   const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, params.pageSize ?? PAGE_SIZE_DEFAULT))
   const { rows, total } = await repo.listMovements(businessId, {
