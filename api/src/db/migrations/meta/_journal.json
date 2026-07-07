@@ -64,6 +64,13 @@
       "when": 1783337626163,
       "tag": "0008_phase30_multi_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783389929120,
+      "tag": "0009_phase31_expenses",
+      "breakpoints": true
     }
   ]
 }

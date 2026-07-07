@@ -256,6 +256,32 @@ Manual FX rate entry, rate-at-date lookup, and the realized gain/loss ledger (Ph
 
 ---
 
+## Module: `expenses`
+
+Lightweight expense capture (Phase 31, UPGRADE.md G-11) — see ARCHITECTURE.md §4.11. Distinct from supplier bills; GST is informational only and does not feed MIRA input tax.
+
+| Kind  | Name                              | Signature                                                                                             | Purpose                                                                                                                   |
+| ----- | --------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /expenses`                | `?category&supplierId&customerId&billable&invoiced&from&to&page` → `{ items, total, page, pageSize }` | —                                                                                                                         |
+| route | `GET    /expenses/billable`       | `?customerId` → `{ items: Expense[] }`                                                                | Uninvoiced billable expenses for a customer — used by the invoice editor to prefill line items                            |
+| route | `GET    /expenses/:id`            | → `Expense`                                                                                           | —                                                                                                                         |
+| route | `POST   /expenses`                | `ExpenseCreate` → `Expense` (201)                                                                     | GST computed forward from the net `amount` via `gstFor()`; `billable: true` requires `customerId`                         |
+| route | `PATCH  /expenses/:id`            | `ExpensePatch` → `Expense`                                                                            | Rejects (422) once `invoicedAt` is set                                                                                    |
+| route | `DELETE /expenses/:id`            | → `204`                                                                                               | Rejects (422) once `invoicedAt` is set                                                                                    |
+| route | `POST   /expenses/:id/receipt`    | multipart `file` → `Expense` (201)                                                                    | Reuses the `files` module's upload/scan pipeline (SECURITY.md §13.5); sets `receiptFileId`                                |
+| route | `GET    /expenses/:id/receipt`    | → `{ url }` (signed URL)                                                                              | 404 if no receipt attached                                                                                                |
+| route | `POST   /expenses/mark-invoiced`  | `ExpenseMarkInvoiced { expenseIds, invoiceId }` → `204`                                               | Called by the web client after creating an invoice draft from selected billable expenses                                  |
+| svc   | `expenses.createExpense`          | `(businessId, data, ctx) → Expense`                                                                   | Snapshots the GST rate at `expenseDate`, same convention as invoice/bill lines                                            |
+| svc   | `expenses.updateExpense`          | `(businessId, id, data, ctx) → Expense`                                                               | Recomputes GST if amount/category/date changed; throws `ValidationError` once invoiced                                    |
+| svc   | `expenses.deleteExpense`          | `(businessId, id, ctx) → void`                                                                        | Throws `ValidationError` once invoiced                                                                                    |
+| svc   | `expenses.listUninvoicedBillable` | `(businessId, customerId) → Expense[]`                                                                | Backs `GET /expenses/billable`                                                                                            |
+| svc   | `expenses.attachReceipt`          | `(businessId, id, buffer, fileName, mimeType, ctx) → Expense`                                         | `filesSvc.uploadFile` + `filesSvc.attachToEntity('expense', id)`, then persists `receiptFileId` on the expense row itself |
+| svc   | `expenses.markInvoiced`           | `(businessId, expenseIds, invoiceId, ctx) → void`                                                     | `FOR UPDATE` locks the rows; throws if any expense is already invoiced or not billable                                    |
+
+`ExpenseCreate`'s Zod schema (`shared/src/expenses.ts`) refines `billable: true` to require `customerId`; the service layer repeats this check (`ARCHITECTURE.md`'s "trust internal callers" doesn't extend to genuine business invariants — a direct service-to-service call must not be able to bypass it). `PermissionResource` gains `'expenses'` (`shared/src/primitives.ts`; also added to `UserDrawer.vue`'s permission grid).
+
+---
+
 ## Module: `files`
 
 | Kind  | Name                    | Signature                                                     | Purpose                                                                                                |

@@ -43,6 +43,7 @@ const RESOURCE_ROWS: Array<{ resource: PermissionResource; label: string }> = [
   { resource: 'estimates', label: 'Estimates' },
   { resource: 'recurring', label: 'Recurring Invoices' },
   { resource: 'bills', label: 'Bills' },
+  { resource: 'expenses', label: 'Expenses' },
   { resource: 'po', label: 'Purchase Orders' },
   { resource: 'gst', label: 'GST' },
   { resource: 'reports', label: 'Reports' },

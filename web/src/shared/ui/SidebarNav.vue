@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Repeat,
   Receipt,
+  Banknote,
   ShoppingCart,
   Percent,
   BarChart2,
@@ -53,6 +54,7 @@ const BASE_GROUPS: NavGroup[] = [
   {
     items: [
       { label: 'Bills', to: '/bills', icon: markRaw(Receipt) },
+      { label: 'Expenses', to: '/expenses', icon: markRaw(Banknote) },
       { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart) },
     ],
   },

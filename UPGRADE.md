@@ -181,7 +181,8 @@ Order rationale: fix trust in the numbers first (20), unblock user management (2
 
 ### Phase 31 (optional) — Expenses — G-11
 
-- Lightweight expense capture (category, amount, GST, receipt upload, billable→invoice line). Distinct from supplier bills; skippable if bills suffice for the target users.
+- ✅ Done: Lightweight expense capture (category, amount, GST, receipt upload, billable→invoice line). Distinct from supplier bills — see ARCHITECTURE.md §4.11.
+- Note: GST on expenses is informational/reporting only and deliberately does not feed the GST return builder or Input Tax Statement (only `bill_lines` does) — a genuine input tax credit still requires recording a supplier bill. Category is free text, not a managed list.
 
 ### Phase 32 (optional) — Projects & time tracking — G-12
 

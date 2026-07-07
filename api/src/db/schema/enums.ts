@@ -80,6 +80,7 @@ export const permissionResourceEnum = pgEnum('permission_resource', [
   'reports',
   'estimates',
   'recurring',
+  'expenses',
 ])
 
 export const permissionActionEnum = pgEnum('permission_action', [

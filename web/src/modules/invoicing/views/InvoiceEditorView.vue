@@ -68,6 +68,49 @@ const currencyOptions = [
 
 function onCustomerSelect(option: CustomerOption) {
   if (!isEdit.value) currency.value = option.currency ?? 'MVR'
+  void loadBillableExpenses(option.id)
+}
+
+// ─── Billable expenses → invoice line (Phase 31, UPGRADE.md G-11) ────────────
+// Create-only: once an invoice draft exists, expenses aren't re-fetched.
+interface BillableExpense {
+  id: string
+  category: string
+  description: string | null
+  expenseDate: string
+  amount: string
+  gstCategory: string
+}
+const billableExpenses = ref<BillableExpense[]>([])
+const addedExpenseIds = ref<Set<string>>(new Set())
+
+async function loadBillableExpenses(customerId: string) {
+  billableExpenses.value = []
+  addedExpenseIds.value = new Set()
+  if (isEdit.value) return
+  try {
+    const data = await apiFetch<{ items: BillableExpense[] }>(
+      `/expenses/billable?customerId=${customerId}`,
+    )
+    billableExpenses.value = data.items
+  } catch {
+    billableExpenses.value = []
+  }
+}
+
+function addExpenseAsLine(expense: BillableExpense) {
+  lines.value.push({
+    _key: lineKey++,
+    itemId: null,
+    description: expense.description
+      ? `${expense.category}: ${expense.description}`
+      : expense.category,
+    qty: '1.0000',
+    unitPrice: expense.amount,
+    gstCategory: expense.gstCategory,
+    sortOrder: lines.value.length,
+  })
+  addedExpenseIds.value.add(expense.id)
 }
 
 let lineKey = 0
@@ -309,6 +352,21 @@ async function save() {
         method: 'POST',
         body: JSON.stringify(body),
       })
+      if (addedExpenseIds.value.size > 0) {
+        await apiFetch('/expenses/mark-invoiced', {
+          method: 'POST',
+          body: JSON.stringify({ expenseIds: [...addedExpenseIds.value], invoiceId: inv.id }),
+        }).catch(() => {
+          // Non-fatal — the invoice itself was created successfully; the
+          // expenses just won't show as "invoiced" and could be re-added.
+          toast.add({
+            severity: 'warn',
+            summary: 'Note',
+            detail: "The invoice was created, but couldn't mark the linked expenses as invoiced.",
+            life: 6000,
+          })
+        })
+      }
       toast.add({
         severity: 'success',
         summary: 'Created',
@@ -418,6 +476,42 @@ async function save() {
               placeholder="Optional notes for this invoice"
               auto-resize
             />
+          </div>
+        </div>
+      </div>
+
+      <!-- Billable expenses (Phase 31, UPGRADE.md G-11) -->
+      <div v-if="billableExpenses.length > 0" class="card p-6 space-y-3">
+        <h3 class="text-base font-medium text-surface-700 dark:text-surface-300">
+          Billable Expenses for this Customer
+        </h3>
+        <p class="text-xs text-surface-500 -mt-1">
+          Add any of these as a line item on this invoice. Once added, an expense can't be added
+          again.
+        </p>
+        <div class="space-y-2">
+          <div
+            v-for="expense in billableExpenses"
+            :key="expense.id"
+            class="flex items-center justify-between text-sm px-3 py-2 rounded-lg bg-surface-50 dark:bg-surface-800"
+          >
+            <div>
+              <span class="font-medium">{{ expense.category }}</span>
+              <span v-if="expense.description" class="text-surface-500">
+                — {{ expense.description }}</span
+              >
+              <span class="text-surface-400 text-xs ml-2">{{ expense.expenseDate }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <MoneyCell :amount="expense.amount" />
+              <Button
+                :label="addedExpenseIds.has(expense.id) ? 'Added' : 'Add'"
+                size="small"
+                severity="secondary"
+                :disabled="addedExpenseIds.has(expense.id)"
+                @click="addExpenseAsLine(expense)"
+              />
+            </div>
           </div>
         </div>
       </div>

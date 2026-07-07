@@ -160,6 +160,12 @@ export const router = createRouter({
           component: () => import('../modules/purchases/views/BillEditorView.vue'),
           meta: { requiresAuth: true, title: 'Edit Bill' },
         },
+        // Expenses (Phase 31, UPGRADE.md G-11)
+        {
+          path: 'expenses',
+          component: () => import('../modules/expenses/views/ExpensesView.vue'),
+          meta: { requiresAuth: true, title: 'Expenses' },
+        },
         // Purchase Orders
         {
           path: 'pos',

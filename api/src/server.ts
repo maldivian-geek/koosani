@@ -26,6 +26,7 @@ import { customerCreditRoutes } from './modules/customerCredits/routes.js'
 import { portalAuthRoutes } from './modules/portalAuth/routes.js'
 import { portalRoutes } from './modules/portal/routes.js'
 import { exchangeRateRoutes } from './modules/exchangeRates/routes.js'
+import { expenseRoutes } from './modules/expenses/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ app.route('/portal', portalRoutes)
 
 // Multi-currency (Phase 30, UPGRADE.md G-10)
 app.route('/exchange-rates', exchangeRateRoutes)
+
+// Expenses (Phase 31, UPGRADE.md G-11)
+app.route('/expenses', expenseRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 
