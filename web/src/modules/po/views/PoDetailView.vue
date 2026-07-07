@@ -110,6 +110,11 @@ const cancelReason = ref('')
 const cancelling = ref(false)
 const cancelError = ref('')
 
+function resetCancelDialog() {
+  cancelReason.value = ''
+  cancelError.value = ''
+}
+
 async function submitCancel() {
   cancelError.value = ''
   if (!cancelReason.value.trim()) {
@@ -473,10 +478,7 @@ const canConvertToBill = computed(
     header="Cancel Purchase Order"
     modal
     :style="{ width: '30rem' }"
-    @hide="
-      cancelReason = ''
-      cancelError = ''
-    "
+    @hide="resetCancelDialog"
   >
     <div class="space-y-4">
       <p class="text-sm text-surface-600 dark:text-surface-400">
