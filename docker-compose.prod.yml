@@ -15,12 +15,14 @@
 #                          into the web bundle at build time — see
 #                          web/Dockerfile.prod's comment on why this can't
 #                          just be a runtime env var)
-# Required for file uploads/PDF downloads to work (FILES_STORAGE=local is
-# explicitly dev/test-only in api/src/lib/storage.ts — its signed URLs are
-# fake and won't serve real files):
-#   S3_BUCKET, AWS_REGION, AWS_ENDPOINT_URL (if not AWS itself),
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK,
-#   not by this app's own config — still need to be set in the environment)
+# FILES_STORAGE defaults to `s3` here (production default) — set S3_BUCKET,
+# AWS_REGION, AWS_ENDPOINT_URL (if not AWS itself), AWS_ACCESS_KEY_ID,
+# AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK, not by this app's own
+# config) for file uploads/PDF downloads to actually work. Until then, set
+# FILES_STORAGE=local as a stopgap — api/src/lib/storage.ts's local backend
+# is explicitly dev/test-only (its "signed URLs" are fake `local://` strings,
+# not real download links), so uploads/downloads silently won't work, but
+# everything else in the app runs fine.
 # Optional: PORTAL_JWT_SECRET/PORTAL_FRONTEND_URL (customer portal), RESEND_API_KEY
 # (email), GEO_PROVIDER.
 
@@ -80,7 +82,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-noreply@example.com}
       GEO_PROVIDER: ${GEO_PROVIDER:-disabled}
-      FILES_STORAGE: s3
+      FILES_STORAGE: ${FILES_STORAGE:-s3}
       S3_BUCKET: ${S3_BUCKET}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
@@ -125,7 +127,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-noreply@example.com}
       GEO_PROVIDER: ${GEO_PROVIDER:-disabled}
-      FILES_STORAGE: s3
+      FILES_STORAGE: ${FILES_STORAGE:-s3}
       S3_BUCKET: ${S3_BUCKET}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
