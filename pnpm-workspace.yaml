@@ -5,7 +5,12 @@ packages:
   - 'shared'
 allowBuilds:
   argon2: true
-  cpu-features: true
+  # cpu-features is an optional native accelerator for ssh2 (itself only
+  # pulled in transitively by @testcontainers/postgresql, a devDependency
+  # used solely in Vitest integration tests). Its C++ compile is slow and
+  # resource-heavy for zero runtime benefit — ssh2 falls back to pure JS
+  # crypto, which is all the tests need. Blocked, not allowed.
+  cpu-features: false
   esbuild: true
   msgpackr-extract: true
   protobufjs: true
