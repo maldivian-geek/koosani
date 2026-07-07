@@ -1,7 +1,7 @@
 ﻿import { numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { movementSourceEnum } from './enums'
-import { businesses } from './businesses'
-import { items } from './items'
+import { movementSourceEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { items } from './items.js'
 
 // Append-only. REVOKE UPDATE, DELETE ON stock_movements FROM koosani_app (enforced in migration).
 export const stockMovements = pgTable('stock_movements', {

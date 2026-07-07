@@ -121,6 +121,8 @@ A workspace package (`/shared`) used by both api and web. Contains:
 
 No runtime dependencies except `zod` and `decimal.js`. Never import Vue, Hono, or Drizzle here.
 
+**`exports` points at `./src/*.ts`, not `./dist/*.js`, by default.** This lets `tsx` (api's dev/test runtime) and Vite (web's bundler) run/bundle the raw TypeScript directly with no separate watch step for `shared` — the `tsc -b --force` rebuild documented above exists purely so the TypeScript _type-checker_ sees changes when checking api/web, not because anything executes the compiled output in dev. A production Node process **cannot** execute `.ts` directly, so `package.json` also declares a `"production"` exports condition pointing at `./dist/*.js` — opted into only by `NODE_OPTIONS=--conditions=production` in `api/Dockerfile.prod`'s runtime stage. Dev/test tooling never sets that flag, so this is a no-op for the existing workflow.
+
 ---
 
 ## Infrastructure (recommended baseline)
@@ -136,6 +138,8 @@ No runtime dependencies except `zod` and `decimal.js`. Never import Vue, Hono, o
 | Secrets                | Platform's secret manager (Doppler, Fly secrets, etc.) — never `.env` in git |
 
 **Local dev containers (optional).** `docker-compose.yml` also defines `api`, `worker`, and `web` services alongside the infra ones (postgres/redis/clamav) — dev-mode containers running the same `tsx watch`/`vite --host` commands as `pnpm run dev`, with `src/` bind-mounted for hot reload. Not the default workflow (`pnpm run dev` on the host is faster to iterate with); useful when you specifically want to verify the app runs the same way inside a container as it will in production. Host ports 3001 (api) / 5180 (web) — chosen to avoid clashing with the host-run dev servers on 3000/5173. `api`/`worker` share one Dockerfile (`api/Dockerfile`); differ only in `command:`. Secrets come from the gitignored `api/.env` via `env_file:`, never hardcoded in the compose file.
+
+**Production containers (`docker-compose.prod.yml`).** Separate from the dev-container setup above — real multi-stage builds (`api/Dockerfile.prod` compiles TS to JS and runs `node dist/*.js`; `web/Dockerfile.prod` runs `vite build` and serves the static bundle via nginx, `web/nginx.conf`, with SPA client-side-routing fallback), no bind mounts, no local `.env` dependency. Built for a Coolify-style compose-based deploy: all domain-dependent values and secrets are `${VAR}` placeholders, set via the host's env — see the comment block at the top of `docker-compose.prod.yml` for the full required-variables list. **`FILES_STORAGE=local` is hardcoded to `s3` in this file** — `api/src/lib/storage.ts`'s local backend is explicitly dev/test-only (its "signed URLs" are fake `local://` strings, not real download links), so production always needs real S3-compatible credentials (`S3_BUCKET`/`AWS_REGION`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, plus `AWS_ENDPOINT_URL` for a non-AWS provider like Cloudflare R2).
 
 ---
 

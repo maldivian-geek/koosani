@@ -8,10 +8,10 @@
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, gstPeriodTypeEnum, gstPeriodStatusEnum } from './enums'
-import { businesses } from './businesses'
-import { users } from './users'
+import { timestamps, auditedBy } from './helpers.js'
+import { gstCategoryEnum, gstPeriodTypeEnum, gstPeriodStatusEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { users } from './users.js'
 
 export const gstRates = pgTable('gst_rates', {
   id: uuid('id').primaryKey().defaultRandom(),

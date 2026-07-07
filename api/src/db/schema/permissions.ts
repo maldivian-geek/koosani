@@ -1,7 +1,7 @@
 import { pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { businesses } from './businesses'
-import { users } from './users'
-import { permissionResourceEnum, permissionActionEnum } from './enums'
+import { businesses } from './businesses.js'
+import { users } from './users.js'
+import { permissionResourceEnum, permissionActionEnum } from './enums.js'
 
 // Explicit per-user permission grants (SECURITY.md §Authorization Model).
 // Admins bypass this table entirely; managers get elevated defaults in the

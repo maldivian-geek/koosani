@@ -2,7 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import * as argon2 from 'argon2'
-import * as schema from './schema/index'
+import * as schema from './schema/index.js'
 
 const url = process.env.DATABASE_URL ?? 'postgresql://koosani:koosani@localhost:5432/koosani_dev'
 const client = postgres(url, { max: 1 })

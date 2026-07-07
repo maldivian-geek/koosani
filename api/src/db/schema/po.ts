@@ -1,10 +1,10 @@
 ﻿import { date, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { timestamps, auditedBy } from './helpers'
-import { poStatusEnum } from './enums'
-import { businesses } from './businesses'
-import { suppliers } from './suppliers'
-import { items } from './items'
+import { timestamps, auditedBy } from './helpers.js'
+import { poStatusEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { suppliers } from './suppliers.js'
+import { items } from './items.js'
 
 export const purchaseOrders = pgTable(
   'purchase_orders',

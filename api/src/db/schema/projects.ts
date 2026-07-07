@@ -1,9 +1,9 @@
 import { boolean, date, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { projectStatusEnum, taskStatusEnum, gstCategoryEnum } from './enums'
-import { businesses } from './businesses'
-import { customers } from './customers'
-import { users } from './users'
+import { timestamps, auditedBy } from './helpers.js'
+import { projectStatusEnum, taskStatusEnum, gstCategoryEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
+import { users } from './users.js'
 
 // Projects & time tracking (Phase 32, UPGRADE.md G-12) — optional,
 // service-business-oriented feature; see ARCHITECTURE.md §4.12. MVR-only,

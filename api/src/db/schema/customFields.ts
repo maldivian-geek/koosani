@@ -1,7 +1,7 @@
 import { integer, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { customFieldDocTypeEnum, customFieldTypeEnum } from './enums'
-import { businesses } from './businesses'
+import { timestamps, auditedBy } from './helpers.js'
+import { customFieldDocTypeEnum, customFieldTypeEnum } from './enums.js'
+import { businesses } from './businesses.js'
 
 // Custom fields (Phase 33c, UPGRADE.md G-13/F-24) — see ARCHITECTURE.md §4.15.
 // A generic typed key-value system per document type. `custom_field_values`

@@ -1,0 +1,49 @@
+# Production image for api/worker — multi-stage build. Compiles TS to JS and
+# runs the compiled output directly with node (unlike api/Dockerfile, the dev
+# container, which runs `tsx watch` against the TS sources). Shared by both
+# the `api` and `worker` services in docker-compose.prod.yml — same image,
+# different command. Build context is the repo root (pnpm workspace requires
+# the full monorepo to resolve `workspace:*` deps).
+FROM node:22 AS build
+
+WORKDIR /repo
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY api/package.json ./api/package.json
+COPY web/package.json ./web/package.json
+COPY portal/package.json ./portal/package.json
+COPY shared/package.json ./shared/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY shared ./shared
+COPY api ./api
+
+# Not `pnpm --filter @koosani/shared build` (plain `tsc -p`) — composite
+# project references need `-b --force` for a from-scratch build or the
+# downstream api build can't reliably resolve shared's declaration output.
+RUN cd shared && pnpm exec tsc -b --force
+RUN pnpm --filter @koosani/api build
+
+# Runtime stage: copies the entire build-stage /repo verbatim (node_modules,
+# pnpm's workspace symlinks, and both packages' dist/ output) rather than
+# cherry-picking paths — correctness over image size, since pnpm's symlinked
+# node_modules structure is easy to subtly break by copying it partially.
+FROM node:22 AS runtime
+
+WORKDIR /repo
+ENV NODE_ENV=production
+# @koosani/shared's package.json "exports" points at ./src/*.ts by default,
+# so tsx (dev mode) can run the raw TS with no separate build step. Plain
+# node can't execute .ts at all, so the "production" exports condition
+# (added in shared/package.json) redirects it to the compiled ./dist/*.js
+# instead — opt in to that condition here, only for this runtime stage.
+ENV NODE_OPTIONS=--conditions=production
+
+COPY --from=build /repo /repo
+
+WORKDIR /repo/api
+EXPOSE 3000
+
+CMD ["node", "dist/server.js"]

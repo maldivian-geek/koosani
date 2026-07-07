@@ -8,11 +8,11 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, recurrenceFrequencyEnum } from './enums'
-import { businesses } from './businesses'
-import { customers } from './customers'
-import { items } from './items'
+import { timestamps, auditedBy } from './helpers.js'
+import { gstCategoryEnum, recurrenceFrequencyEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
+import { items } from './items.js'
 
 // Recurring invoice profiles (Phase 26, UPGRADE.md G-6). The daily cron
 // (worker/reminders.ts) generates a draft (or auto-issues, per autoIssue) each

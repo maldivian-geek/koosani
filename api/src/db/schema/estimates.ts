@@ -9,11 +9,11 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, estimateStatusEnum, currencyCodeEnum } from './enums'
-import { businesses } from './businesses'
-import { customers } from './customers'
-import { items } from './items'
+import { timestamps, auditedBy } from './helpers.js'
+import { gstCategoryEnum, estimateStatusEnum, currencyCodeEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
+import { items } from './items.js'
 
 // Estimates / quotes (Phase 25, UPGRADE.md G-5) — mirrors invoicing's draft
 // pattern but with no stock reservation and no GST period interaction; GST is

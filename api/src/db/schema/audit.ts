@@ -1,6 +1,6 @@
 ﻿import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { businesses } from './businesses'
-import { users } from './users'
+import { businesses } from './businesses.js'
+import { users } from './users.js'
 
 // Append-only. REVOKE UPDATE, DELETE ON audit_logs FROM koosani_app (enforced in migration).
 // Written by audit.record() only â€” never directly (ARCHITECTURE.md Â§3, SECURITY.md Â§13.3).

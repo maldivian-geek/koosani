@@ -1,6 +1,6 @@
 import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { businesses } from './businesses'
-import { customers } from './customers'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
 
 // Customer portal auth (Phase 28, UPGRADE.md G-8) — see SECURITY.md §13.14.
 // Deliberately separate from `auth_tokens`/`user_sessions`: portal identities

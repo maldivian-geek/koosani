@@ -1,7 +1,7 @@
 import { numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { creditLedgerKindEnum } from './enums'
-import { businesses } from './businesses'
-import { customers } from './customers'
+import { creditLedgerKindEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
 
 // Customer credit ledger (Phase 27, UPGRADE.md G-7) — see ARCHITECTURE.md §4.8.
 // Append-only: a customer's available credit balance is SUM(amount) over their

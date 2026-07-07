@@ -10,11 +10,16 @@
   uuid,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum, invoiceStatusEnum, creditNoteStatusEnum, currencyCodeEnum } from './enums'
-import { businesses } from './businesses'
-import { customers } from './customers'
-import { items } from './items'
+import { timestamps, auditedBy } from './helpers.js'
+import {
+  gstCategoryEnum,
+  invoiceStatusEnum,
+  creditNoteStatusEnum,
+  currencyCodeEnum,
+} from './enums.js'
+import { businesses } from './businesses.js'
+import { customers } from './customers.js'
+import { items } from './items.js'
 
 export const invoices = pgTable(
   'invoices',

@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Production containers for api/worker/web** (STACK.md "Infrastructure" §): `docker-compose.prod.yml` + `api/Dockerfile.prod` (multi-stage: compiles TS, runs `node dist/*.js`) + `web/Dockerfile.prod` (multi-stage: `vite build`, served via nginx with SPA fallback routing, `web/nginx.conf`) — for a Coolify-style compose-based deploy, separate from the dev-container setup added earlier. `FILES_STORAGE` is fixed to `s3` in this file (`local` is dev/test-only — see STACK.md).
+  - `@koosani/shared`'s `package.json` gains a `"production"` exports condition pointing at `./dist/*.js` (default remains `./src/*.ts`, unchanged, for `tsx`/Vite) — opted into only via `NODE_OPTIONS=--conditions=production` in the api prod image's runtime stage. Needed because a production Node process can't execute `.ts` directly the way `tsx` does.
+
+### Fixed
+
+- **`db/schema/*.ts` and `db/client.ts`/`db/numbering.ts`/`db/seed.ts` used extensionless relative imports** (`from './helpers'` instead of `from './helpers.js'`) — silently tolerated by `tsx`'s bundler-style dev resolution and by Vitest/Vite, but a hard crash (`ERR_MODULE_NOT_FOUND`) under plain Node ESM, i.e. any real production run of the compiled output. Found while building the production Docker images above; fixed across all 25 affected files.
+- **`PoDetailView.vue`'s cancel-dialog `@hide` handler** had two statements on separate lines with no semicolon between them — tolerated by Vite's dev-mode lazy transform but rejected by a full `vite build`. Unrelated to Phase 32/33 work; found the same way.
+
 - **Local dev containers for api/worker/web** (STACK.md "Infrastructure" §): `docker-compose.yml` gains `api`, `worker`, and `web` services running the same dev commands as `pnpm run dev`, for verifying the app runs correctly inside a container. New `api/Dockerfile` (shared by `api`/`worker`) and `web/Dockerfile`; new root `.dockerignore`. Fixed the `clamav` service's stale image tag (`1.4-stable` → `1.5.3`, the old tag no longer exists upstream) along the way.
 
 - **Phase 33c — Custom fields (UPGRADE.md G-13/F-24):** generic typed key-value fields per document type, shown on PDFs — see ARCHITECTURE.md §4.15. Completes Phase 33's parity work.

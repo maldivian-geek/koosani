@@ -1,7 +1,7 @@
 ﻿import { numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum } from './enums'
-import { businesses } from './businesses'
+import { timestamps, auditedBy } from './helpers.js'
+import { gstCategoryEnum } from './enums.js'
+import { businesses } from './businesses.js'
 
 export const itemCategories = pgTable('item_categories', {
   id: uuid('id').primaryKey().defaultRandom(),

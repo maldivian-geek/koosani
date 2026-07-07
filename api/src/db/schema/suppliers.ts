@@ -1,6 +1,6 @@
 ﻿import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { businesses } from './businesses'
+import { timestamps, auditedBy } from './helpers.js'
+import { businesses } from './businesses.js'
 
 export const suppliers = pgTable('suppliers', {
   id: uuid('id').primaryKey().defaultRandom(),

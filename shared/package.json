@@ -6,11 +6,13 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
+      "production": "./dist/index.js",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
     "./*": {
       "types": "./src/*.ts",
+      "production": "./dist/*.js",
       "import": "./src/*.ts",
       "default": "./src/*.ts"
     }

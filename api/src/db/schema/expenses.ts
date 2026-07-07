@@ -1,9 +1,9 @@
 import { boolean, date, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { gstCategoryEnum } from './enums'
-import { businesses } from './businesses'
-import { suppliers } from './suppliers'
-import { customers } from './customers'
+import { timestamps, auditedBy } from './helpers.js'
+import { gstCategoryEnum } from './enums.js'
+import { businesses } from './businesses.js'
+import { suppliers } from './suppliers.js'
+import { customers } from './customers.js'
 
 // Lightweight expense capture (Phase 31, UPGRADE.md G-11) — distinct from
 // supplier bills (ARCHITECTURE.md §4.11): category is free text (no managed

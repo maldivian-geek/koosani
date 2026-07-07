@@ -1,6 +1,6 @@
 import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { emailKindEnum, emailStatusEnum } from './enums'
-import { businesses } from './businesses'
+import { emailKindEnum, emailStatusEnum } from './enums.js'
+import { businesses } from './businesses.js'
 
 // Append-only outbound email log — audit-adjacent, not the audit_logs table
 // itself, since these record deliveries, not mutations (Phase 24, UPGRADE.md).

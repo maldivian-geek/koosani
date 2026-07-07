@@ -1,6 +1,6 @@
 ﻿import { boolean, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
-import { timestamps } from './helpers'
-import { gstPeriodTypeEnum } from './enums'
+import { timestamps } from './helpers.js'
+import { gstPeriodTypeEnum } from './enums.js'
 
 export const businesses = pgTable('businesses', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -1,7 +1,7 @@
 import { date, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
-import { businesses } from './businesses'
-import { invoices } from './invoicing'
-import { currencyCodeEnum } from './enums'
+import { businesses } from './businesses.js'
+import { invoices } from './invoicing.js'
+import { currencyCodeEnum } from './enums.js'
 
 // Multi-currency (Phase 30, UPGRADE.md G-10) — see ARCHITECTURE.md §4.10.
 

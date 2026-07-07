@@ -1,7 +1,7 @@
 ﻿import { boolean, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { timestamps, auditedBy } from './helpers'
-import { roleEnum, authEventEnum, authTokenTypeEnum } from './enums'
-import { businesses } from './businesses'
+import { timestamps, auditedBy } from './helpers.js'
+import { roleEnum, authEventEnum, authTokenTypeEnum } from './enums.js'
+import { businesses } from './businesses.js'
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),

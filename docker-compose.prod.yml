@@ -1,0 +1,157 @@
+# Production stack — for Coolify (or any Docker-Compose-based host), not
+# local dev (use docker-compose.yml for that). Builds real production images
+# (compiled JS via api/Dockerfile.prod, a static nginx-served bundle via
+# web/Dockerfile.prod) instead of the dev-mode tsx-watch/vite-dev-server
+# containers.
+#
+# All domain-dependent and secret values are ${VAR} placeholders — set them
+# as environment variables on the Coolify resource (or in a .env file next
+# to this compose file if deploying by hand). Required:
+#   POSTGRES_PASSWORD   - any strong password
+#   JWT_SECRET           - >= 32 chars, e.g. `openssl rand -base64 32`
+#   FRONTEND_URL         - the public URL the web app will be served from
+#                          (also used as the CORS allowlist entry)
+#   VITE_API_URL         - the public URL the api will be served from (baked
+#                          into the web bundle at build time — see
+#                          web/Dockerfile.prod's comment on why this can't
+#                          just be a runtime env var)
+# Required for file uploads/PDF downloads to work (FILES_STORAGE=local is
+# explicitly dev/test-only in api/src/lib/storage.ts — its signed URLs are
+# fake and won't serve real files):
+#   S3_BUCKET, AWS_REGION, AWS_ENDPOINT_URL (if not AWS itself),
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK,
+#   not by this app's own config — still need to be set in the environment)
+# Optional: PORTAL_JWT_SECRET/PORTAL_FRONTEND_URL (customer portal), RESEND_API_KEY
+# (email), GEO_PROVIDER.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: koosani
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: koosani
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U koosani']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  clamav:
+    image: clamav/clamav:1.5.3
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://koosani:${POSTGRES_PASSWORD}@postgres:5432/koosani
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORTAL_JWT_SECRET: ${PORTAL_JWT_SECRET:-}
+      PORTAL_FRONTEND_URL: ${PORTAL_FRONTEND_URL:-}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-noreply@example.com}
+      GEO_PROVIDER: ${GEO_PROVIDER:-disabled}
+      FILES_STORAGE: s3
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
+    expose:
+      - '3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.prod
+    command: ['node', 'dist/worker.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://koosani:${POSTGRES_PASSWORD}@postgres:5432/koosani
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORTAL_JWT_SECRET: ${PORTAL_JWT_SECRET:-}
+      PORTAL_FRONTEND_URL: ${PORTAL_FRONTEND_URL:-}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-noreply@example.com}
+      GEO_PROVIDER: ${GEO_PROVIDER:-disabled}
+      FILES_STORAGE: s3
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    expose:
+      - '80'
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  clamav_data:
