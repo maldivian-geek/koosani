@@ -135,6 +135,8 @@ No runtime dependencies except `zod` and `decimal.js`. Never import Vue, Hono, o
 | Email                  | Postmark or SES                                                              |
 | Secrets                | Platform's secret manager (Doppler, Fly secrets, etc.) — never `.env` in git |
 
+**Local dev containers (optional).** `docker-compose.yml` also defines `api`, `worker`, and `web` services alongside the infra ones (postgres/redis/clamav) — dev-mode containers running the same `tsx watch`/`vite --host` commands as `pnpm run dev`, with `src/` bind-mounted for hot reload. Not the default workflow (`pnpm run dev` on the host is faster to iterate with); useful when you specifically want to verify the app runs the same way inside a container as it will in production. Host ports 3001 (api) / 5180 (web) — chosen to avoid clashing with the host-run dev servers on 3000/5173. `api`/`worker` share one Dockerfile (`api/Dockerfile`); differ only in `command:`. Secrets come from the gitignored `api/.env` via `env_file:`, never hardcoded in the compose file.
+
 ---
 
 ## Open decisions (flag and pick before Phase 2)

@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Local dev containers for api/worker/web** (STACK.md "Infrastructure" §): `docker-compose.yml` gains `api`, `worker`, and `web` services running the same dev commands as `pnpm run dev`, for verifying the app runs correctly inside a container. New `api/Dockerfile` (shared by `api`/`worker`) and `web/Dockerfile`; new root `.dockerignore`. Fixed the `clamav` service's stale image tag (`1.4-stable` → `1.5.3`, the old tag no longer exists upstream) along the way.
+
 - **Phase 33c — Custom fields (UPGRADE.md G-13/F-24):** generic typed key-value fields per document type, shown on PDFs — see ARCHITECTURE.md §4.15. Completes Phase 33's parity work.
   - New standalone `customFields` module: `custom_field_definitions` (admin-defined, per business + doc type + field name; text/number/date/boolean) and `custom_field_values` (per definition + document, stored as text regardless of type — validated against the definition's type at the service layer).
   - Doc types: `invoice`, `estimate`, `po`, `bill`, `credit_note`. `bill` has no PDF wiring since koosani never generates a bill PDF (bills are received as supplier PDFs).
