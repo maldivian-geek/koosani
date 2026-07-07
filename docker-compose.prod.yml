@@ -125,6 +125,19 @@ services:
       ADMIN_TIN: ${ADMIN_TIN:-}
       ADMIN_ADDRESS: ${ADMIN_ADDRESS:-}
       ADMIN_PHONE: ${ADMIN_PHONE:-}
+    # Explicit router priority — Coolify auto-generates Traefik routers for
+    # both api (Host && PathPrefix(/api)) and web (Host && PathPrefix(/)) with
+    # no priority label of its own, relying on Traefik's automatic rule-length
+    # heuristic to prefer the more specific one. That didn't hold in practice
+    # (web's catch-all won, so /api/* served the SPA instead of the API) —
+    # forcing it explicitly here removes the ambiguity. Router names
+    # (`http(s)-0-<app-uuid>-api`) are Coolify's fixed naming convention for
+    # this exact application resource; SECURITY.md §13.12 has the rationale
+    # for routing the api under the web app's own domain instead of a
+    # separate subdomain in the first place.
+    labels:
+      - traefik.http.routers.https-0-nkv789iyv3unx5otkgw59hw6-api.priority=100
+      - traefik.http.routers.http-0-nkv789iyv3unx5otkgw59hw6-api.priority=100
     expose:
       - '3000'
     depends_on:
