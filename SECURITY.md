@@ -486,6 +486,7 @@ Only the SPA and the API origin are internet-reachable. Everything else is priva
 - The API process binds to `127.0.0.1` (or a private interface) and is **never** directly internet-reachable. A reverse proxy (Caddy / nginx / Cloudflare) is the only thing on `0.0.0.0:443`; it terminates TLS, sets `X-Real-IP`, and provides the WAF / DDoS layer.
 - Database, Redis, and the worker have no public listener and live on a private network / VPC. DB and Redis ports are never exposed.
 - `/healthz` and `/readyz` return status codes only; restrict to the load balancer's health-check source at the proxy.
+- **The API's public origin does not need its own subdomain.** Since the Vue SPA is a static bundle executed in the end user's browser (not proxied through the web container), the browser calls the API directly — this needs _some_ publicly reachable, TLS-terminated origin, but it can be the same hostname as the web app under a path prefix (e.g. `https://<domain>/api/*`, Traefik/reverse-proxy stripping the prefix before forwarding — the app's own routes are mounted at root, e.g. `/customers`, not `/api/customers`). CORS is origin-based, not path-based, so `FRONTEND_URL` stays the bare domain either way.
 
 ### 13.13 Items NOT in this app
 

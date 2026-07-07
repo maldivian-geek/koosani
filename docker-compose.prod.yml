@@ -15,6 +15,15 @@
 #                          into the web bundle at build time — see
 #                          web/Dockerfile.prod's comment on why this can't
 #                          just be a runtime env var)
+#   ADMIN_BUSINESS_NAME, ADMIN_EMAIL, ADMIN_NAME
+#                        - first-run admin bootstrap (api/src/db/seedProd.ts).
+#                          Runs on every `api` container start via
+#                          api/docker-entrypoint.sh, but is idempotent — a
+#                          no-op once any business row exists. Optional:
+#                          ADMIN_PASSWORD (a secure one is generated and
+#                          printed once to the api container's logs if unset
+#                          — check `docker logs` right after first deploy),
+#                          ADMIN_TIN, ADMIN_ADDRESS, ADMIN_PHONE.
 # FILES_STORAGE defaults to `s3` here (production default) — set S3_BUCKET,
 # AWS_REGION, AWS_ENDPOINT_URL (if not AWS itself), AWS_ACCESS_KEY_ID,
 # AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK, not by this app's own
@@ -109,6 +118,13 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
+      ADMIN_BUSINESS_NAME: ${ADMIN_BUSINESS_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_TIN: ${ADMIN_TIN:-}
+      ADMIN_ADDRESS: ${ADMIN_ADDRESS:-}
+      ADMIN_PHONE: ${ADMIN_PHONE:-}
     expose:
       - '3000'
     depends_on:
