@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **`api/src/lib/config.ts` crashed the `api` container at boot in production** (`FATAL: Invalid environment configuration`, `process.exit(1)`) for `PORTAL_JWT_SECRET`/`PORTAL_FRONTEND_URL` — Docker Compose's `${VAR:-}` syntax always defines the env var (empty string if unset), never omits it, and Zod's `.optional()` combined with a stricter validator (`.url()`, `.min(n)`) only skips validation for a genuinely `undefined` value, not a defined-but-empty string. Fixed with a `z.preprocess` wrapper converting empty string to `undefined` on both fields (STACK.md "config.ts's empty-string env var gotcha").
 - **`db/schema/*.ts` and `db/client.ts`/`db/numbering.ts`/`db/seed.ts` used extensionless relative imports** (`from './helpers'` instead of `from './helpers.js'`) — silently tolerated by `tsx`'s bundler-style dev resolution and by Vitest/Vite, but a hard crash (`ERR_MODULE_NOT_FOUND`) under plain Node ESM, i.e. any real production run of the compiled output. Found while building the production Docker images above; fixed across all 25 affected files.
 - **`PoDetailView.vue`'s cancel-dialog `@hide` handler** had two statements on separate lines with no semicolon between them — tolerated by Vite's dev-mode lazy transform but rejected by a full `vite build`. The first attempted fix never actually landed in a commit; refactored to a named `resetCancelDialog()` method instead of an inline multi-statement expression so it can't silently regress the same way again.
 
