@@ -315,6 +315,12 @@ export const router = createRouter({
           component: () => import('../modules/settings/views/ExchangeRatesView.vue'),
           meta: { requiresAuth: true, requiresAdmin: true, title: 'Exchange Rates' },
         },
+        // Custom fields (Phase 33c, UPGRADE.md G-13/F-24)
+        {
+          path: 'settings/custom-fields',
+          component: () => import('../modules/settings/views/CustomFieldsSettingsView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Custom Fields' },
+        },
       ],
     },
     {

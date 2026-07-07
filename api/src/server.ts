@@ -28,6 +28,7 @@ import { portalRoutes } from './modules/portal/routes.js'
 import { exchangeRateRoutes } from './modules/exchangeRates/routes.js'
 import { expenseRoutes } from './modules/expenses/routes.js'
 import { projectRoutes, taskRoutes, timeEntryRoutes } from './modules/projects/routes.js'
+import { customFieldRoutes } from './modules/customFields/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -169,6 +170,9 @@ app.route('/expenses', expenseRoutes)
 app.route('/projects', projectRoutes)
 app.route('/tasks', taskRoutes)
 app.route('/time-entries', timeEntryRoutes)
+
+// Custom fields (Phase 33c, UPGRADE.md G-13/F-24)
+app.route('/custom-fields', customFieldRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

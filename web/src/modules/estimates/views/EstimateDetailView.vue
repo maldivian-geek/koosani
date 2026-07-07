@@ -18,6 +18,7 @@ import {
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
+import CustomFieldsPanel from '../../../shared/ui/CustomFieldsPanel.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
 
@@ -441,6 +442,8 @@ onMounted(() => void load())
           </div>
         </div>
       </div>
+
+      <CustomFieldsPanel doc-type="estimate" :doc-id="estimateId" />
     </template>
   </div>
 </template>

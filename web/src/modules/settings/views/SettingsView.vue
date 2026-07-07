@@ -206,12 +206,14 @@ onMounted(() => void load())
         <h2 class="text-2xl font-semibold text-surface-900">Business Settings</h2>
         <p class="text-surface-500 mt-0.5">Profile, branding, and document defaults.</p>
       </div>
-      <RouterLink
-        to="/settings/exchange-rates"
-        class="text-sm text-primary-500 hover:underline mt-1"
-      >
-        Exchange rates →
-      </RouterLink>
+      <div class="flex flex-col items-end gap-1 mt-1">
+        <RouterLink to="/settings/exchange-rates" class="text-sm text-primary-500 hover:underline">
+          Exchange rates →
+        </RouterLink>
+        <RouterLink to="/settings/custom-fields" class="text-sm text-primary-500 hover:underline">
+          Custom fields →
+        </RouterLink>
+      </div>
     </div>
 
     <div v-if="!loading" class="card space-y-6">

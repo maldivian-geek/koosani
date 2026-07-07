@@ -9,6 +9,7 @@ import * as suppliers from '../../modules/suppliers/service.js'
 import * as purchases from '../../modules/purchases/service.js'
 import * as settings from '../../modules/settings/service.js'
 import * as estimatesService from '../../modules/estimates/service.js'
+import * as customFieldsService from '../../modules/customFields/service.js'
 import { InvoiceDocument } from './InvoiceDocument.js'
 import { PoDocument } from './PoDocument.js'
 import { SoaDocument } from './SoaDocument.js'
@@ -17,6 +18,25 @@ import { CreditNoteDocument } from './CreditNoteDocument.js'
 import { DeliveryNoteDocument } from './DeliveryNoteDocument.js'
 import { renderPdfBuffer } from './render.js'
 import type { BusinessInfo } from './types.js'
+import type { CustomFieldPdfData } from './customFieldsSection.js'
+
+// Shared by every renderer below that supports custom fields (Phase 33c,
+// UPGRADE.md G-13/F-24) — fetches defined fields with their values for one
+// document and formats them for display (booleans as Yes/No; text/number/
+// date render as stored). Unset fields are omitted rather than shown blank.
+async function customFieldsFor(
+  businessId: string,
+  docType: 'invoice' | 'estimate' | 'po' | 'credit_note',
+  docId: string,
+): Promise<CustomFieldPdfData[]> {
+  const fields = await customFieldsService.listValuesForDoc(businessId, docType, docId)
+  return fields
+    .filter((f) => f.value !== null)
+    .map((f) => ({
+      label: f.fieldLabel,
+      value: f.fieldType === 'boolean' ? (f.value === 'true' ? 'Yes' : 'No') : (f.value as string),
+    }))
+}
 
 export async function businessInfo(businessId: string): Promise<BusinessInfo> {
   const b = await settings.get(businessId)
@@ -35,7 +55,10 @@ export async function renderInvoicePdf(businessId: string, invoiceId: string): P
     businessInfo(businessId),
     invoicing.getInvoice(businessId, invoiceId),
   ])
-  const customer = await customers.assertExists(invoice.customerId, businessId)
+  const [customer, customFields] = await Promise.all([
+    customers.assertExists(invoice.customerId, businessId),
+    customFieldsFor(businessId, 'invoice', invoiceId),
+  ])
 
   const element = InvoiceDocument({
     business,
@@ -57,6 +80,7 @@ export async function renderInvoicePdf(businessId: string, invoiceId: string): P
     total: invoice.total,
     balanceDue: (Number(invoice.total) - Number(invoice.paidAmount ?? '0')).toFixed(2),
     notes: invoice.notes,
+    customFields,
   })
   return renderPdfBuffer(element)
 }
@@ -66,7 +90,10 @@ export async function renderPoPdf(businessId: string, poId: string): Promise<Buf
     businessInfo(businessId),
     poService.getPo(businessId, poId),
   ])
-  const supplier = await suppliers.getById(businessId, po.supplierId)
+  const [supplier, customFields] = await Promise.all([
+    suppliers.getById(businessId, po.supplierId),
+    customFieldsFor(businessId, 'po', poId),
+  ])
 
   const element = PoDocument({
     business,
@@ -82,6 +109,7 @@ export async function renderPoPdf(businessId: string, poId: string): Promise<Buf
     })),
     subtotal: po.subtotal,
     notes: po.notes,
+    customFields,
   })
   return renderPdfBuffer(element)
 }
@@ -155,7 +183,10 @@ export async function renderEstimatePdf(businessId: string, estimateId: string):
     businessInfo(businessId),
     estimatesService.getEstimate(businessId, estimateId),
   ])
-  const customer = await customers.assertExists(estimate.customerId, businessId)
+  const [customer, customFields] = await Promise.all([
+    customers.assertExists(estimate.customerId, businessId),
+    customFieldsFor(businessId, 'estimate', estimateId),
+  ])
 
   const element = EstimateDocument({
     business,
@@ -175,6 +206,7 @@ export async function renderEstimatePdf(businessId: string, estimateId: string):
     gstAmount: estimate.gstAmount,
     total: estimate.total,
     notes: estimate.notes,
+    customFields,
   })
   return renderPdfBuffer(element)
 }
@@ -187,9 +219,10 @@ export async function renderCreditNotePdf(
     businessInfo(businessId),
     invoicing.getCreditNote(businessId, creditNoteId),
   ])
-  const [customer, invoice] = await Promise.all([
+  const [customer, invoice, customFields] = await Promise.all([
     customers.assertExists(cn.customerId, businessId),
     cn.invoiceId ? invoicing.getInvoice(businessId, cn.invoiceId) : null,
+    customFieldsFor(businessId, 'credit_note', creditNoteId),
   ])
 
   const element = CreditNoteDocument({
@@ -210,6 +243,7 @@ export async function renderCreditNotePdf(
     gstAmount: cn.gstAmount,
     total: cn.total,
     reason: cn.reason ?? '',
+    customFields,
   })
   return renderPdfBuffer(element)
 }

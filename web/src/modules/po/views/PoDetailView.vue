@@ -14,6 +14,7 @@ import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import MoneyInput from '../../../shared/ui/MoneyInput.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
+import CustomFieldsPanel from '../../../shared/ui/CustomFieldsPanel.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
 import { money } from '@koosani/shared'
@@ -461,6 +462,8 @@ const canConvertToBill = computed(
           </DataTable>
         </div>
       </div>
+
+      <CustomFieldsPanel doc-type="po" :doc-id="poId" />
     </template>
   </div>
 

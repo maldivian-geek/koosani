@@ -1,6 +1,7 @@
 import React from 'react'
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer'
 import { styles, formatMoney } from './styles.js'
+import { customFieldsSection, type CustomFieldPdfData } from './customFieldsSection.js'
 import type { BusinessInfo, PartyInfo, DocumentLine } from './types.js'
 
 const h = React.createElement
@@ -16,6 +17,7 @@ export type EstimatePdfData = {
   gstAmount: string
   total: string
   notes: string | null
+  customFields?: CustomFieldPdfData[]
 }
 
 export function EstimateDocument(data: EstimatePdfData): React.ReactElement {
@@ -109,6 +111,7 @@ export function EstimateDocument(data: EstimatePdfData): React.ReactElement {
         ),
       ),
       data.notes ? h(View, { style: styles.notes }, h(Text, null, data.notes)) : null,
+      customFieldsSection(data.customFields ?? []),
       h(
         Text,
         { style: styles.footer, fixed: true },

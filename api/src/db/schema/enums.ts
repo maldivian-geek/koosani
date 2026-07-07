@@ -142,3 +142,20 @@ export const currencyCodeEnum = pgEnum('currency_code', ['MVR', 'USD', 'EUR', 'G
 // business-oriented feature; see ARCHITECTURE.md §4.12.
 export const projectStatusEnum = pgEnum('project_status', ['active', 'completed', 'archived'])
 export const taskStatusEnum = pgEnum('task_status', ['open', 'done'])
+
+// Custom fields (Phase 33c, UPGRADE.md G-13/F-24) — see ARCHITECTURE.md §4.15.
+// 'bill' is a valid doc type for definitions/values even though koosani never
+// generates a bill PDF (bills are received as supplier PDFs, not rendered).
+export const customFieldDocTypeEnum = pgEnum('custom_field_doc_type', [
+  'invoice',
+  'estimate',
+  'po',
+  'bill',
+  'credit_note',
+])
+export const customFieldTypeEnum = pgEnum('custom_field_type', [
+  'text',
+  'number',
+  'date',
+  'boolean',
+])

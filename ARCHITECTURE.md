@@ -82,6 +82,7 @@ Each module is a folder under `api/src/modules/` and `web/src/modules/`. A modul
 | `exchangeRates`   | Manual FX rate entry, rate-at-date lookup, realized gain/loss ledger (Phase 30) — see §4.10                                                                              |
 | `expenses`        | Lightweight expense capture, billable-to-invoice-line flow, receipt attachment (Phase 31) — see §4.11                                                                    |
 | `projects`        | Projects, tasks, time entries, billable-to-invoice-line flow (Phase 32, optional) — see §4.12                                                                            |
+| `customFields`    | Generic typed key-value custom fields per document type, shown on PDFs (Phase 33c) — see §4.15                                                                           |
 | `purchases`       | Supplier invoices (bills), payments made, supplier SOA                                                                                                                   |
 | `po`              | Purchase orders, goods receipt notes (GRN), PO→bill matching                                                                                                             |
 | `gst`             | GST rate config, MIRA 205 / 206 builders, Input Tax Statement, period locking                                                                                            |
@@ -231,6 +232,19 @@ New feature, entirely additive to `invoicing` (not a separate module — lives i
 - **New numbering sequence**, `businesses.deliveryNoteNumberPrefix` (default `DN-`), same advisory-lock `allocateDocumentNumber` mechanism (`api/src/db/numbering.ts`) as invoices/CNs/bills/POs/estimates — configurable in the Settings screen alongside the other prefixes.
 - **Reuses the `'invoices'` `PermissionResource`** — no new permission gate; generating/viewing a delivery note is invoice-adjacent, not a distinct authorization concern.
 - **PDF follows the same queue-and-wait pattern** as every other document type (§8) — `DeliveryNoteDocument.ts`, `renderDeliveryNotePdf`, a `'delivery-note'` pdf-worker job kind, `GET /delivery-notes/:id/pdf`.
+
+### 4.15 Custom fields — generic typed key-value per document type (Phase 33c, UPGRADE.md G-13/F-24)
+
+New standalone `customFields` module (schema, repository, service, routes) — cross-cutting, doesn't belong to any single document module, mirrors how `audit`/`files` are standalone cross-cutting modules.
+
+- **Two tables**: `custom_field_definitions` (per business + doc type + field name — the admin-defined schema) and `custom_field_values` (per definition + document — the actual data). `docId` on values has **no FK**, since it's polymorphic across five different tables (invoices/estimates/pos/bills/credit_notes) — same no-FK-traceability convention as `files.ts`/`audit.ts` for polymorphic references.
+- **`value` is always stored as `text`**, regardless of `fieldType` (text/number/date/boolean). A single nullable text column is simpler than one nullable column per type, and this data never feeds financial computation — validation against the definition's declared type happens at the service layer (`assertValidForType`), not via a typed column.
+- **Definitions are admin-only** (`requireRole('admin')`, same gate as business settings) — `fieldName` (the machine key) and `fieldType` are immutable once created; only `fieldLabel`/`sortOrder` can be patched. Renaming or retyping a field after data exists would silently corrupt every document already using it, so those are one-time choices at creation.
+- **Setting a value on a document requires the same permission as editing that document**, not a new `'customFields'` resource — a lookup table (`DOC_TYPE_RESOURCE` in `customFields/routes.ts`) maps doc type → existing `PermissionResource` (`invoice`/`credit_note` → `'invoices'`, `estimate` → `'estimates'`, `po` → `'po'`, `bill` → `'bills'`), checked dynamically per-request via `hasPermission()` rather than fixed route middleware, since the resource depends on the request body's `docType`.
+- **Deleting a definition cascades to its values in the service layer**, not via `ON DELETE CASCADE` — house style avoids DB-level cascades (explicit multi-table deletes in one transaction, same as expenses/credit notes), so `deleteDefinition` removes all `custom_field_values` for that definition before removing the definition itself.
+- **`bill` is a valid doc type for definitions/values with no PDF wiring** — koosani never generates a bill PDF (bills are received as supplier PDFs, not rendered), so bill custom fields exist for internal tracking/display only, not for a PDF that doesn't exist.
+- **PDF wiring**: `invoice`/`estimate`/`po`/`credit_note` — each template gained an optional `customFields?: CustomFieldPdfData[]` and a shared `customFieldsSection()` renderer (`api/src/lib/pdf/customFieldsSection.ts`) that renders nothing if no fields are set, avoiding an empty "Additional Details" heading on every PDF. `build.ts`'s `customFieldsFor()` helper fetches and formats values (booleans as Yes/No) for each of the four renderers.
+- **Web**: an admin-only Settings sub-page (`/settings/custom-fields`) to define fields per doc type, and a generic `CustomFieldsPanel.vue` component embedded in each of the four documents' detail views for viewing/editing that specific document's values — the panel renders nothing if the business hasn't defined any fields for that doc type.
 
 ---
 

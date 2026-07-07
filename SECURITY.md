@@ -202,6 +202,8 @@ Default policy, checked in this order (`hasPermission` in `authorize.ts`):
 
 Grants are stored in `user_permissions` (`business_id`, `user_id`, `resource`, `action`, `granted_by`, unique on `(user_id, resource, action)`). There is no department-default table — grants are per-user only. Granting/revoking permissions is part of the `users` module (UPGRADE.md Phase 21); no UI exists yet.
 
+**Dynamic per-request resource check (Phase 33c, custom fields).** `PUT /custom-fields/values` doesn't know which `PermissionResource` to gate on until it reads the request body's `docType` — `requirePermission(resource, action)` is fixed at route-registration time, so this route instead calls the exported `hasPermission(role, userId, resource, action)` function directly inside the handler, after mapping `docType` → resource via a lookup table. Same policy, same function, just invoked at request time instead of wired as middleware. Custom field _definitions_ (the admin-facing "what fields exist" config, not per-document values) are gated by `requireRole('admin')` instead, same as business settings — not a `PermissionResource` at all.
+
 **Known gap:** report exports are documented as pure-read/no-audit (ARCHITECTURE.md §3, FUNCTIONS.md §reports), but §13.6 below calls for auditing bulk exports with filter parameters. This is unresolved — exports are currently permission-gated and rate-limited but **not** audit-logged. Track as a follow-up before relying on export audit trails.
 
 ---

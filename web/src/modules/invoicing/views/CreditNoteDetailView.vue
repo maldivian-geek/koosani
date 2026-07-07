@@ -7,6 +7,7 @@ import DataTable from 'primevue/datatable'
 import { useConfirm } from 'primevue/useconfirm'
 import { ArrowLeft, Download, CheckCircle } from 'lucide-vue-next'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
+import CustomFieldsPanel from '../../../shared/ui/CustomFieldsPanel.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
@@ -239,6 +240,8 @@ async function downloadPdf() {
           </div>
         </div>
       </div>
+
+      <CustomFieldsPanel doc-type="credit_note" :doc-id="cnId" />
     </template>
   </div>
 </template>

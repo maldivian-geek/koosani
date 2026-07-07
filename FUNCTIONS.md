@@ -322,6 +322,25 @@ Projects, tasks, and time entries — optional, service-business-oriented featur
 
 ---
 
+## Module: `customFields`
+
+Generic typed key-value custom fields per document type (Phase 33c, UPGRADE.md G-13/F-24) — see ARCHITECTURE.md §4.15. Mounted at `/custom-fields`. No new `PermissionResource` — definitions are admin-only (`requireRole('admin')`); values reuse each doc type's existing edit permission.
+
+| Kind  | Name                                                 | Signature                                                                          | Purpose                                                                                                                                               |
+| ----- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /custom-fields/definitions`                  | `?docType` → `CustomFieldDefinition[]`                                             | —                                                                                                                                                     |
+| route | `POST   /custom-fields/definitions`                  | `CustomFieldDefinitionCreate` → `CustomFieldDefinition` (201)                      | Admin only. 422 if `fieldName` already used for that `docType`                                                                                        |
+| route | `PATCH  /custom-fields/definitions/:id`              | `CustomFieldDefinitionPatch { fieldLabel?, sortOrder? }` → `CustomFieldDefinition` | Admin only. `fieldName`/`fieldType`/`docType` are immutable once created                                                                              |
+| route | `DELETE /custom-fields/definitions/:id`              | → `204`                                                                            | Admin only. Cascades: removes all values for this definition first (service layer, not a DB cascade)                                                  |
+| route | `GET    /custom-fields/values`                       | `?docType&docId` → `CustomFieldWithValue[]`                                        | Every definition for the doc type, each with its value (or `null` if unset) — no permission gate beyond `requireAuth`                                 |
+| route | `PUT    /custom-fields/values`                       | `CustomFieldValueUpsert { docType, docId, values }` → `CustomFieldWithValue[]`     | Permission checked dynamically per `docType` (`hasPermission` inline, not fixed route middleware). 422 on a value that doesn't match its field's type |
+| svc   | `customFields.createDefinition`                      | `(businessId, data, ctx) → CustomFieldDefinition`                                  | Throws `ValidationError` on a duplicate `fieldName` for the doc type                                                                                  |
+| svc   | `customFields.updateDefinition` / `deleteDefinition` | `(businessId, id, [data,] ctx) → …`                                                | `deleteDefinition` removes values for the definition in the same transaction before deleting it                                                       |
+| svc   | `customFields.listValuesForDoc`                      | `(businessId, docType, docId) → CustomFieldWithValue[]`                            | Joins every definition for the doc type against that document's stored values                                                                         |
+| svc   | `customFields.upsertValues`                          | `(businessId, data, ctx) → CustomFieldWithValue[]`                                 | Validates every value against its field's declared type (`assertValidForType`) before writing any of them                                             |
+
+---
+
 ## Module: `files`
 
 | Kind  | Name                    | Signature                                                     | Purpose                                                                                                |

@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Phase 33c — Custom fields (UPGRADE.md G-13/F-24):** generic typed key-value fields per document type, shown on PDFs — see ARCHITECTURE.md §4.15. Completes Phase 33's parity work.
+  - New standalone `customFields` module: `custom_field_definitions` (admin-defined, per business + doc type + field name; text/number/date/boolean) and `custom_field_values` (per definition + document, stored as text regardless of type — validated against the definition's type at the service layer).
+  - Doc types: `invoice`, `estimate`, `po`, `bill`, `credit_note`. `bill` has no PDF wiring since koosani never generates a bill PDF (bills are received as supplier PDFs).
+  - New routes: `GET/POST /custom-fields/definitions`, `PATCH/DELETE /custom-fields/definitions/:id` (admin only — `fieldName`/`fieldType`/`docType` immutable once created), `GET/PUT /custom-fields/values` (value writes reuse each doc type's existing edit permission via a dynamic per-request check, not a new `PermissionResource`).
+  - PDF wiring: invoice/estimate/PO/credit-note templates each gained an optional custom-fields section (renders nothing if none are set) via a shared `customFieldsSection()` renderer.
+  - Web: an admin-only Settings sub-page to define fields per doc type, and a reusable `CustomFieldsPanel.vue` embedded in each of the four documents' detail views for viewing/editing that document's values.
+
 - **Phase 33b — Delivery notes / packing slips (UPGRADE.md G-13/F-24):** new feature — see ARCHITECTURE.md §4.14.
   - New `delivery_notes`/`delivery_note_lines` tables (in the `invoicing` schema file, alongside credit notes) — no prices, just item/description/qty; no draft state, generated once directly from an issued invoice.
   - New `POST /invoices/:id/delivery-note` (only from an issued invoice; lines copied from the invoice with prices dropped), `GET /delivery-notes`, `GET /delivery-notes/:id`, `GET /delivery-notes/:id/pdf`. Reuses the `'invoices'` `PermissionResource` — no new permission gate.
