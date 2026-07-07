@@ -15,7 +15,14 @@ COPY web/package.json ./web/package.json
 COPY portal/package.json ./portal/package.json
 COPY shared/package.json ./shared/package.json
 
-RUN pnpm install --frozen-lockfile
+# Resource caps for the build stage — this runs on the same host as every
+# other deployed app, not a dedicated build machine, so an unbounded
+# tsc/esbuild/pnpm-install memory or CPU spike here can starve everything
+# else on the box (this took the whole server down once already). Lower
+# network concurrency to reduce peak parallel download/extract load; cap
+# Node's heap so a runaway compile OOMs its own container instead of the host.
+ENV NODE_OPTIONS=--max-old-space-size=768
+RUN pnpm install --frozen-lockfile --network-concurrency=4
 
 COPY shared ./shared
 COPY api ./api
