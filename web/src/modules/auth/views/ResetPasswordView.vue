@@ -51,12 +51,13 @@ async function onSubmit() {
     await apiFetch('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ token: result.data.token, password: result.data.password }),
+      noRedirect: true,
     })
     done.value = true
     setTimeout(() => void router.push('/login'), 2000)
   } catch (err) {
     errorMsg.value =
-      err instanceof ApiError && err.status === 400
+      err instanceof ApiError && err.status === 401
         ? 'This reset link is invalid or has expired.'
         : 'Something went wrong. Please try again.'
   } finally {

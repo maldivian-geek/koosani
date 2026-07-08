@@ -61,12 +61,13 @@ async function onSubmit() {
         name: result.data.name,
         password: result.data.password,
       }),
+      noRedirect: true,
     })
     done.value = true
     setTimeout(() => void router.push('/login'), 2000)
   } catch (err) {
     errorMsg.value =
-      err instanceof ApiError && err.status === 400
+      err instanceof ApiError && err.status === 401
         ? 'This invitation link is invalid or has expired.'
         : 'Something went wrong. Please try again.'
   } finally {

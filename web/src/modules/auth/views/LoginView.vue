@@ -5,7 +5,7 @@ import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
 import { useAuthStore } from '../../../stores/auth.js'
-import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
+import { apiFetch } from '../../../lib/apiFetch.js'
 import { LoginSchema } from '@koosani/shared'
 
 const router = useRouter()
@@ -42,16 +42,13 @@ async function onSubmit() {
     }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(result.data),
+      noRedirect: true,
     })
     authStore.setUser(res.user, res.permissions)
     const redirect = route.query['redirect'] as string | undefined
     await router.push(redirect && redirect.startsWith('/') ? redirect : '/dashboard')
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 422) {
-      errorMsg.value = 'Invalid email or password.'
-    } else if (err instanceof ApiError && err.status !== 401) {
-      errorMsg.value = 'Invalid email or password.'
-    }
+  } catch {
+    errorMsg.value = 'Invalid email or password.'
   } finally {
     loading.value = false
   }
