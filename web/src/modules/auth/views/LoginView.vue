@@ -95,9 +95,12 @@ async function onSubmit() {
 
         <Button type="submit" label="Sign in" :loading="loading" fluid />
 
-        <div class="text-center">
+        <div class="text-center flex flex-col gap-2">
           <RouterLink to="/forgot-password" class="text-sm text-surface-500 hover:underline">
             Forgot your password?
+          </RouterLink>
+          <RouterLink to="/sign-in-link" class="text-sm text-surface-500 hover:underline">
+            Sign in with an email link instead
           </RouterLink>
         </div>
       </form>
