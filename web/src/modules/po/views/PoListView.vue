@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -131,28 +132,28 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="number" header="Number">
+      <Column field="number" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as Po).number ?? '—' }}</span>
         </template>
       </Column>
-      <Column field="supplierName" header="Supplier" />
-      <Column field="orderDate" header="Order Date">
+      <Column field="supplierName" header="Supplier" :pt="stackPt" />
+      <Column field="orderDate" header="Order Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Po).orderDate" />
         </template>
       </Column>
-      <Column field="expectedDate" header="Expected">
+      <Column field="expectedDate" header="Expected" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Po).expectedDate" />
         </template>
       </Column>
-      <Column field="status" header="Status">
+      <Column field="status" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as Po).status" />
         </template>
       </Column>
-      <Column field="subtotal" header="Subtotal" class="text-right">
+      <Column field="subtotal" header="Subtotal" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Po).subtotal" />
         </template>

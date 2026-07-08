@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -133,26 +134,26 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="name" header="Name" />
-      <Column field="customerName" header="Customer" />
-      <Column field="frequency" header="Frequency">
+      <Column field="name" header="Name" :pt="stackPt" />
+      <Column field="customerName" header="Customer" :pt="stackPt" />
+      <Column field="frequency" header="Frequency" :pt="stackPt">
         <template #body="{ data }">
           {{ frequencyLabel((data as RecurrenceProfile).frequency) }}
         </template>
       </Column>
-      <Column field="nextRunDate" header="Next Run">
+      <Column field="nextRunDate" header="Next Run" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as RecurrenceProfile).nextRunDate" />
         </template>
       </Column>
-      <Column field="autoIssue" header="Mode">
+      <Column field="autoIssue" header="Mode" :pt="stackPt">
         <template #body="{ data }">
           <span class="text-xs text-surface-500">{{
             (data as RecurrenceProfile).autoIssue ? 'Auto-issue' : 'Draft only'
           }}</span>
         </template>
       </Column>
-      <Column field="active" header="Status">
+      <Column field="active" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <span
             class="text-xs px-2 py-0.5 rounded-full"

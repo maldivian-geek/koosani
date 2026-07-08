@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -139,33 +140,33 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="number" header="Number">
+      <Column field="number" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as Invoice).number ?? '—' }}</span>
         </template>
       </Column>
-      <Column field="customerName" header="Customer" />
-      <Column field="issuedAt" header="Date">
+      <Column field="customerName" header="Customer" :pt="stackPt" />
+      <Column field="issuedAt" header="Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Invoice).issuedAt ?? (data as Invoice).createdAt" />
         </template>
       </Column>
-      <Column field="dueDate" header="Due">
+      <Column field="dueDate" header="Due" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Invoice).dueDate" />
         </template>
       </Column>
-      <Column field="status" header="Status">
+      <Column field="status" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as Invoice).status" />
         </template>
       </Column>
-      <Column field="total" header="Total" class="text-right">
+      <Column field="total" header="Total" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Invoice).total" />
         </template>
       </Column>
-      <Column field="paidAmount" header="Paid" class="text-right">
+      <Column field="paidAmount" header="Paid" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Invoice).paidAmount" />
         </template>

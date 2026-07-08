@@ -584,12 +584,12 @@ Every view follows this shell inside `<main>`:
 
     <!-- filters row -->
     <div class="flex flex-wrap items-center gap-3">
-      <div class="relative">
-        <Search
-          class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 pointer-events-none"
-        />
-        <InputText v-model="search" placeholder="Search…" class="pl-9 w-72" />
-      </div>
+      <IconField>
+        <InputIcon>
+          <Search class="w-4 h-4 text-surface-400" />
+        </InputIcon>
+        <InputText v-model="search" placeholder="Search…" class="w-72" />
+      </IconField>
       <Select
         v-model="filterValue"
         :options="OPTIONS"
@@ -617,6 +617,10 @@ Every view follows this shell inside `<main>`:
   </div>
 </template>
 ```
+
+**Search input: use `<IconField>`/`<InputIcon>`, not a manual `absolute` + `pl-*` icon overlay.** The manual version (a `relative` wrapper, an absolutely-positioned icon, and `pl-9` on `<InputText>` to clear it) looks fine in isolation but the icon visibly overlapped the input's text/placeholder in practice — PrimeVue's own theme CSS sets the input's padding with enough precedence to not reliably yield to a Tailwind `pl-*` utility. `<IconField>`/`<InputIcon>` (PrimeVue 4) are the official components for this exact pattern — they coordinate the input's padding via PrimeVue's own theme system instead of fighting it with a utility class, so there's no positioning to get wrong.
+
+**`EntityList`'s `DataTable` stacks into labeled cards below `md`.** PrimeVue 4 dropped the old `responsiveLayout="stack"` feature from PrimeVue 3 — the `breakpoint` prop still exists on `DataTable` but isn't wired to anything in this version. Achieved via the `pt` prop instead (not raw CSS/`:deep()` — see §4's PrimeVue-override rule): `EntityList.vue`'s `DataTable` `pt` hides `thead` and turns each body row into a bordered flex-column card below `md`; every `<Column>` in every list view passes `:pt="stackPt"` (`shared/ui/entityListColumnPt.ts`), which reads the column's own `header` prop and sets `data-label` on its body cell — a CSS `content: attr(data-label)` pseudo-element then shows that as a label prefix on mobile, hidden again at `md`+. Any _new_ `<Column>` in an `EntityList`-based view must include `:pt="stackPt"` too, or it'll render as a bare unlabeled value on mobile instead of "Label: value".
 
 ---
 
@@ -750,12 +754,12 @@ Gate buttons, action columns, and modals with `v-if="canManage"`. Never hide the
 
 ### Icon sizes (Lucide via `lucide-vue-next`)
 
-| Context                                     | Class                                          |
-| ------------------------------------------- | ---------------------------------------------- |
-| Button icon, sidebar nav item               | `w-4 h-4`                                      |
-| Small toggle buttons (eye, etc.)            | `w-3.5 h-3.5`                                  |
-| Topbar (bell, hamburger), mobile bottom nav | `w-5 h-5`                                      |
-| Search input prefix                         | `w-4 h-4 text-surface-400 pointer-events-none` |
+| Context                                     | Class                      |
+| ------------------------------------------- | -------------------------- |
+| Button icon, sidebar nav item               | `w-4 h-4`                  |
+| Small toggle buttons (eye, etc.)            | `w-3.5 h-3.5`              |
+| Topbar (bell, hamburger), mobile bottom nav | `w-5 h-5`                  |
+| Search input prefix (inside `<InputIcon>`)  | `w-4 h-4 text-surface-400` |
 
 ### Status label / severity maps
 

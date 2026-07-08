@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
 import Button from 'primevue/button'
 import { Search, Plus } from 'lucide-vue-next'
 
@@ -57,12 +59,12 @@ function onPage(event: { page: number; rows: number }) {
   <div class="space-y-4">
     <!-- filters row -->
     <div class="flex flex-wrap items-center gap-3">
-      <div class="relative">
-        <Search
-          class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 pointer-events-none"
-        />
-        <InputText v-model="q" placeholder="Search…" class="pl-9 w-72" @input="onSearchInput" />
-      </div>
+      <IconField>
+        <InputIcon>
+          <Search class="w-4 h-4 text-surface-400" />
+        </InputIcon>
+        <InputText v-model="q" placeholder="Search…" class="w-72" @input="onSearchInput" />
+      </IconField>
       <Button v-if="q" label="Reset" severity="secondary" text @click="clearSearch" />
       <slot name="filters" />
       <span class="ml-auto text-xs text-surface-400">{{ totalRecords }} {{ entity }}s</span>
@@ -90,6 +92,12 @@ function onPage(event: { page: number; rows: number }) {
         row-hover
         :pt="{
           root: { class: 'text-sm!' },
+          thead: { class: 'hidden! md:table-header-group!' },
+          tbody: { class: 'block! md:table-row-group!' },
+          bodyRow: {
+            class:
+              'flex! flex-col gap-1 mb-3 p-3 border border-surface-200 dark:border-surface-700 rounded-lg md:table-row! md:flex-none md:gap-0 md:mb-0 md:p-0 md:border-0 md:rounded-none',
+          },
           paginator: { class: 'border-t! border-surface-100! px-4! py-3!' },
         }"
         @page="onPage"

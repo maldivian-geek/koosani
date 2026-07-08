@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import ExpenseDrawer from '../ExpenseDrawer.vue'
@@ -132,24 +133,24 @@ onMounted(() => void load())
           @change="onBillableFilterChange"
         />
       </template>
-      <Column field="expenseDate" header="Date" style="width: 130px">
+      <Column field="expenseDate" header="Date" style="width: 130px" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Expense).expenseDate" />
         </template>
       </Column>
-      <Column field="category" header="Category" />
-      <Column field="description" header="Description" />
-      <Column header="Amount" class="text-right" style="width: 120px">
+      <Column field="category" header="Category" :pt="stackPt" />
+      <Column field="description" header="Description" :pt="stackPt" />
+      <Column header="Amount" class="text-right" style="width: 120px" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Expense).amount" />
         </template>
       </Column>
-      <Column header="Total (incl. GST)" class="text-right" style="width: 140px">
+      <Column header="Total (incl. GST)" class="text-right" style="width: 140px" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Expense).total" />
         </template>
       </Column>
-      <Column header="Billable" style="width: 110px">
+      <Column header="Billable" style="width: 110px" :pt="stackPt">
         <template #body="{ data }">
           <span v-if="(data as Expense).billable" class="text-xs text-primary-500 font-medium">
             {{ (data as Expense).invoicedAt ? 'Invoiced' : 'Billable' }}

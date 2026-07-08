@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import Column from 'primevue/column'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import ItemDrawer from '../ItemDrawer.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -146,18 +147,18 @@ onMounted(() => {
       @create="openCreate"
       @row-click="onRowClick"
     >
-      <Column field="sku" header="SKU" sortable />
-      <Column field="name" header="Name" sortable />
-      <Column field="unit" header="Unit" />
-      <Column header="Category">
+      <Column field="sku" header="SKU" sortable :pt="stackPt" />
+      <Column field="name" header="Name" sortable :pt="stackPt" />
+      <Column field="unit" header="Unit" :pt="stackPt" />
+      <Column header="Category" :pt="stackPt">
         <template #body="{ data }">{{ categoryName((data as Item).categoryId) }}</template>
       </Column>
-      <Column header="GST Category">
+      <Column header="GST Category" :pt="stackPt">
         <template #body="{ data }">{{
           GST_LABELS[(data as Item).gstCategory] ?? (data as Item).gstCategory
         }}</template>
       </Column>
-      <Column field="defaultPrice" header="Price (MVR)" />
+      <Column field="defaultPrice" header="Price (MVR)" :pt="stackPt" />
     </EntityList>
 
     <ItemDrawer

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import ProjectDrawer from '../ProjectDrawer.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
@@ -95,13 +96,13 @@ onMounted(() => void load())
       @create="openCreate"
       @row-click="onRowClick"
     >
-      <Column field="name" header="Name" sortable />
-      <Column header="Status" style="width: 120px">
+      <Column field="name" header="Name" sortable :pt="stackPt" />
+      <Column header="Status" style="width: 120px" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as Project).status" />
         </template>
       </Column>
-      <Column header="Default rate" style="width: 130px">
+      <Column header="Default rate" style="width: 130px" :pt="stackPt">
         <template #body="{ data }">
           {{ (data as Project).defaultBillableRate ?? '—' }}
         </template>

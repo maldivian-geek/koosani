@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -77,13 +78,13 @@ onMounted(() => void load())
       @search="onSearch"
       @row-click="onRowClick"
     >
-      <Column field="deliveryNoteNumber" header="Number">
+      <Column field="deliveryNoteNumber" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as DeliveryNote).deliveryNoteNumber }}</span>
         </template>
       </Column>
-      <Column field="customerName" header="Customer" />
-      <Column field="issueDate" header="Date">
+      <Column field="customerName" header="Customer" :pt="stackPt" />
+      <Column field="issueDate" header="Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as DeliveryNote).issueDate" />
         </template>

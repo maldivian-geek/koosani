@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import Column from 'primevue/column'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import CustomerDrawer from '../CustomerDrawer.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -118,11 +119,11 @@ onMounted(() => void load())
       @create="openCreate"
       @row-click="onRowClick"
     >
-      <Column field="name" header="Name" sortable />
-      <Column field="tin" header="TIN" />
-      <Column field="email" header="Email" />
-      <Column field="phone" header="Phone" />
-      <Column field="creditTermsDays" header="Terms (days)" />
+      <Column field="name" header="Name" sortable :pt="stackPt" />
+      <Column field="tin" header="TIN" :pt="stackPt" />
+      <Column field="email" header="Email" :pt="stackPt" />
+      <Column field="phone" header="Phone" :pt="stackPt" />
+      <Column field="creditTermsDays" header="Terms (days)" :pt="stackPt" />
     </EntityList>
 
     <CustomerDrawer

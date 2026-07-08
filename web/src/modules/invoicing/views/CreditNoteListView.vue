@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -87,23 +88,23 @@ onMounted(() => void load())
       @search="onSearch"
       @row-click="onRowClick"
     >
-      <Column field="creditNoteNumber" header="Number">
+      <Column field="creditNoteNumber" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as CreditNote).creditNoteNumber ?? '—' }}</span>
         </template>
       </Column>
-      <Column field="customerName" header="Customer" />
-      <Column header="Date">
+      <Column field="customerName" header="Customer" :pt="stackPt" />
+      <Column header="Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as CreditNote).issueDate ?? (data as CreditNote).createdAt" />
         </template>
       </Column>
-      <Column field="status" header="Status">
+      <Column field="status" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as CreditNote).status" />
         </template>
       </Column>
-      <Column field="total" header="Total" class="text-right">
+      <Column field="total" header="Total" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as CreditNote).total" />
         </template>

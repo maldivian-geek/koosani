@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -131,31 +132,31 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="number" header="Number">
+      <Column field="number" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as Bill).number ?? '—' }}</span>
         </template>
       </Column>
-      <Column field="supplierName" header="Supplier" />
-      <Column field="supplierRef" header="Supplier Ref">
+      <Column field="supplierName" header="Supplier" :pt="stackPt" />
+      <Column field="supplierRef" header="Supplier Ref" :pt="stackPt">
         <template #body="{ data }">{{ (data as Bill).supplierRef ?? '—' }}</template>
       </Column>
-      <Column field="billDate" header="Bill Date">
+      <Column field="billDate" header="Bill Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Bill).billDate" />
         </template>
       </Column>
-      <Column field="dueDate" header="Due">
+      <Column field="dueDate" header="Due" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Bill).dueDate" />
         </template>
       </Column>
-      <Column field="status" header="Status">
+      <Column field="status" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as Bill).status" />
         </template>
       </Column>
-      <Column field="total" header="Total" class="text-right">
+      <Column field="total" header="Total" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Bill).total" />
         </template>

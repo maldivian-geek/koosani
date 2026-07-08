@@ -6,6 +6,7 @@ import Column from 'primevue/column'
 import AutoComplete from 'primevue/autocomplete'
 import { ArrowLeft } from 'lucide-vue-next'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import DateCell from '../../../shared/ui/DateCell.vue'
 import { apiFetch } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -122,16 +123,16 @@ onMounted(() => void load())
           @clear="onItemFilterChange"
         />
       </template>
-      <Column field="movedAt" header="Date" style="width: 160px">
+      <Column field="movedAt" header="Date" style="width: 160px" :pt="stackPt">
         <template #body="{ data }"><DateCell :date="(data as Movement).movedAt" /></template>
       </Column>
-      <Column header="Item" style="width: 220px">
+      <Column header="Item" style="width: 220px" :pt="stackPt">
         <template #body="{ data }">
           {{ (data as Movement).itemName }}
           <span class="text-surface-400 text-xs">({{ (data as Movement).itemSku }})</span>
         </template>
       </Column>
-      <Column header="Qty" class="text-right" style="width: 100px">
+      <Column header="Qty" class="text-right" style="width: 100px" :pt="stackPt">
         <template #body="{ data }">
           <span
             :class="
@@ -144,10 +145,10 @@ onMounted(() => void load())
           </span>
         </template>
       </Column>
-      <Column header="Source" style="width: 130px">
+      <Column header="Source" style="width: 130px" :pt="stackPt">
         <template #body="{ data }">{{ sourceLabel((data as Movement).source) }}</template>
       </Column>
-      <Column field="reason" header="Reason" />
+      <Column field="reason" header="Reason" :pt="stackPt" />
     </EntityList>
   </div>
 </template>

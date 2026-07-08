@@ -4,6 +4,7 @@ import Column from 'primevue/column'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import UserDrawer from '../UserDrawer.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
@@ -150,9 +151,9 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="name" header="Name" sortable />
-      <Column field="email" header="Email" />
-      <Column field="role" header="Role">
+      <Column field="name" header="Name" sortable :pt="stackPt" />
+      <Column field="email" header="Email" :pt="stackPt" />
+      <Column field="role" header="Role" :pt="stackPt">
         <template #body="{ data }: { data: AdminUser }">
           <Tag :value="data.role" :severity="ROLE_SEVERITY[data.role]" class="capitalize" />
         </template>

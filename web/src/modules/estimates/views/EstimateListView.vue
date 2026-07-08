@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import EntityList from '../../../shared/ui/EntityList.vue'
+import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -130,28 +131,28 @@ onMounted(() => void load())
         />
       </template>
 
-      <Column field="estimateNumber" header="Number">
+      <Column field="estimateNumber" header="Number" :pt="stackPt">
         <template #body="{ data }">
           <span class="font-mono text-sm">{{ (data as Estimate).estimateNumber ?? '—' }}</span>
         </template>
       </Column>
-      <Column field="customerName" header="Customer" />
-      <Column field="issueDate" header="Date">
+      <Column field="customerName" header="Customer" :pt="stackPt" />
+      <Column field="issueDate" header="Date" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Estimate).issueDate ?? (data as Estimate).createdAt" />
         </template>
       </Column>
-      <Column field="expiryDate" header="Valid Until">
+      <Column field="expiryDate" header="Valid Until" :pt="stackPt">
         <template #body="{ data }">
           <DateCell :date="(data as Estimate).expiryDate" />
         </template>
       </Column>
-      <Column field="status" header="Status">
+      <Column field="status" header="Status" :pt="stackPt">
         <template #body="{ data }">
           <StatusTag :status="(data as Estimate).status" />
         </template>
       </Column>
-      <Column field="total" header="Total" class="text-right">
+      <Column field="total" header="Total" class="text-right" :pt="stackPt">
         <template #body="{ data }">
           <MoneyCell :amount="(data as Estimate).total" />
         </template>
