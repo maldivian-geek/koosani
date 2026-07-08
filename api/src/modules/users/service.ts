@@ -144,7 +144,7 @@ export async function create(
     expiresAt: new Date(Date.now() + INVITE_EXPIRY_MS),
   })
 
-  const link = `${config.FRONTEND_URL}/auth/accept-invite?token=${token}`
+  const link = `${config.FRONTEND_URL}/accept-invite?token=${token}`
   await sendEmail(inviteEmail({ to: user.email, link, inviterName: inviter?.name ?? 'An admin' }))
 
   return toSafeUser(user)

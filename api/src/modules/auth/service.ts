@@ -262,7 +262,7 @@ export async function requestMagicLink(email: string): Promise<void> {
     expiresAt,
   })
 
-  const link = `${config.FRONTEND_URL}/auth/magic-link?token=${token}`
+  const link = `${config.FRONTEND_URL}/magic-link?token=${token}`
   await sendEmail(magicLinkEmail({ to: user.email, link }))
 }
 
@@ -317,7 +317,7 @@ export async function forgotPassword(email: string): Promise<void> {
     expiresAt,
   })
 
-  const link = `${config.FRONTEND_URL}/auth/reset-password?token=${token}`
+  const link = `${config.FRONTEND_URL}/reset-password?token=${token}`
   await sendEmail(passwordResetEmail({ to: user.email, link }))
 }
 

@@ -33,6 +33,11 @@ export const router = createRouter({
       meta: { public: true, title: 'Reset Password' },
     },
     {
+      path: '/magic-link',
+      component: () => import('../modules/auth/views/MagicLinkVerifyView.vue'),
+      meta: { public: true, title: 'Signing in…' },
+    },
+    {
       path: '/accept-invite',
       component: () => import('../modules/auth/views/AcceptInviteView.vue'),
       meta: { public: true, title: 'Accept Invitation' },
