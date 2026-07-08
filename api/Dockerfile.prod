@@ -14,7 +14,7 @@
 FROM node:22 AS build
 
 WORKDIR /repo
-RUN corepack enable && corepack prepare pnpm@11.4.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY api/package.json ./api/package.json
@@ -47,7 +47,7 @@ RUN pnpm --filter @koosani/api build
 FROM node:22 AS runtime
 
 WORKDIR /repo
-RUN corepack enable && corepack prepare pnpm@11.4.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 ENV NODE_ENV=production
 # @koosani/shared's package.json "exports" points at ./src/*.ts by default,
 # so tsx (dev mode) can run the raw TS with no separate build step. Plain

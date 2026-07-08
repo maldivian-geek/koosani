@@ -9,7 +9,7 @@
 FROM node:22 AS build
 
 WORKDIR /repo
-RUN corepack enable && corepack prepare pnpm@11.4.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY api/package.json ./api/package.json
