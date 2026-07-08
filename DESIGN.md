@@ -504,32 +504,31 @@ Never display backend error messages verbatim in auth views (per SECURITY.md). O
 
 ### AppLayout.vue
 
+Actual component names: `SidebarNav.vue` (not `AppSidebar.vue`) and `TopBar.vue` (not `AppTopBar.vue`) — this doc previously named them differently before the responsive rework below was actually built.
+
 ```vue
 <template>
   <div class="flex min-h-dvh bg-surface-50 dark:bg-surface-950 overflow-hidden">
-    <AppSidebar v-model:mobile-open="sidebarOpen" />
+    <SidebarNav v-model:mobile-open="sidebarOpen" />
+    <div class="hidden md:block w-16 lg:w-64 shrink-0" />
 
     <div class="flex flex-col flex-1 min-w-0">
-      <AppTopBar v-model:notif-open="notifOpen" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-      <main class="flex-1 overflow-y-auto p-4 md:p-6 pb-20 lg:pb-6">
+      <TopBar @toggle-sidebar="sidebarOpen = !sidebarOpen" />
+      <BreadcrumbBar />
+      <main class="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
         <RouterView />
       </main>
     </div>
 
     <!-- mobile bottom nav -->
     <nav
-      class="fixed bottom-0 inset-x-0 bg-surface-0 dark:bg-surface-900 border-t border-surface-200 dark:border-surface-700 flex lg:hidden z-30"
+      class="fixed bottom-0 inset-x-0 bg-surface-0 dark:bg-surface-900 border-t border-surface-200 dark:border-surface-700 flex md:hidden z-30"
     >
-      <RouterLink
-        v-for="item in bottomNav"
-        :key="item.to"
-        :to="item.to"
-        class="flex-1 flex flex-col items-center py-2 text-xs gap-1 text-surface-500 hover:text-surface-900 transition-colors"
-        active-class="text-surface-900! font-medium"
-      >
-        <component :is="iconMap[item.icon]" class="w-5 h-5" />
+      <RouterLink v-for="item in bottomNavLinks" :key="item.to" :to="item.to" ...>
+        <component :is="item.icon" class="w-5 h-5" />
         {{ item.label }}
       </RouterLink>
+      <button @click="sidebarOpen = true"><MenuIcon class="w-5 h-5" />More</button>
     </nav>
   </div>
 </template>
@@ -538,23 +537,29 @@ Never display backend error messages verbatim in auth views (per SECURITY.md). O
 **Key layout tokens:**
 
 - Page background: `bg-surface-50` (light grey, not white).
-- Content padding: `p-4 md:p-6` with `pb-20 lg:pb-6` for mobile bottom-nav clearance.
+- Content padding: `p-4 md:p-6` with `pb-20 md:pb-6` for mobile bottom-nav clearance — **`md`, not `lg`**: the bottom nav is phone-only (see below), so clearance only needs to apply below `md`, matching where the bottom nav actually disappears.
 - All views render inside `<main>` via `<RouterView />`.
 
-### AppSidebar.vue
+**Mobile bottom nav:** phone-only (`flex md:hidden`, not `lg:hidden`) — deliberately narrower than the sidebar's own `md` tablet breakpoint, since the tablet icon-rail (below) is already visible at `md` and showing the bottom nav too would be two navigation UIs competing for space on the same screen. Content: Dashboard, Invoices, Customers as direct links, plus a "More" button that opens the same drawer the topbar's hamburger opens (not a 4th route).
 
-- **Mobile:** PrimeVue `<Drawer>` overlay, slides in from left, `w-64`.
-- **Tablet (md):** fixed aside `w-16` — icons only (text hidden with `md:hidden lg:block`).
-- **Desktop (lg):** fixed aside `w-64` — icons and labels.
+### SidebarNav.vue / SidebarContent.vue
+
+The nav content (brand block, nav groups, user info + sign-out) lives in `SidebarContent.vue`, a single source rendered twice by `SidebarNav.vue` so the mobile drawer and the fixed rail never drift apart:
+
+- **Mobile (below `md`):** PrimeVue `<Drawer position="left">`, `SidebarContent` with full labels always shown (`:compact="false"`), width `16rem` (`w-64` equivalent). Triggered by the topbar's hamburger (`v-model:mobile-open`); auto-closes on route change (`watch(() => route.path, ...)`) so tapping a link doesn't leave the drawer open over the new page.
+- **Tablet (`md`):** fixed aside `w-16` — `SidebarContent compact` hides every label (`md:hidden lg:block` on each label span) — icons only.
+- **Desktop (`lg`):** fixed aside `w-64` — same `compact` instance, labels reappear at `lg`.
 - Background: `bg-surface-0`, right border: `border-r border-surface-200`.
-- A spacer `<div class="hidden md:block md:w-16 lg:w-64">` pushes main content right.
+- A spacer `<div class="hidden md:block w-16 lg:w-64">` pushes main content right, matching the aside's own width classes at each breakpoint.
 
 **Active nav item** style: `bg-surface-900! text-surface-0! hover:bg-surface-800!` — dark background, white text.
 **Inactive:** `text-surface-600 hover:bg-surface-100 hover:text-surface-900`.
 
-### AppTopBar.vue
+### TopBar.vue
 
-Holds: hamburger (mobile only), page title (`flex-1 text-base font-semibold text-surface-900`), optional live clock (`font-mono tabular-nums`), the dark-mode toggle (sun/moon), the notification bell with unread badge, and the user avatar + `Menu` popup. Topbar height is `h-16`, surface `bg-surface-0`, bottom border `border-surface-200`. Button backgrounds use `bg-surface-200 hover:bg-surface-300`.
+Holds: hamburger (mobile only, `md:hidden`, emits `toggle-sidebar`), page title (`flex-1 text-base font-semibold text-surface-900`), the dark-mode toggle (sun/moon), a notification bell, and the user avatar + `Menu` popup. Topbar height is `h-16`, surface `bg-surface-0`, bottom border `border-surface-200`. Button backgrounds use `bg-surface-200 hover:bg-surface-300`.
+
+**The notification bell is currently a layout placeholder only** — static icon, `title="Notifications (coming soon)"`, no click handler, muted colors (`text-surface-400`, no hover state) so it doesn't read as a broken interactive control. No notifications feature (store, backend, unread badge) exists in this codebase yet; build one before wiring this up for real.
 
 ### View layout
 

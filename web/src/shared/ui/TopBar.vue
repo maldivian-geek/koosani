@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChevronDown, Sun, Moon } from 'lucide-vue-next'
+import { ChevronDown, Sun, Moon, Menu as MenuIcon, Bell } from 'lucide-vue-next'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { useAuthStore } from '../../stores/auth.js'
 import { useUiStore } from '../../stores/ui.js'
+
+const emit = defineEmits<{ 'toggle-sidebar': [] }>()
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -37,6 +39,15 @@ const menuItems = ref<MenuItem[]>([
   <header
     class="h-16 bg-surface-0 dark:bg-surface-900 border-b border-surface-200 dark:border-surface-800 flex items-center px-4 gap-3 shrink-0 z-20"
   >
+    <!-- sidebar toggle, mobile only -->
+    <button
+      class="md:hidden p-2 -ml-2 rounded-lg text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+      aria-label="Open menu"
+      @click="emit('toggle-sidebar')"
+    >
+      <MenuIcon class="w-5 h-5" />
+    </button>
+
     <h1 class="flex-1 text-base font-semibold text-surface-900 dark:text-surface-50">
       {{ pageTitle }}
     </h1>
@@ -49,6 +60,14 @@ const menuItems = ref<MenuItem[]>([
     >
       <Sun v-if="uiStore.isDark" class="w-4 h-4" />
       <Moon v-else class="w-4 h-4" />
+    </button>
+
+    <!-- notifications — layout placeholder only, no backing feature yet -->
+    <button
+      class="p-2 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-400 dark:text-surface-500 cursor-default"
+      title="Notifications (coming soon)"
+    >
+      <Bell class="w-4 h-4" />
     </button>
 
     <!-- user menu -->
