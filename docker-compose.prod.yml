@@ -74,7 +74,7 @@ services:
     command: ['sh', '-c', 'pnpm exec drizzle-kit migrate && node dist/db/seedProd.js']
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=prefer
       ADMIN_BUSINESS_NAME: ${ADMIN_BUSINESS_NAME:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_NAME: ${ADMIN_NAME:-}
@@ -130,7 +130,7 @@ services:
     command: ['node', 'dist/server.js']
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=prefer
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
@@ -196,7 +196,7 @@ services:
     command: ['node', 'dist/worker.js']
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=prefer
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
