@@ -4,10 +4,22 @@
 # web/Dockerfile.prod) instead of the dev-mode tsx-watch/vite-dev-server
 # containers.
 #
+# Postgres is NOT a service in this file — it's a separate Coolify-managed
+# standalone database resource (its own "Database" resource, not part of this
+# docker-compose application), reachable over Coolify's shared external
+# `coolify` Docker network by its resource UUID (see DB_HOST below). Modeled
+# on the same pattern already used by another Maldivian Geek project
+# (roanuedhuru_v3) on this same Coolify instance. This trades the simplicity
+# of one self-contained compose stack for: a Coolify-managed backup/restore
+# UI for the database, and the ability to view its logs/terminal directly
+# without picking through a multi-container compose app's service selector.
+#
 # All domain-dependent and secret values are ${VAR} placeholders — set them
 # as environment variables on the Coolify resource (or in a .env file next
 # to this compose file if deploying by hand). Required:
-#   POSTGRES_PASSWORD   - any strong password
+#   DB_HOST              - the separate Postgres Coolify resource's UUID
+#                          (its hostname on the shared `coolify` network)
+#   DB_PASSWORD          - that resource's postgres user password
 #   JWT_SECRET           - >= 32 chars, e.g. `openssl rand -base64 32`
 #   FRONTEND_URL         - the public URL the web app will be served from
 #                          (also used as the CORS allowlist entry)
@@ -17,9 +29,12 @@
 #                          just be a runtime env var)
 #   ADMIN_BUSINESS_NAME, ADMIN_EMAIL, ADMIN_NAME
 #                        - first-run admin bootstrap (api/src/db/seedProd.ts).
-#                          Runs on every `api` container start via
-#                          api/docker-entrypoint.sh, but is idempotent — a
-#                          no-op once any business row exists. Optional:
+#                          Runs once per deploy via the dedicated `migrate`
+#                          service below (not on every `api`/`worker` start
+#                          the way api/docker-entrypoint.sh's default flow
+#                          does for local dev's docker-compose.yml), but is
+#                          idempotent — a no-op once any business row exists.
+#                          Optional:
 #                          ADMIN_PASSWORD (a secure one is generated and
 #                          printed once to the api container's logs if unset
 #                          — check `docker logs` right after first deploy),
@@ -44,20 +59,31 @@
 # whatever headroom the actual server has.
 
 services:
-  postgres:
-    image: postgres:16-alpine
+  # One-shot: runs migrations then the idempotent production seed against the
+  # separate Postgres resource, then exits. `api`/`worker` wait for this to
+  # exit 0 (depends_on below) before starting, instead of each running
+  # migrate+seed themselves on every start (api/docker-entrypoint.sh's
+  # default flow, still used as-is by local dev's docker-compose.yml, which
+  # keeps postgres embedded and doesn't need this separate step). Modeled on
+  # roanuedhuru_v3's docker-compose.coolify.yml `migrate` service.
+  migrate:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.prod
+    restart: 'no'
+    command: ['sh', '-c', 'pnpm exec drizzle-kit migrate && node dist/db/seedProd.js']
     environment:
-      POSTGRES_USER: koosani
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: koosani
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U koosani']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      NODE_ENV: production
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
+      ADMIN_BUSINESS_NAME: ${ADMIN_BUSINESS_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_TIN: ${ADMIN_TIN:-}
+      ADMIN_ADDRESS: ${ADMIN_ADDRESS:-}
+      ADMIN_PHONE: ${ADMIN_PHONE:-}
+    networks:
+      - coolify
     deploy:
       resources:
         limits:
@@ -98,9 +124,13 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile.prod
+    # Bypasses api/docker-entrypoint.sh's default migrate+seed+serve flow
+    # (still used by local dev's docker-compose.yml) — migration/seed now
+    # happens once in the `migrate` service above, not on every api start.
+    command: ['node', 'dist/server.js']
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://koosani:${POSTGRES_PASSWORD}@postgres:5432/koosani
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
@@ -135,10 +165,13 @@ services:
     expose:
       - '3000'
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    networks:
+      - default
+      - coolify
     restart: unless-stopped
     healthcheck:
       test:
@@ -163,7 +196,7 @@ services:
     command: ['node', 'dist/worker.js']
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://koosani:${POSTGRES_PASSWORD}@postgres:5432/koosani
+      DATABASE_URL: postgresql://koosani:${DB_PASSWORD}@${DB_HOST}:5432/koosani?sslmode=require
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_URL: ${FRONTEND_URL}
@@ -182,10 +215,13 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    networks:
+      - default
+      - coolify
     restart: unless-stopped
     deploy:
       resources:
@@ -209,6 +245,14 @@ services:
           memory: 128M
 
 volumes:
-  postgres_data:
   redis_data:
   clamav_data:
+
+networks:
+  # Coolify's own shared network — external because Coolify creates it, not
+  # this compose file. `migrate`/`api`/`worker` join it to reach the separate
+  # Postgres database resource (by its resource UUID as hostname); `redis`,
+  # `clamav`, and `web` don't need it, so they stay on the implicit default
+  # network only.
+  coolify:
+    external: true
