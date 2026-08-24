@@ -44,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Local dev Postgres couldn't start at all under `postgres:18-alpine`** (`docker-compose.yml`): 18+ images require the volume mount at `/var/lib/postgresql` (data in a subdirectory), not the pre-18 `/var/lib/postgresql/data` — the container exited with an explicit refusal on every boot since the 16→18 image bump. Mount corrected, and the service now uses a fresh `postgres18_data` volume; the old `postgres_data` volume holds a pg16-era cluster this image cannot run and is left untouched for manual recovery or deletion (`docker volume rm koosani_postgres_data` once confirmed unneeded).
+
 - **Auth security scan follow-ups** — role change / delete no longer leave a live JWT with stale access, portal session-cache parity, a bogus accept-invite rate limiter, and portal draft-document exposure (SECURITY.md §JWT, §13.2, §Rate Limiting, §13.14).
   - `users.update` bumps `token_version` (inside the existing transaction) when `data.role` is defined and differs from the current role; `users.softDelete` bumps it too, in the same transaction as the soft delete. Both routes (`PATCH /users/:id` when the body includes `role`, `DELETE /users/:id`) call `invalidateSessionCache` after the service call so the in-process 30s session-cache window (SECURITY.md §13.2) doesn't leave a demoted or deleted user's old JWT accepted after the DB-level revocation already happened (FUNCTIONS.md §users).
   - `auth.resetPassword` now returns `{ ok: true; userId }` instead of `{ ok: true }`; `POST /auth/reset-password` uses it to call `invalidateSessionCache(userId)`, closing the same cache-window gap for the reset-password flow (FUNCTIONS.md §auth).

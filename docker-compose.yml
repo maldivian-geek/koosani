@@ -1,4 +1,4 @@
-services:
+﻿services:
   postgres:
     image: postgres:18-alpine
     environment:
@@ -8,7 +8,10 @@ services:
     ports:
       - '5434:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # postgres:18 images require the mount at /var/lib/postgresql (data lives in a subdir).
+      # postgres18_data is a fresh volume — the old postgres_data volume holds a pg16-era
+      # cluster this image cannot run; it is left untouched for manual recovery/deletion.
+      - postgres18_data:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U koosani']
       interval: 10s
@@ -27,7 +30,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # File upload virus scanning (SECURITY.md §13.5, STACK.md "open decision" #2).
+  # File upload virus scanning (SECURITY.md Â§13.5, STACK.md "open decision" #2).
   # Set CLAMAV_HOST=localhost CLAMAV_PORT=3311 in api/.env to use it locally.
   # Freshclam takes a few minutes to pull virus definitions on first start.
   clamav:
@@ -43,12 +46,12 @@ services:
       retries: 10
       start_period: 180s
 
-  # App containers (dev mode — same `tsx watch` / `vite` dev servers as
+  # App containers (dev mode â€” same `tsx watch` / `vite` dev servers as
   # `pnpm run dev` on the host, just containerized). Host port 3001/5180 to
-  # avoid clashing with the host-run dev servers on 3000/5173-5174 — note
+  # avoid clashing with the host-run dev servers on 3000/5173-5174 â€” note
   # 5175 was tried first but collides with an unrelated process already
   # bound there via IPv6 loopback on this machine. Secrets (JWT_SECRET,
-  # RESEND_API_KEY, etc.) come from the gitignored api/.env — never
+  # RESEND_API_KEY, etc.) come from the gitignored api/.env â€” never
   # hardcoded here; only non-secret container-network wiring is inline.
   api:
     build:
@@ -110,6 +113,6 @@ services:
       - api
 
 volumes:
-  postgres_data:
+  postgres18_data:
   redis_data:
   clamav_data:
