@@ -17,6 +17,12 @@ import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useAuthStore } from '../../../stores/auth.js'
 import { OrderListPatch } from '@koosani/shared'
 
+// Quantities transport as NUMERIC strings ("24.0000") — trim insignificant
+// trailing decimals for display only; the raw string is what gets patched.
+function formatQty(q: string): string {
+  return q.includes('.') ? q.replace(/0+$/, '').replace(/\.$/, '') : q
+}
+
 export interface OrderListLine {
   id: string
   orderListId: string
@@ -296,7 +302,7 @@ onMounted(() => void load())
             <template #body="{ data }">{{ (data as OrderListLine).itemName }}</template>
           </Column>
           <Column header="Qty" style="width: 90px" :pt="stackPt">
-            <template #body="{ data }">{{ (data as OrderListLine).qty }}</template>
+            <template #body="{ data }">{{ formatQty((data as OrderListLine).qty) }}</template>
           </Column>
           <Column header="UOM" style="width: 90px" :pt="stackPt">
             <template #body="{ data }">{{ (data as OrderListLine).uom }}</template>
