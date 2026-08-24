@@ -64,6 +64,8 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
+  // PrimeUI community license (PrimeVue 5+) — same key as web/src/main.ts.
+  license: import.meta.env.VITE_PRIMEVUE_LICENSE_KEY as string | undefined,
   theme: {
     preset: Roanuedhuru,
     options: { darkModeSelector: '.dark' },

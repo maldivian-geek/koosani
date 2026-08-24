@@ -63,6 +63,10 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
+  // PrimeUI community license (PrimeVue 5+). Build-time only — baked into the
+  // JS bundle, not a server secret; without it PrimeVue shows a small
+  // "Invalid PrimeUI License" corner banner but nothing breaks.
+  license: import.meta.env.VITE_PRIMEVUE_LICENSE_KEY as string | undefined,
   theme: {
     preset: Roanuedhuru,
     options: { darkModeSelector: '.dark' },

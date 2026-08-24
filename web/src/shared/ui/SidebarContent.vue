@@ -22,7 +22,7 @@ import {
   ScrollText,
   Settings,
   LogOut,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { useAuthStore } from '../../stores/auth.js'
 
 interface NavItem {

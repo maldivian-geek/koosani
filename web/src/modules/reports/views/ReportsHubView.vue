@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { TrendingUp, TrendingDown, Package, Users, Building2, FileText } from 'lucide-vue-next'
+import { TrendingUp, TrendingDown, Package, Users, Building2, FileText } from '@lucide/vue'
 
 const router = useRouter()
 

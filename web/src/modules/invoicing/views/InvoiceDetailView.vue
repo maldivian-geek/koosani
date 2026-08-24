@@ -23,7 +23,7 @@ import {
   Ban,
   Wallet,
   Truck,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import MoneyInput from '../../../shared/ui/MoneyInput.vue'

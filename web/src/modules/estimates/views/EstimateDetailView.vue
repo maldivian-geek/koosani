@@ -14,7 +14,7 @@ import {
   CheckCircle,
   XCircle,
   ArrowRightCircle,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import DateCell from '../../../shared/ui/DateCell.vue'

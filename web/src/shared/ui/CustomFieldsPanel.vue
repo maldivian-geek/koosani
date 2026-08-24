@@ -4,7 +4,7 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
-import { Pencil, Check, X } from 'lucide-vue-next'
+import { Pencil, Check, X } from '@lucide/vue'
 import { apiFetch, ApiError } from '../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
 

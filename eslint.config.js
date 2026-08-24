@@ -67,10 +67,10 @@ export default tseslint.config(
     },
     rules: {
       // Pull rules from the legacy recommended config object
-      ...pluginVue.configs['vue3-recommended'].rules,
+      // (eslint-plugin-vue 10 renamed 'vue3-recommended' to 'recommended')
+      ...pluginVue.configs['recommended'].rules,
       // Enforce <script setup lang="ts"> on every SFC (CLAUDE.md §5)
       'vue/block-lang': ['error', { script: { lang: 'ts' } }],
-      'vue/script-setup-uses-vars': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },

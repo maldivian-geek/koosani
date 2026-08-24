@@ -9,7 +9,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import AutoComplete from 'primevue/autocomplete'
-import { ClipboardList, SlidersHorizontal } from 'lucide-vue-next'
+import { ClipboardList, SlidersHorizontal } from '@lucide/vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useToast } from 'primevue/usetoast'
 

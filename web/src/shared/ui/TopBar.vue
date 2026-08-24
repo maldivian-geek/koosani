@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChevronDown, Sun, Moon, Menu as MenuIcon, Bell } from 'lucide-vue-next'
+import { ChevronDown, Sun, Moon, Menu as MenuIcon, Bell } from '@lucide/vue'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { useAuthStore } from '../../stores/auth.js'

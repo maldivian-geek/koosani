@@ -9,15 +9,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
 import { useConfirm } from 'primevue/useconfirm'
-import {
-  ArrowLeft,
-  Pencil,
-  CheckCircle,
-  Plus,
-  Trash2,
-  Paperclip,
-  ExternalLink,
-} from 'lucide-vue-next'
+import { ArrowLeft, Pencil, CheckCircle, Plus, Trash2, Paperclip, ExternalLink } from '@lucide/vue'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import MoneyInput from '../../../shared/ui/MoneyInput.vue'

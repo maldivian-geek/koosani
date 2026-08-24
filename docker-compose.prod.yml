@@ -1,10 +1,10 @@
-# Production stack — for Coolify (or any Docker-Compose-based host), not
+﻿# Production stack â€” for Coolify (or any Docker-Compose-based host), not
 # local dev (use docker-compose.yml for that). Builds real production images
 # (compiled JS via api/Dockerfile.prod, a static nginx-served bundle via
 # web/Dockerfile.prod) instead of the dev-mode tsx-watch/vite-dev-server
 # containers.
 #
-# Postgres is NOT a service in this file — it's a separate Coolify-managed
+# Postgres is NOT a service in this file â€” it's a separate Coolify-managed
 # standalone database resource (its own "Database" resource, not part of this
 # docker-compose application), reachable over Coolify's shared external
 # `coolify` Docker network by its resource UUID (see DB_HOST below). Modeled
@@ -14,7 +14,7 @@
 # UI for the database, and the ability to view its logs/terminal directly
 # without picking through a multi-container compose app's service selector.
 #
-# All domain-dependent and secret values are ${VAR} placeholders — set them
+# All domain-dependent and secret values are ${VAR} placeholders â€” set them
 # as environment variables on the Coolify resource (or in a .env file next
 # to this compose file if deploying by hand). Required:
 #   DB_HOST              - the separate Postgres Coolify resource's UUID
@@ -24,7 +24,7 @@
 #   FRONTEND_URL         - the public URL the web app will be served from
 #                          (also used as the CORS allowlist entry)
 #   VITE_API_URL         - the public URL the api will be served from (baked
-#                          into the web bundle at build time — see
+#                          into the web bundle at build time â€” see
 #                          web/Dockerfile.prod's comment on why this can't
 #                          just be a runtime env var)
 #   ADMIN_BUSINESS_NAME, ADMIN_EMAIL, ADMIN_NAME
@@ -33,17 +33,17 @@
 #                          service below (not on every `api`/`worker` start
 #                          the way api/docker-entrypoint.sh's default flow
 #                          does for local dev's docker-compose.yml), but is
-#                          idempotent — a no-op once any business row exists.
+#                          idempotent â€” a no-op once any business row exists.
 #                          Optional:
 #                          ADMIN_PASSWORD (a secure one is generated and
 #                          printed once to the api container's logs if unset
-#                          — check `docker logs` right after first deploy),
+#                          â€” check `docker logs` right after first deploy),
 #                          ADMIN_TIN, ADMIN_ADDRESS, ADMIN_PHONE.
-# FILES_STORAGE defaults to `s3` here (production default) — set S3_BUCKET,
+# FILES_STORAGE defaults to `s3` here (production default) â€” set S3_BUCKET,
 # AWS_REGION, AWS_ENDPOINT_URL (if not AWS itself), AWS_ACCESS_KEY_ID,
 # AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK, not by this app's own
 # config) for file uploads/PDF downloads to actually work. Until then, set
-# FILES_STORAGE=local as a stopgap — api/src/lib/storage.ts's local backend
+# FILES_STORAGE=local as a stopgap â€” api/src/lib/storage.ts's local backend
 # is explicitly dev/test-only (its "signed URLs" are fake `local://` strings,
 # not real download links), so uploads/downloads silently won't work, but
 # everything else in the app runs fine.
@@ -51,10 +51,10 @@
 # (email), GEO_PROVIDER.
 #
 # Every service has a `deploy.resources.limits.memory` cap. This host runs
-# other people's apps too, not just this one — a runtime memory leak here
+# other people's apps too, not just this one â€” a runtime memory leak here
 # should OOM this container alone, not destabilize the whole box. (The build
-# stage has its own separate caps — see api/Dockerfile.prod and
-# web/Dockerfile.prod's NODE_OPTIONS/--network-concurrency comments — after a
+# stage has its own separate caps â€” see api/Dockerfile.prod and
+# web/Dockerfile.prod's NODE_OPTIONS/--network-concurrency comments â€” after a
 # build here took the entire server down once.) Adjust the numbers below to
 # whatever headroom the actual server has.
 
@@ -125,7 +125,7 @@ services:
       context: .
       dockerfile: api/Dockerfile.prod
     # Bypasses api/docker-entrypoint.sh's default migrate+seed+serve flow
-    # (still used by local dev's docker-compose.yml) — migration/seed now
+    # (still used by local dev's docker-compose.yml) â€” migration/seed now
     # happens once in the `migrate` service above, not on every api start.
     command: ['node', 'dist/server.js']
     environment:
@@ -155,13 +155,13 @@ services:
       ADMIN_TIN: ${ADMIN_TIN:-}
       ADMIN_ADDRESS: ${ADMIN_ADDRESS:-}
       ADMIN_PHONE: ${ADMIN_PHONE:-}
-    # No public domain/Traefik routing for api at all — see web/nginx.conf's
+    # No public domain/Traefik routing for api at all â€” see web/nginx.conf's
     # /api/ location block. web/nginx reverse-proxies /api/* to this service
     # internally on the compose network instead, which sidesteps a real
     # Traefik router-priority problem: Coolify auto-generates a
     # Host && PathPrefix(/api) router for api and Host && PathPrefix(/) for
     # web with no explicit priority, and web's catch-all won in practice even
-    # after forcing api's priority explicitly (SECURITY.md §13.12).
+    # after forcing api's priority explicitly (SECURITY.md Â§13.12).
     expose:
       - '3000'
     depends_on:
@@ -234,6 +234,7 @@ services:
       dockerfile: web/Dockerfile.prod
       args:
         VITE_API_URL: ${VITE_API_URL}
+        VITE_PRIMEVUE_LICENSE_KEY: ${VITE_PRIMEVUE_LICENSE_KEY:-}
     expose:
       - '80'
     depends_on:
@@ -249,7 +250,7 @@ volumes:
   clamav_data:
 
 networks:
-  # Coolify's own shared network — external because Coolify creates it, not
+  # Coolify's own shared network â€” external because Coolify creates it, not
   # this compose file. `migrate`/`api`/`worker` join it to reach the separate
   # Postgres database resource (by its resource UUID as hostname); `redis`,
   # `clamav`, and `web` don't need it, so they stay on the implicit default

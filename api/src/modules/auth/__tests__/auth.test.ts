@@ -36,7 +36,12 @@ async function seedUser(opts?: { emailVerified?: boolean; role?: 'admin' | 'mana
   const { db: appDb } = await import('../../../db/client.js')
   const schema = await import('../../../db/schema/index.js')
 
-  const HASH_OPTIONS = { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 }
+  const HASH_OPTIONS = {
+    type: argon2.argon2id,
+    memoryCost: 19456,
+    timeCost: 2,
+    parallelism: 1,
+  } as const
 
   const [business] = await appDb
     .insert(schema.businesses)

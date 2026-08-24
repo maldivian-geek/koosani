@@ -39,13 +39,13 @@
 | `helmet` (Hono port: `hono/secure-headers`)            | Security headers                  | Use Hono's built-in `secureHeaders` middleware                                                                                                                                                                                                                                                |
 | `decimal.js`                                           | Money math                        | Never `Number` for currency                                                                                                                                                                                                                                                                   |
 | `date-fns` + `date-fns-tz`                             | Dates                             | Maldives is `Indian/Maldives` (UTC+5, no DST)                                                                                                                                                                                                                                                 |
-| `bullmq`                                               | Job queue                         | Redis-backed                                                                                                                                                                                                                                                                                  |
-| `ioredis`                                              | Redis client                      | BullMQ dependency                                                                                                                                                                                                                                                                             |
+| `bullmq`                                               | Job queue                         | Redis-backed. v6 no longer depends on ioredis itself — upgraded together with ioredis 6                                                                                                                                                                                                       |
+| `ioredis`                                              | Redis client                      | Used directly (`lib/redis.ts`) for BullMQ connections and rate-limiter-flexible                                                                                                                                                                                                               |
 | `resend`                                               | Email (transactional)             | Replaced nodemailer — TypeScript-native SDK, no SMTP config needed. `lib/mailer.ts`'s `SendOpts.attachments` (Buffer content, no base64 step) added Phase 24 for invoice/statement PDF attachments. No `RESEND_API_KEY` set → dev fallback logs the email instead of sending, same as before. |
 | `@react-pdf/renderer`                                  | PDF generation                    | Decided Phase 23: declarative components, no headless browser — see _Open decisions_ below (was unresolved through Phase 20). Templates built with `React.createElement` (no JSX) to avoid adding a `jsx` tsconfig option to a backend-only package.                                          |
 | `react` + `@types/react` (dev)                         | `@react-pdf/renderer` peer dep    | Not used for anything else in `api` — pulled in solely so react-pdf can build its element tree.                                                                                                                                                                                               |
 | `papaparse`                                            | CSV parse (SOA extract)           | —                                                                                                                                                                                                                                                                                             |
-| `pdf-parse`                                            | PDF text extraction (SOA extract) | —                                                                                                                                                                                                                                                                                             |
+| `pdf-parse`                                            | PDF text extraction (SOA extract) | v2: class-based API (`new PDFParse({data}).getText()`), TS-native (`@types/pdf-parse` removed)                                                                                                                                                                                                |
 | `file-type`                                            | Magic-byte MIME sniff on uploads  | Added Phase 20 (SECURITY.md §13.5 rule 1, UPGRADE.md F-3)                                                                                                                                                                                                                                     |
 | `sharp`                                                | Strip EXIF from uploaded images   | Added Phase 20 (SECURITY.md §13.5 rule 8, UPGRADE.md F-3)                                                                                                                                                                                                                                     |
 | ClamAV (`clamd`, spoken over raw TCP — no npm client)  | Virus scan uploads                | Decided Phase 20: self-hosted clamd (`docker-compose.yml`'s `clamav` service). `api/src/lib/virusScan.ts` implements clamd's INSTREAM protocol directly; no client library needed. `CLAMAV_HOST`/`CLAMAV_PORT` config.                                                                        |
@@ -54,34 +54,35 @@
 
 ### Dev / test
 
-| Package                                 | Purpose                                                                                                                                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tsx`                                   | Run TS without build in dev (and production build via esbuild bundling)                                                                                                                  |
-| `typescript`                            | TypeScript compiler — strict mode, frontend uses it too (not just `vue-tsc`). `api` uses `moduleResolution: Bundler` (not NodeNext) so drizzle-kit's esbuild can resolve schema imports. |
-| `vitest`                                | Unit + integration tests                                                                                                                                                                 |
-| `supertest` _or_ Hono's `app.request()` | HTTP-level tests                                                                                                                                                                         |
-| `@testcontainers/postgresql`            | Real Postgres in tests                                                                                                                                                                   |
-| `eslint` + `@typescript-eslint`         | Lint                                                                                                                                                                                     |
-| `prettier`                              | Format                                                                                                                                                                                   |
+| Package                                 | Purpose                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tsx`                                   | Run TS without build in dev (and production build via esbuild bundling)                                                                                                                                                                                                                                                                      |
+| `typescript`                            | TypeScript compiler — strict mode, frontend uses it too (not just `vue-tsc`). `api` uses `moduleResolution: Bundler` (not NodeNext) so drizzle-kit's esbuild can resolve schema imports. **Held at 5.9.x deliberately** — TS 7 (native compiler) isn't yet supported by `typescript-eslint` or `vue-tsc`; revisit once both declare support. |
+| `vitest`                                | Unit + integration tests                                                                                                                                                                                                                                                                                                                     |
+| `supertest` _or_ Hono's `app.request()` | HTTP-level tests                                                                                                                                                                                                                                                                                                                             |
+| `@testcontainers/postgresql`            | Real Postgres in tests                                                                                                                                                                                                                                                                                                                       |
+| `eslint` + `@typescript-eslint`         | Lint                                                                                                                                                                                                                                                                                                                                         |
+| `prettier`                              | Format                                                                                                                                                                                                                                                                                                                                       |
 
 ---
 
 ## Frontend (web)
 
-| Package                    | Purpose                                        |
+| Package | Purpose |
 | -------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| `vue`                      | —                                              |
-| `vue-router`               | —                                              |
-| `pinia`                    | —                                              |
-| `primevue`                 | UI                                             |                                                                        |
-| `@primeuix/themes`         | Aura preset (noir palette) for PrimeVue 4.5+   | `@primevue/themes` was deprecated; presets moved to `@primeuix/themes` |
-| `primeicons`               | Icon set bundled with PrimeVue                 |
-| `tailwindcss` v4           | Layout / spacing                               |
-| `@tailwindcss/vite`        | Tailwind v4 Vite plugin (replaces PostCSS)     |
-| `chart.js` + `vue-chartjs` | Charts                                         |
-| `zod`                      | Shared schemas                                 |
-| `date-fns`                 | —                                              |
-| `@vueuse/core`             | Composables (debounce, useEventListener, etc.) |
+| `vue` | — |
+| `vue-router` | — |
+| `pinia` | — |
+| `primevue` | UI | v5 takes a PrimeUI community license key (`VITE_PRIMEVUE_LICENSE_KEY`, see `web/.env.example`) — build-time, baked into the bundle, not a server secret; without it a small "Invalid PrimeUI License" banner shows |
+| `@primeuix/themes` | Aura preset (noir palette) for PrimeVue 5 | `@primevue/themes` was deprecated; presets moved to `@primeuix/themes` |
+| `primeicons` | Icon set bundled with PrimeVue |
+| `@lucide/vue` | Icon set (list/detail view chrome) | Renamed from `lucide-vue-next` (deprecated upstream); was missing from this table before |
+| `tailwindcss` v4 | Layout / spacing |
+| `@tailwindcss/vite` | Tailwind v4 Vite plugin (replaces PostCSS) |
+| `chart.js` + `vue-chartjs` | Charts |
+| `zod` | Shared schemas |
+| `date-fns` | — |
+| `@vueuse/core` | Composables (debounce, useEventListener, etc.) |
 
 ### Build / test
 

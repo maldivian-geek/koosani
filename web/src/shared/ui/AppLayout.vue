@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { LayoutDashboard, FileText, Users, Menu as MenuIcon } from 'lucide-vue-next'
+import { LayoutDashboard, FileText, Users, Menu as MenuIcon } from '@lucide/vue'
 import SidebarNav from './SidebarNav.vue'
 import TopBar from './TopBar.vue'
 import BreadcrumbBar from './BreadcrumbBar.vue'

@@ -1,5 +1,5 @@
 import Papa from 'papaparse'
-import pdfParse from 'pdf-parse'
+import { PDFParse } from 'pdf-parse'
 import { SoaExtractLine } from '@koosani/shared'
 
 // ─── Text line pattern ────────────────────────────────────────────────────────
@@ -47,6 +47,11 @@ export function parseCsv(text: string): SoaExtractLine[] {
 // ─── PDF parser ───────────────────────────────────────────────────────────────
 
 export async function parsePdf(buffer: Buffer): Promise<SoaExtractLine[]> {
-  const { text } = await pdfParse(buffer)
-  return parseTextLines(text)
+  const parser = new PDFParse({ data: new Uint8Array(buffer) })
+  try {
+    const { text } = await parser.getText()
+    return parseTextLines(text)
+  } finally {
+    await parser.destroy()
+  }
 }

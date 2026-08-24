@@ -40,6 +40,10 @@ RUN cd shared && pnpm exec tsc -b --force
 # baked in last.
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+# PrimeUI community license key (PrimeVue 5+) — build-time, baked into the
+# bundle, not a server secret (see web/.env.example).
+ARG VITE_PRIMEVUE_LICENSE_KEY
+ENV VITE_PRIMEVUE_LICENSE_KEY=$VITE_PRIMEVUE_LICENSE_KEY
 RUN pnpm --filter @koosani/web build
 
 FROM nginx:1.27-alpine AS runtime

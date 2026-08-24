@@ -5,7 +5,7 @@ import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import Button from 'primevue/button'
-import { Search, Plus } from 'lucide-vue-next'
+import { Search, Plus } from '@lucide/vue'
 
 const props = withDefaults(
   defineProps<{
