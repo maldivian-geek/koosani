@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- App version shown at the bottom of the web sidebar (`SidebarContent.vue`), injected at build time from `web/package.json`'s version via a Vite `define` (`__APP_VERSION__`, declared in `web/src/env.d.ts`). All workspace `package.json` versions bumped to `1.1.0` and are now kept in lockstep with CHANGELOG releases — bump them as part of the release step (CHANGELOG.md protocol).
+
 ## [1.1.0] - 2026-08-24
 
 ### Added

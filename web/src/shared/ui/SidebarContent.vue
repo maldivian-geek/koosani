@@ -95,6 +95,8 @@ function isActive(to: string): boolean {
 
 const userInitial = () => authStore.user?.name?.charAt(0).toUpperCase() ?? '?'
 
+const appVersion = __APP_VERSION__
+
 // At `compact`, labels hide at tablet width (icon-only rail) and reappear at
 // desktop (`lg`) — used for the fixed aside. The mobile drawer never passes
 // `compact`, so its labels always show regardless of viewport width.
@@ -165,6 +167,12 @@ const labelClass = computed(() => (props.compact ? 'md:hidden lg:block' : ''))
         <LogOut class="w-4 h-4 flex-none" />
         <span :class="labelClass">Sign out</span>
       </button>
+      <p
+        class="px-3 pt-1 text-[11px] text-surface-400 dark:text-surface-500 select-none"
+        :class="labelClass"
+      >
+        v{{ appVersion }}
+      </p>
     </div>
   </div>
 </template>
