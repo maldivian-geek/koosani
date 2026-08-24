@@ -3,6 +3,24 @@ packages:
   - 'web'
   - 'portal'
   - 'shared'
+# Security floors for vulnerable transitive deps (pnpm audit). Scoped per major
+# so a future major bump of a consumer isn't silently pinned down. Remove an
+# entry once every consumer requires the patched version on its own.
+overrides:
+  'nanoid@3': '^3.3.18'
+  'postcss@8': '^8.5.23'
+  'shell-quote@1': '^1.8.5'
+  'brace-expansion@1': '^1.1.18'
+  'brace-expansion@2': '^2.1.4'
+  'brace-expansion@5': '^5.0.9'
+  'undici@6': '^6.28.0'
+  'vite@6': '^6.4.3'
+  'protobufjs@7': '^7.6.5'
+  'js-yaml@4': '^4.3.1'
+  'js-cookie@3': '^3.0.6'
+  'tmp@0': '^0.2.6'
+  '@grpc/grpc-js@1': '^1.14.4'
+  'uuid@11': '^11.1.1'
 allowBuilds:
   argon2: true
   # cpu-features is an optional native accelerator for ssh2 (itself only
