@@ -168,6 +168,11 @@ authRoutes.post('/reset-password', zValidator('json', resetPasswordSchema), asyn
   const result = await svc.resetPassword(token, password, { ip, ua })
   if (!result.ok) return c.json({ error: 'invalid_token' }, 401)
 
+  // resetPassword already bumped token_version and deactivated sessions
+  // (SECURITY.md §Password Reset Flow); clear the in-process session cache
+  // too so that takes effect immediately rather than after the 30s window
+  // (SECURITY.md §13.2) — same pattern as logout/logout-all/change-password.
+  invalidateSessionCache(result.userId)
   clearSessionCookie(c)
   return c.body(null, 204)
 })
@@ -178,11 +183,13 @@ authRoutes.post('/accept-invite', zValidator('json', acceptInviteSchema), async 
   const ip = getRealIp(c)
   const ua = c.req.header('user-agent') ?? ''
 
-  const [ipOk, emailOk] = await Promise.all([
-    checkLimiter(strictLimiter, ip),
-    checkLimiter(emailLimiter, `invite:${token.slice(0, 8)}`),
-  ])
-  if (!ipOk || !emailOk) return c.json({ error: 'too_many_requests' }, 429)
+  // Per-IP only (SECURITY.md §Rate Limiting). A second limiter keyed on the
+  // token itself would be attacker-controlled (not a real per-email limit —
+  // the request carries only token+password, no email) and would lock out a
+  // legitimate invitee retrying the same link. Per-email limiting isn't
+  // possible here pre-consumption; strictLimiter is the real defense.
+  const ipOk = await checkLimiter(strictLimiter, ip)
+  if (!ipOk) return c.json({ error: 'too_many_requests' }, 429)
 
   const result = await svc.acceptInvite(token, password, { ip, ua })
   if (!result.ok) return c.json({ error: 'invalid_token' }, 401)

@@ -100,6 +100,39 @@ function authHeaders(token: string) {
   return { 'Content-Type': 'application/json', Cookie: `session=${token}` }
 }
 
+// A second, already-activated user in the same business, with its own real
+// login session — used by the token-revocation tests below, which need to
+// log in AS the target user (not just create it via invite) so there's a
+// live JWT to prove gets rejected.
+async function seedActiveUser(businessId: string, role: 'admin' | 'manager' | 'staff') {
+  const { db: appDb } = await import('../../../db/client.js')
+  const schema = await import('../../../db/schema/index.js')
+
+  const hash = await argon2.hash('Password1!', {
+    type: argon2.argon2id,
+    memoryCost: 19456,
+    timeCost: 2,
+    parallelism: 1,
+  })
+  const [user] = await appDb
+    .insert(schema.users)
+    .values({
+      businessId,
+      email: `target+${role}+${Date.now()}+${Math.random()}@example.com`,
+      name: 'Target User',
+      role,
+      passwordHash: hash,
+      emailVerified: true,
+      tokenVersion: 0,
+      createdBy: businessId,
+      updatedBy: businessId,
+    })
+    .returning()
+  if (!user) throw new Error('seed: no user')
+
+  return { user, password: 'Password1!' }
+}
+
 describe('users — invite + CRUD (admin only)', () => {
   it('creates (invites) a user and returns 201', async () => {
     const { app } = await import('../../../server.js')
@@ -218,5 +251,108 @@ describe('users — invite + CRUD (admin only)', () => {
       headers: authHeaders(token),
     })
     expect(res.status).toBe(422)
+  })
+})
+
+// ─── Token revocation on role change / delete (SECURITY.md §JWT, §13.2) ──────
+// A role change or delete must invalidate every live JWT for that user
+// immediately — not after the 30s session-cache window. Each test logs in AS
+// the target user (populating the cache via a real request), then performs
+// the admin action, then re-uses the target's OLD cookie: if revocation
+// didn't work, the stale cache entry would still accept it.
+
+describe('users — role change / delete revoke live tokens immediately', () => {
+  it('bumps token_version on a role change and rejects the old JWT right away', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, token: adminToken } = await seedBusiness('admin')
+    const { user: target, password } = await seedActiveUser(business.id, 'staff')
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: target.email, password }),
+    })
+    expect(loginRes.status).toBe(200)
+    const targetCookie = loginRes.headers.get('set-cookie') ?? ''
+    const targetToken = /session=([^;]+)/.exec(targetCookie)?.[1]
+    expect(targetToken).toBeTruthy()
+
+    // Populate the session cache for (target.id, sid) with a real request.
+    const meBefore = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meBefore.status).toBe(200)
+
+    const patchRes = await app.request(`/users/${target.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ role: 'manager' }),
+    })
+    expect(patchRes.status).toBe(200)
+
+    // Old token must be rejected immediately — not after the 30s cache TTL.
+    const meAfter = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meAfter.status).toBe(401)
+  })
+
+  it('does not bump token_version when a PATCH omits role or keeps it unchanged', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, token: adminToken } = await seedBusiness('admin')
+    const { user: target, password } = await seedActiveUser(business.id, 'staff')
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: target.email, password }),
+    })
+    const targetCookie = loginRes.headers.get('set-cookie') ?? ''
+    const targetToken = /session=([^;]+)/.exec(targetCookie)?.[1]
+
+    const meBefore = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meBefore.status).toBe(200)
+
+    // Name-only patch — no role field at all.
+    const patchName = await app.request(`/users/${target.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ name: 'Renamed Target' }),
+    })
+    expect(patchName.status).toBe(200)
+
+    // Same-value role patch — role present but unchanged.
+    const patchSameRole = await app.request(`/users/${target.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(adminToken),
+      body: JSON.stringify({ role: 'staff' }),
+    })
+    expect(patchSameRole.status).toBe(200)
+
+    // Old token is still valid — neither patch should have bumped token_version.
+    const meAfter = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meAfter.status).toBe(200)
+  })
+
+  it('bumps token_version on soft-delete and rejects the old JWT right away', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, token: adminToken } = await seedBusiness('admin')
+    const { user: target, password } = await seedActiveUser(business.id, 'staff')
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: target.email, password }),
+    })
+    const targetCookie = loginRes.headers.get('set-cookie') ?? ''
+    const targetToken = /session=([^;]+)/.exec(targetCookie)?.[1]
+
+    const meBefore = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meBefore.status).toBe(200)
+
+    const delRes = await app.request(`/users/${target.id}`, {
+      method: 'DELETE',
+      headers: authHeaders(adminToken),
+    })
+    expect(delRes.status).toBe(204)
+
+    const meAfter = await app.request('/me', { headers: { Cookie: `session=${targetToken}` } })
+    expect(meAfter.status).toBe(401)
   })
 })

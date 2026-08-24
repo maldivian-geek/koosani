@@ -338,6 +338,57 @@ describe('auth — change password', () => {
   })
 })
 
+// ─── Reset password invalidates the session cache immediately ───────────────
+// resetPassword bumps token_version and deactivates sessions, but the
+// in-process session cache (SECURITY.md §13.2) is only cleared if the route
+// calls invalidateSessionCache. Without that call, a request that already
+// populated the cache (e.g. an earlier GET /me on the same JWT) would keep
+// being accepted for up to the 30s cache TTL even after the reset.
+
+describe('auth — reset password revokes the session cache immediately', () => {
+  it('rejects the pre-reset JWT right away, not after the cache TTL', async () => {
+    const { app } = await import('../../../server.js')
+    const { user, password } = await seedUser()
+
+    const loginRes = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password }),
+    })
+    const cookie = loginRes.headers.get('set-cookie') ?? ''
+    const sessionToken = cookie.match(/session=([^;]+)/)?.[1]
+
+    // Populate the session cache for (user.id, sid) with a real request.
+    const meBefore = await app.request('/me', { headers: { Cookie: `session=${sessionToken}` } })
+    expect(meBefore.status).toBe(200)
+
+    // Mint a reset token directly (mirrors what the emailed link would
+    // contain) rather than going through forgotPassword's email send.
+    const authRepo = await import('../repository.js')
+    const crypto = await import('node:crypto')
+    const token = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    await authRepo.createAuthToken({
+      userId: user.id,
+      businessId: user.businessId,
+      type: 'password_reset',
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    })
+
+    const resetRes = await app.request('/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'BrandNewPassword9!' }),
+    })
+    expect(resetRes.status).toBe(204)
+
+    // The pre-reset JWT must be rejected immediately.
+    const meAfter = await app.request('/me', { headers: { Cookie: `session=${sessionToken}` } })
+    expect(meAfter.status).toBe(401)
+  })
+})
+
 // ─── /me endpoint ────────────────────────────────────────────────────────────
 
 describe('auth — /me', () => {

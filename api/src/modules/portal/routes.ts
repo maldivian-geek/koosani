@@ -58,6 +58,11 @@ portalRoutes.get('/invoices', zValidator('query', ListQuery), async (c) => {
     q: undefined,
     page,
     pageSize,
+    // Drafts are internal working state — never shown to the customer
+    // (SECURITY.md §13.14). Every other status (issued/paid/partially_paid/
+    // voided) was already visible to the customer at some point, since an
+    // invoice can only reach 'voided' by first being 'issued'.
+    excludeDraft: true,
   })
   return c.json({ items: rows, total, page, pageSize })
 })
@@ -66,7 +71,11 @@ portalRoutes.get('/invoices', zValidator('query', ListQuery), async (c) => {
 portalRoutes.get('/invoices/:id', async (c) => {
   try {
     const invoice = await invoicing.getInvoice(c.get('portalBusinessId'), c.req.param('id'))
-    if (invoice.customerId !== c.get('portalCustomerId')) return c.json({ error: 'not_found' }, 404)
+    // Same 404 shape for "not mine" and "still a draft" — no information leak
+    // about a document's existence or internal state (SECURITY.md §13.14).
+    if (invoice.customerId !== c.get('portalCustomerId') || invoice.status === 'draft') {
+      return c.json({ error: 'not_found' }, 404)
+    }
     return c.json(invoice)
   } catch (err) {
     if (err instanceof invoicing.NotFoundError) return c.json({ error: 'not_found' }, 404)
@@ -80,7 +89,9 @@ portalRoutes.get('/invoices/:id/pdf', async (c) => {
   const invoiceId = c.req.param('id')
   try {
     const invoice = await invoicing.getInvoice(c.get('portalBusinessId'), invoiceId)
-    if (invoice.customerId !== c.get('portalCustomerId')) return c.json({ error: 'not_found' }, 404)
+    if (invoice.customerId !== c.get('portalCustomerId') || invoice.status === 'draft') {
+      return c.json({ error: 'not_found' }, 404)
+    }
 
     const fileId = await renderAndWaitForFile({
       kind: 'invoice',
@@ -109,6 +120,10 @@ portalRoutes.get('/estimates', zValidator('query', ListQuery), async (c) => {
     q: undefined,
     page,
     pageSize,
+    // Drafts are internal working state (SECURITY.md §13.14). Every other
+    // status (sent/accepted/declined/expired) is only reachable from 'sent',
+    // which the customer already saw.
+    excludeDraft: true,
   })
   return c.json({ items: rows, total, page, pageSize })
 })
@@ -117,8 +132,11 @@ portalRoutes.get('/estimates', zValidator('query', ListQuery), async (c) => {
 portalRoutes.get('/estimates/:id', async (c) => {
   try {
     const estimate = await estimates.getEstimate(c.get('portalBusinessId'), c.req.param('id'))
-    if (estimate.customerId !== c.get('portalCustomerId'))
+    // Same 404 shape for "not mine" and "still a draft" — no information leak
+    // about a document's existence or internal state (SECURITY.md §13.14).
+    if (estimate.customerId !== c.get('portalCustomerId') || estimate.status === 'draft') {
       return c.json({ error: 'not_found' }, 404)
+    }
     return c.json(estimate)
   } catch (err) {
     if (err instanceof estimates.NotFoundError) return c.json({ error: 'not_found' }, 404)
@@ -132,8 +150,9 @@ portalRoutes.get('/estimates/:id/pdf', async (c) => {
   const estimateId = c.req.param('id')
   try {
     const estimate = await estimates.getEstimate(c.get('portalBusinessId'), estimateId)
-    if (estimate.customerId !== c.get('portalCustomerId'))
+    if (estimate.customerId !== c.get('portalCustomerId') || estimate.status === 'draft') {
       return c.json({ error: 'not_found' }, 404)
+    }
 
     const fileId = await renderAndWaitForFile({
       kind: 'estimate',
@@ -159,8 +178,9 @@ portalRoutes.post('/estimates/:id/accept', async (c) => {
   const estimateId = c.req.param('id')
   try {
     const estimate = await estimates.getEstimate(c.get('portalBusinessId'), estimateId)
-    if (estimate.customerId !== c.get('portalCustomerId'))
+    if (estimate.customerId !== c.get('portalCustomerId') || estimate.status === 'draft') {
       return c.json({ error: 'not_found' }, 404)
+    }
 
     const updated = await estimates.markAccepted(c.get('portalBusinessId'), estimateId, {
       userId: null,
@@ -184,8 +204,9 @@ portalRoutes.post('/estimates/:id/decline', async (c) => {
   const estimateId = c.req.param('id')
   try {
     const estimate = await estimates.getEstimate(c.get('portalBusinessId'), estimateId)
-    if (estimate.customerId !== c.get('portalCustomerId'))
+    if (estimate.customerId !== c.get('portalCustomerId') || estimate.status === 'draft') {
       return c.json({ error: 'not_found' }, 404)
+    }
 
     const updated = await estimates.markDeclined(c.get('portalBusinessId'), estimateId, {
       userId: null,

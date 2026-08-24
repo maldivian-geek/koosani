@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { allocateDocumentNumber } from '../../db/numbering.js'
 import type { DbTx } from '../../db/client.js'
@@ -74,6 +74,10 @@ export type ListInvoiceParams = {
   q: string | undefined
   page: number
   pageSize: number
+  // Excludes draft invoices regardless of `status` — used by the customer
+  // portal (SECURITY.md §13.14), which must never surface internal
+  // working-state documents. Staff-facing callers never set this.
+  excludeDraft?: boolean
 }
 
 export async function listInvoices(
@@ -83,6 +87,7 @@ export async function listInvoices(
   const where = and(
     eq(invoices.businessId, businessId),
     params.status ? eq(invoices.status, params.status as Invoice['status']) : undefined,
+    params.excludeDraft ? ne(invoices.status, 'draft') : undefined,
     params.customerId ? eq(invoices.customerId, params.customerId) : undefined,
     params.from ? gte(invoices.issueDate, params.from) : undefined,
     params.to ? lte(invoices.issueDate, params.to) : undefined,

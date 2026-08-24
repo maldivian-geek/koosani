@@ -4,6 +4,7 @@ import { config } from '../../lib/config.js'
 import { geoLookup } from '../../lib/geo.js'
 import { sendEmail } from '../../lib/mailer.js'
 import * as repo from './repository.js'
+import * as customers from '../customers/service.js'
 import type { PortalSession } from './repository.js'
 
 // Customer portal auth (Phase 28, UPGRADE.md G-8) — see SECURITY.md §13.14.
@@ -129,7 +130,14 @@ export async function requestMagicLink(email: string): Promise<void> {
 }
 
 export type PortalVerifyResult =
-  | { ok: true; businessId: string; customerId: string; sid: string; jwt: string }
+  | {
+      ok: true
+      businessId: string
+      customerId: string
+      sid: string
+      jwt: string
+      customer: { id: string; name: string; email: string | null }
+    }
   | { ok: false }
 
 export async function verifyMagicLink(
@@ -140,8 +148,30 @@ export async function verifyMagicLink(
   const consumed = await repo.consumeToken(tokenHash)
   if (!consumed) return { ok: false }
 
+  // Verify the customer still exists and isn't soft-deleted BEFORE creating a
+  // session — a customer soft-deleted between token issue and verify must not
+  // leave an orphaned active session (and previously caused a 500, since the
+  // route's own assertExists ran only after the cookie was already set).
+  // Cross-module access goes through the customers SERVICE, never its
+  // repository (ARCHITECTURE.md §3). Note the argument order:
+  // assertExists(id, businessId), not (businessId, id).
+  let customer
+  try {
+    customer = await customers.assertExists(consumed.customerId, consumed.businessId)
+  } catch (err) {
+    if (err instanceof customers.NotFoundError) return { ok: false }
+    throw err
+  }
+
   const { sid, jwt } = await issueSession(consumed.businessId, consumed.customerId, ctx)
-  return { ok: true, businessId: consumed.businessId, customerId: consumed.customerId, sid, jwt }
+  return {
+    ok: true,
+    businessId: consumed.businessId,
+    customerId: consumed.customerId,
+    sid,
+    jwt,
+    customer: { id: customer.id, name: customer.name, email: customer.email },
+  }
 }
 
 export async function logout(sid: string): Promise<void> {

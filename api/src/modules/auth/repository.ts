@@ -9,7 +9,7 @@ import {
   type User,
   type UserSession,
 } from '../../db/schema/index.js'
-import type { Db } from '../../db/client.js'
+import type { Db, DbTx } from '../../db/client.js'
 
 // ─── User lookups ────────────────────────────────────────────────────────────
 
@@ -44,7 +44,13 @@ export async function updatePasswordHash(
   await tx.update(users).set({ passwordHash, updatedBy: userId }).where(eq(users.id, userId))
 }
 
-export async function incrementTokenVersion(userId: string, tx: Db = db): Promise<number> {
+// tx accepts either the plain db client or an open transaction — unlike this
+// file's other tx-taking functions (which only ever run inside their own
+// module's flow, always with the default db), this one is now also called
+// from other modules' existing transactions (users.update/softDelete,
+// SECURITY.md §JWT) and must be able to join them rather than opening a
+// second, separate one.
+export async function incrementTokenVersion(userId: string, tx: Db | DbTx = db): Promise<number> {
   const rows = await tx
     .update(users)
     .set({

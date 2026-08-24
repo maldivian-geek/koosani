@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, ilike, lte, or } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, lte, ne, or } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { allocateDocumentNumber } from '../../db/numbering.js'
 import type { DbTx } from '../../db/client.js'
@@ -41,6 +41,10 @@ export type ListEstimateParams = {
   q: string | undefined
   page: number
   pageSize: number
+  // Excludes draft estimates regardless of `status` — used by the customer
+  // portal (SECURITY.md §13.14), which must never surface internal
+  // working-state documents. Staff-facing callers never set this.
+  excludeDraft?: boolean
 }
 
 export async function listEstimates(
@@ -50,6 +54,7 @@ export async function listEstimates(
   const where = and(
     eq(estimates.businessId, businessId),
     params.status ? eq(estimates.status, params.status as Estimate['status']) : undefined,
+    params.excludeDraft ? ne(estimates.status, 'draft') : undefined,
     params.customerId ? eq(estimates.customerId, params.customerId) : undefined,
     params.from ? gte(estimates.issueDate, params.from) : undefined,
     params.to ? lte(estimates.issueDate, params.to) : undefined,

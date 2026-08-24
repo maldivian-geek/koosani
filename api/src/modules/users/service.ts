@@ -170,6 +170,18 @@ export async function update(
 
     const after = await repo.updateUser(businessId, id, patch, tx)
 
+    // Role changes must revoke every live JWT for this user — requireAuth
+    // trusts the JWT's role claim, so a demoted admin would otherwise keep
+    // admin access for up to 8h (SECURITY.md §JWT, §13.2). Bumping
+    // token_version fails the live comparison for every existing token,
+    // forcing re-login with the new role. Session-cache invalidation is the
+    // route's job (matches the existing logout/logout-all/change-password
+    // pattern — routes call invalidateSessionCache, not services, to avoid
+    // importing the requireAuth middleware from here).
+    if (data.role !== undefined && data.role !== before.role) {
+      await authRepo.incrementTokenVersion(id, tx)
+    }
+
     if (data.permissions !== undefined) {
       await permissions.replaceForUser(businessId, id, data.permissions, ctx.userId, tx)
     }
@@ -200,6 +212,11 @@ export async function softDelete(businessId: string, id: string, ctx: AuditCtx):
 
   await db.transaction(async (tx) => {
     await repo.softDeleteUser(businessId, id, ctx.userId, tx)
+    // Bump token_version for full parity with the session deactivation below —
+    // without this, a deleted user's still-cached JWT stays accepted for up to
+    // the 30s session-cache window (SECURITY.md §13.2) instead of dying
+    // immediately once the cache is cleared by the route.
+    await authRepo.incrementTokenVersion(id, tx)
     await audit.record('user.deleted', 'user', id, user as Record<string, unknown>, null, ctx, tx)
   })
 

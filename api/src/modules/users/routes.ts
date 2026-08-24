@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { UserCreate, UserPatch } from '@koosani/shared'
-import { requireAuth } from '../../middleware/requireAuth.js'
+import { requireAuth, invalidateSessionCache } from '../../middleware/requireAuth.js'
 import { requireRole } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import * as svc from './service.js'
@@ -66,7 +66,13 @@ userRoutes.patch('/:id', zValidator('json', UserPatch), async (c) => {
     ua: c.req.header('user-agent'),
   }
   try {
-    const user = await svc.update(c.get('businessId'), c.req.param('id'), data, ctx)
+    const id = c.req.param('id')
+    const user = await svc.update(c.get('businessId'), id, data, ctx)
+    // Role changes bump token_version in the service (SECURITY.md §JWT); the
+    // in-process session cache must be cleared here so the new role/rejection
+    // takes effect immediately rather than after the 30s cache window
+    // (SECURITY.md §13.2) — same pattern as logout/logout-all/change-password.
+    if (data.role !== undefined) invalidateSessionCache(id)
     return c.json(user)
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
@@ -83,7 +89,12 @@ userRoutes.delete('/:id', async (c) => {
     ua: c.req.header('user-agent'),
   }
   try {
-    await svc.softDelete(c.get('businessId'), c.req.param('id'), ctx)
+    const id = c.req.param('id')
+    await svc.softDelete(c.get('businessId'), id, ctx)
+    // Same rationale as the PATCH route above — softDelete bumps
+    // token_version in its own transaction; clear the cache so it takes
+    // effect immediately (SECURITY.md §13.2).
+    invalidateSessionCache(id)
     return c.body(null, 204)
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)

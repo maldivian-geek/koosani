@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lt, sql } from 'drizzle-orm'
+import { and, count, eq, gt, isNull, lt, sql } from 'drizzle-orm'
 import { db } from '../../db/client.js'
 import { portalAuthTokens, portalSessions, customers } from '../../db/schema/index.js'
 import type { PortalSession, NewPortalSession, Customer } from '../../db/schema/index.js'
@@ -46,9 +46,47 @@ export async function deleteExpiredTokens(): Promise<void> {
   await db.delete(portalAuthTokens).where(lt(portalAuthTokens.expiresAt, new Date()))
 }
 
+// Session cap mirrors the staff pattern (auth/repository.ts createSession,
+// SECURITY.md §Session Management): at most 10 active sessions per
+// (businessId, customerId), evicting the oldest by lastUsedAt before insert.
+const MAX_ACTIVE_SESSIONS = 10
+
 export async function createSession(
   data: Omit<NewPortalSession, 'id' | 'createdAt' | 'updatedAt' | 'lastUsedAt' | 'isActive'>,
 ): Promise<PortalSession> {
+  const [countRow] = await db
+    .select({ n: count() })
+    .from(portalSessions)
+    .where(
+      and(
+        eq(portalSessions.businessId, data.businessId),
+        eq(portalSessions.customerId, data.customerId),
+        eq(portalSessions.isActive, true),
+      ),
+    )
+
+  if ((countRow?.n ?? 0) >= MAX_ACTIVE_SESSIONS) {
+    const oldest = await db
+      .select({ id: portalSessions.id })
+      .from(portalSessions)
+      .where(
+        and(
+          eq(portalSessions.businessId, data.businessId),
+          eq(portalSessions.customerId, data.customerId),
+          eq(portalSessions.isActive, true),
+        ),
+      )
+      .orderBy(portalSessions.lastUsedAt)
+      .limit(1)
+    const oldestId = oldest[0]?.id
+    if (oldestId) {
+      await db
+        .update(portalSessions)
+        .set({ isActive: false })
+        .where(eq(portalSessions.id, oldestId))
+    }
+  }
+
   const [row] = await db.insert(portalSessions).values(data).returning()
   if (!row) throw new Error('createSession: no row returned')
   return row

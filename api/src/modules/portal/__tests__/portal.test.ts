@@ -422,6 +422,176 @@ describe('portal — estimate accept/decline', () => {
   })
 })
 
+describe('portal — draft documents are never exposed', () => {
+  it('excludes a draft invoice from the list and 404s its detail route', async () => {
+    const email = `draftinv+${Date.now()}@example.com`
+    const { business, user, customer } = await seedBusinessWithCustomer(email)
+    const issued = await seedIssuedInvoice(business.id, customer.id, user.id)
+
+    const invoicingSvc = await import('../../invoicing/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await invoicingSvc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [
+          {
+            description: 'Draft item',
+            qty: '1.0000',
+            unitPrice: '10.00',
+            gstCategory: 'general_8',
+          },
+        ],
+      },
+      ctx,
+    )
+
+    const sessionToken = await loginToPortal(business.id, customer.id)
+    const { app } = await import('../../../server.js')
+
+    const listRes = await app.request('/portal/invoices', {
+      headers: authCookie('portal_session', sessionToken),
+    })
+    const listBody = (await listRes.json()) as { items: { id: string }[]; total: number }
+    expect(listBody.total).toBe(1)
+    expect(listBody.items.map((i) => i.id)).toEqual([issued.id])
+    expect(listBody.items.map((i) => i.id)).not.toContain(draft.id)
+
+    const detailRes = await app.request(`/portal/invoices/${draft.id}`, {
+      headers: authCookie('portal_session', sessionToken),
+    })
+    expect(detailRes.status).toBe(404)
+  })
+
+  it('excludes a draft estimate from the list and 404s its detail route', async () => {
+    const email = `draftest+${Date.now()}@example.com`
+    const { business, user, customer } = await seedBusinessWithCustomer(email)
+    const sent = await seedSentEstimate(business.id, customer.id, user.id)
+
+    const estimatesSvc = await import('../../estimates/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const draft = await estimatesSvc.createDraft(
+      business.id,
+      {
+        customerId: customer.id,
+        lines: [
+          {
+            description: 'Draft quote',
+            qty: '1.0000',
+            unitPrice: '10.00',
+            gstCategory: 'general_8',
+          },
+        ],
+      },
+      ctx,
+    )
+
+    const sessionToken = await loginToPortal(business.id, customer.id)
+    const { app } = await import('../../../server.js')
+
+    const listRes = await app.request('/portal/estimates', {
+      headers: authCookie('portal_session', sessionToken),
+    })
+    const listBody = (await listRes.json()) as { items: { id: string }[]; total: number }
+    expect(listBody.total).toBe(1)
+    expect(listBody.items.map((i) => i.id)).toEqual([sent.id])
+    expect(listBody.items.map((i) => i.id)).not.toContain(draft.id)
+
+    const detailRes = await app.request(`/portal/estimates/${draft.id}`, {
+      headers: authCookie('portal_session', sessionToken),
+    })
+    expect(detailRes.status).toBe(404)
+
+    const acceptRes = await app.request(`/portal/estimates/${draft.id}/accept`, {
+      method: 'POST',
+      headers: authCookie('portal_session', sessionToken),
+    })
+    expect(acceptRes.status).toBe(404)
+  })
+})
+
+describe('portal auth — session cap', () => {
+  it('caps active portal sessions at 10, evicting the oldest', async () => {
+    const email = `sessioncap+${Date.now()}@example.com`
+    const { business, customer } = await seedBusinessWithCustomer(email)
+
+    const tokens: string[] = []
+    for (let i = 0; i < 11; i++) {
+      tokens.push(await loginToPortal(business.id, customer.id))
+    }
+
+    const { db: appDb } = await import('../../../db/client.js')
+    const schema = await import('../../../db/schema/index.js')
+    const { eq, and } = await import('drizzle-orm')
+    const activeSessions = await appDb
+      .select()
+      .from(schema.portalSessions)
+      .where(
+        and(
+          eq(schema.portalSessions.customerId, customer.id),
+          eq(schema.portalSessions.isActive, true),
+        ),
+      )
+    expect(activeSessions).toHaveLength(10)
+
+    // The very first session (oldest) must have been evicted; the most
+    // recent one is still usable.
+    const { app } = await import('../../../server.js')
+    const firstRes = await app.request('/portal/me', {
+      headers: authCookie('portal_session', tokens[0]!),
+    })
+    expect(firstRes.status).toBe(401)
+
+    const lastRes = await app.request('/portal/me', {
+      headers: authCookie('portal_session', tokens[10]!),
+    })
+    expect(lastRes.status).toBe(200)
+  })
+})
+
+describe('portal auth — verify checks the customer still exists first', () => {
+  it('rejects verify for a customer soft-deleted between token issue and verify, with no orphaned session', async () => {
+    const email = `softdel+${Date.now()}@example.com`
+    const { business, customer } = await seedBusinessWithCustomer(email)
+
+    const crypto = await import('node:crypto')
+    const token = crypto.randomBytes(32).toString('hex')
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const portalAuthRepo = await import('../../portalAuth/repository.js')
+    await portalAuthRepo.createToken({
+      businessId: business.id,
+      customerId: customer.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    })
+
+    // Soft-delete the customer after the token was issued but before it's verified.
+    const { db: appDb } = await import('../../../db/client.js')
+    const schema = await import('../../../db/schema/index.js')
+    const { eq } = await import('drizzle-orm')
+    await appDb
+      .update(schema.customers)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.customers.id, customer.id))
+
+    const { app } = await import('../../../server.js')
+    const res = await app.request('/portal/auth/magic-link/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Real-IP': nextTestIp() },
+      body: JSON.stringify({ token }),
+    })
+    expect(res.status).toBe(401)
+    // No cookie should have been set for a session that was never created.
+    expect(res.headers.get('set-cookie')).toBeNull()
+
+    const sessions = await appDb
+      .select()
+      .from(schema.portalSessions)
+      .where(eq(schema.portalSessions.customerId, customer.id))
+    expect(sessions).toHaveLength(0)
+  })
+})
+
 describe('portal auth — logout', () => {
   it('deactivates the session so the cookie no longer works', async () => {
     const email = `logout+${Date.now()}@example.com`

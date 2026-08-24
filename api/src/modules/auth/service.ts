@@ -321,7 +321,9 @@ export async function forgotPassword(email: string): Promise<void> {
   await sendEmail(passwordResetEmail({ to: user.email, link }))
 }
 
-export type ResetPasswordResult = { ok: true } | { ok: false; reason: 'invalid_token' }
+export type ResetPasswordResult =
+  | { ok: true; userId: string }
+  | { ok: false; reason: 'invalid_token' }
 
 export async function resetPassword(
   token: string,
@@ -348,7 +350,10 @@ export async function resetPassword(
     userAgent: ctx.ua,
   })
 
-  return { ok: true }
+  // Caller (the route) invalidates the in-process session cache for this
+  // user — it can't do that without knowing which user, hence returning the
+  // id here (SECURITY.md §13.2).
+  return { ok: true, userId: user.id }
 }
 
 // ─── Change password (self-service, authenticated) ───────────────────────────

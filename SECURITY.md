@@ -65,7 +65,7 @@ Rotation procedure:
 2. Wait one `JWT_EXPIRES_IN` period (8 hours) so all old tokens expire
 3. Remove `JWT_SECRET_PREVIOUS` and redeploy
 
-**Token version:** Incremented on `logout-all` and password change. Middleware rejects any token with a stale version by comparing the JWT's `tokenVersion` claim against the **live** `users.token_version` column (`getSessionWithTokenVersion`, joined per request or from the 30s cache below) — fixed in Phase 20 (UPGRADE.md F-1); previously the comparison was against the same claim decoded from the token itself and could never fail.
+**Token version:** Incremented on `logout-all`, password change, password reset, **admin-initiated role change** (`PATCH /users/:id` with a `role` different from the current one), and **user soft-delete** (`DELETE /users/:id`). Middleware rejects any token with a stale version by comparing the JWT's `tokenVersion` claim against the **live** `users.token_version` column (`getSessionWithTokenVersion`, joined per request or from the 30s cache below) — fixed in Phase 20 (UPGRADE.md F-1); previously the comparison was against the same claim decoded from the token itself and could never fail. The role-change/delete bump closes a gap where `requireAuth` trusts the JWT's `role` claim: without it, a demoted or deleted user's still-valid JWT would keep its old role/access for up to the token's remaining 8-hour lifetime. Both are implemented in `users/service.ts` (`update`/`softDelete`, inside the same transaction as the role/deletion write, via `authRepo.incrementTokenVersion`).
 
 **Session ID (`sid`):** Every login/magic-link creates a row in `user_sessions`. Middleware calls `getSessionWithTokenVersion(sid)` and rejects if `is_active=FALSE` **or if `session.user_id !== JWT payload id`** (prevents a stolen JWT with a swapped `sid` from passing). Single-device logout only sets that session's `is_active=FALSE` without touching the token version.
 
@@ -124,6 +124,13 @@ SetEnvIf Remote_Addr "(.*)" REAL_IP=$1
 RequestHeader set X-Real-IP "%{REAL_IP}e"
 ```
 
+**Deployment requirement: `X-Real-IP` is trusted unconditionally by `getRealIp()`, with no server-side check that the header actually came from a trusted proxy.** In this deployment (ARCHITECTURE.md §12, STACK.md "Infrastructure"), `web/nginx.conf` forwards the inbound `$http_x_real_ip` value as-is rather than setting it from `$remote_addr` — so the entire chain's correctness depends on the Traefik layer in front of `web` stripping or overwriting any client-supplied `X-Real-IP`/`X-Forwarded-For` before the request reaches nginx. Concretely, this requires:
+
+1. Traefik's `forwardedHeaders.trustedIPs` must **not** be configured permissively (e.g. not `0.0.0.0/0`) — it must trust only the actual upstream (the load balancer / edge network in front of Traefik itself, or nothing, if Traefik is the true edge).
+2. Nothing may be able to reach the `web` container's port 80 directly, bypassing Traefik — if a client could hit `web` (or `api`) directly, they could set `X-Real-IP` to any value and have it trusted outright, including for rate-limit bucketing, geo lookup, and `audit_logs.ip`.
+
+If this deployment topology ever changes (a different reverse proxy, a CDN in front of Traefik, `api` becoming directly internet-reachable again), this section must be re-verified — `getRealIp()` itself has no way to detect a misconfigured upstream.
+
 ---
 
 ## Magic Link Auth
@@ -163,11 +170,13 @@ Magic links are only valid for accounts that already have a password set.
 | POST /login             | loginLimiter (IP+email key) | — (DB-level, see Lockout) | 15 min          | 5     |
 | POST /magic-link        | magicLinkLimiter            | emailLimiter              | 15 min / 1 hour | 5 / 5 |
 | POST /forgot-password   | forgotPasswordLimiter       | emailLimiter              | 15 min / 1 hour | 5 / 5 |
-| POST /accept-invite     | strictLimiter               | emailLimiter              | 15 min / 1 hour | 5 / 5 |
+| POST /accept-invite     | strictLimiter               | — (see note below)        | 15 min          | 5     |
 | POST /magic-link/verify | strictLimiter               | —                         | 15 min          | 5     |
 | POST /reset-password    | strictLimiter               | —                         | 15 min          | 5     |
 
 `emailLimiter` keys by `email:` prefix on the normalised email. Applied as chained middleware alongside the existing IP limiter.
+
+**`POST /accept-invite` is per-IP only, deliberately.** An earlier version chained a second limiter keyed `invite:${token.slice(0, 8)}`. That is not a real per-email limit — the request body carries only `token` + `password`, never an email address, so there is nothing to key on before the token is consumed. Keying on a token fragment instead gave an attacker a limiter key entirely of their own choosing (of no defensive value against brute force) while actively locking out a legitimate invitee who retries the same invite link more than 5 times in 15 minutes. Removed; `strictLimiter` (per-IP) is the real defense here, same as `/magic-link/verify` and `/reset-password` — also token-only requests with no email in the body.
 
 ---
 
@@ -328,7 +337,9 @@ The middleware checks `token_version` and `session.is_active` on every authentic
 - Cache hit + invalid → reject (and clear cache key).
 - Cache miss → DB lookup, populate.
 
-Invalidation is best-effort: `logout`, `logout-all`, password change, and emergency rotation all delete matching keys from the cache. Worst case is a 30-second stale acceptance after revocation — acceptable trade-off for the request-rate reduction. Implemented in `api/src/middleware/requireAuth.ts`; `getSessionWithTokenVersion` (repository) joins `users.token_version` fresh on every cache miss (UPGRADE.md F-1).
+Invalidation is best-effort: `logout`, `logout-all`, password change, password reset, admin-initiated role change, user soft-delete, and emergency rotation all delete matching keys from the cache. Worst case is a 30-second stale acceptance after revocation — acceptable trade-off for the request-rate reduction. Implemented in `api/src/middleware/requireAuth.ts`; `getSessionWithTokenVersion` (repository) joins `users.token_version` fresh on every cache miss (UPGRADE.md F-1).
+
+Following the established convention (routes, not services, call `invalidateSessionCache` — services don't import the middleware, to avoid a `users`/`auth` service → `middleware/requireAuth.ts` → `modules/auth/service.ts` import cycle for `auth`'s own routes), the following routes clear the cache after their service call bumps `token_version`: `POST /auth/logout`, `/logout-all`, `/logout-others`, `/change-password` (pre-existing), and now `POST /auth/reset-password` (`auth/service.ts`'s `resetPassword` returns `{ ok: true; userId }` so the route has an id to invalidate), `PATCH /users/:id` (only when the request body included `role`), and `DELETE /users/:id`.
 
 ### 13.3 Financial audit log (separate from auth log)
 
@@ -514,6 +525,8 @@ The portal is genuinely new attack surface: it is reachable by people who are **
 - Magic-link request takes only an email address (no business context — the portal doesn't ask "which business," since a customer shouldn't need to know or care how Koosani's multi-tenancy works). The backend looks up **every** `customers` row across **every** business matching that email case-insensitively and not soft-deleted, and sends one magic-link email per match — each scoped to exactly one `(businessId, customerId)`. A customer who transacts with two Koosani-hosted businesses under the same email gets two separate emails and two separate sessions; there is no cross-business portal session.
 - Same token mechanics as staff magic links: single-use, consumed via `DELETE ... RETURNING` (atomic, no double-consume), 15-minute expiry, SHA-256 hash stored (never the plaintext token).
 - Same enumeration protection as existing auth flows: the request endpoint always returns 204 regardless of whether any customer matched.
+- **Session cap: 10 active sessions per `(businessId, customerId)`**, same pattern as staff (`auth/repository.ts createSession`, §Session Management above) — `portalAuth/repository.ts createSession` evicts the session with the oldest `lastUsedAt` before inserting when the cap is reached.
+- **Verify-before-session-creation ordering.** `portalAuth.verifyMagicLink` checks the customer still exists and is not soft-deleted (via `customers.assertExists`, the customers **service** — not its repository, per the cross-module rule in ARCHITECTURE.md §3) _before_ creating the portal session or the caller sets any cookie. A customer soft-deleted in the window between token issue and verify therefore never gets an orphaned active session; the route returns the same `401 invalid_token` as any other failed verify. `verifyMagicLink`'s success result carries the customer's `{ id, name, email }` directly, so the route no longer makes its own follow-up `assertExists` call after the fact.
 
 **Rate limits** (Redis-backed, `createRedisRateLimiter`, same infra as staff auth):
 
@@ -527,6 +540,8 @@ The portal is genuinely new attack surface: it is reachable by people who are **
 | `POST /portal/estimates/:id/decline`  | per-portal-session | 1 min  | 20  |
 
 **Read-only by design, with exactly one mutation surface.** Every portal `GET` route is scoped to the authenticated `(businessId, customerId)` — the repository/service calls underneath are the _same_ customer-facing functions the staff SPA uses (`invoicing.getInvoice`, `estimates.getEstimate`, `customers.buildSoa`), called with the portal session's own IDs, never IDs from the request. There is exactly one write surface: `POST /portal/estimates/:id/accept` and `.../decline`, both of which re-check `estimate.customerId === session.customerId` before calling the existing `estimates.markAccepted`/`markDeclined` service functions (UPGRADE.md Phase 25 built these as staff-only; Phase 28 adds the actual customer-facing caller they were always meant to have).
+
+**Drafts are never exposed to the portal.** `invoicing`/`estimates` list/get calls made from `portal/routes.ts` never surface `status: 'draft'` documents — a draft is internal working state, not something a customer has ever seen. `invoicing.listInvoices`/`estimates.listEstimates` (and their repository functions) accept an optional `excludeDraft` boolean (FUNCTIONS.md §invoicing/§estimates); the portal's list routes always pass `excludeDraft: true`. Every other status remains visible: an invoice can only reach `voided` by first being `issued`, and an estimate can only reach `declined`/`expired` by first being `sent` — both of those prior states were already customer-visible, so no new information is withheld by continuing to show the terminal state. Detail, PDF, accept, and decline routes each independently re-check `entity.status === 'draft'` and return the same `404 not_found` used for an ownership mismatch — never a distinguishable error — so a guessed ID belonging to a draft in the same business cannot be distinguished from one that doesn't exist at all.
 
 **Audit trail for portal-initiated mutations.** `AuditCtx.userId` is widened to `string | null` (the `audit_logs.user_id` column was always nullable at the DB level — this is the first caller that actually needs that). Portal-initiated accept/decline calls `audit.record` with `userId: null`; the acting identity is recoverable from the audited entity's own `customerId` plus the portal session's IP/user-agent, which are still recorded. This is a deliberate, minimal schema change — not a new actor-identity column — because the estimate row already carries the customer relationship.
 

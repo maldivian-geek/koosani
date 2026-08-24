@@ -7,7 +7,6 @@ import { getRealIp } from '../../lib/ip.js'
 import { config } from '../../lib/config.js'
 import { requirePortalAuth } from '../../middleware/requirePortalAuth.js'
 import * as svc from './service.js'
-import * as customers from '../customers/service.js'
 import type { PortalEnv } from '../../types.js'
 
 // SECURITY.md §13.14 — same rate limits as staff magic-link, own key prefixes.
@@ -70,8 +69,10 @@ portalAuthRoutes.post('/magic-link/verify', zValidator('json', MagicLinkVerifyBo
   setPortalSessionCookie(c, result.jwt)
   // Returns the profile directly (same convention as staff login/verify) so
   // the frontend can populate its store without a follow-up /portal/me call.
-  const customer = await customers.assertExists(result.customerId, result.businessId)
-  return c.json({ id: customer.id, name: customer.name, email: customer.email })
+  // The service already verified the customer exists (before creating the
+  // session — see portalAuth/service.ts's verifyMagicLink), so no separate
+  // assertExists call is needed here.
+  return c.json(result.customer)
 })
 
 // POST /portal/auth/logout
