@@ -53,6 +53,7 @@ export const PermissionResource = z.enum([
   'recurring',
   'expenses',
   'projects',
+  'orders',
 ])
 export type PermissionResource = z.infer<typeof PermissionResource>
 

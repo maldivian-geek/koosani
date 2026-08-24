@@ -102,16 +102,16 @@ Not exposed via routes — a thin service/repository backing `user_permissions`,
 
 ## Module: `items`
 
-| Kind  | Name                      | Signature                                                   | Purpose                                                                 |
-| ----- | ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| route | `GET    /items`           | `?q&categoryId&active` → `Item[]`                           | —                                                                       |
-| route | `GET    /items/:id`       | → `Item & { stockOnHand, lastCost }`                        | —                                                                       |
-| route | `POST   /items`           | `ItemCreate` → `Item`                                       | SKU unique per business                                                 |
-| route | `PATCH  /items/:id`       | `ItemPatch & { gstCategoryChangeReason?: string }` → `Item` | GST category change requires `gstCategoryChangeReason`; logged in audit |
-| route | `DELETE /items/:id`       | → `204`                                                     | Soft delete (must have zero stock + no active references)               |
-| route | `GET    /item-categories` | → `Category[]`                                              | —                                                                       |
-| route | `POST   /item-categories` | `{ name, parentId? }` → `Category`                          | —                                                                       |
-| svc   | `items.priceFor`          | `(itemId, customerId?) → { price, gstRate, gstCategory }`   | Resolves customer-specific overrides if any                             |
+| Kind  | Name                      | Signature                                                   | Purpose                                                                                                                                                                        |
+| ----- | ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| route | `GET    /items`           | `?q&categoryId&active` → `Item[]`                           | —                                                                                                                                                                              |
+| route | `GET    /items/:id`       | → `Item & { stockOnHand, lastCost }`                        | —                                                                                                                                                                              |
+| route | `POST   /items`           | `ItemCreate` → `Item`                                       | SKU unique per business. `customerItemName?` (Phase 34) — how a customer refers to this item on their own paperwork; display/reference only, not wired into PDFs or the portal |
+| route | `PATCH  /items/:id`       | `ItemPatch & { gstCategoryChangeReason?: string }` → `Item` | GST category change requires `gstCategoryChangeReason`; logged in audit                                                                                                        |
+| route | `DELETE /items/:id`       | → `204`                                                     | Soft delete (must have zero stock + no active references)                                                                                                                      |
+| route | `GET    /item-categories` | → `Category[]`                                              | —                                                                                                                                                                              |
+| route | `POST   /item-categories` | `{ name, parentId? }` → `Category`                          | —                                                                                                                                                                              |
+| svc   | `items.priceFor`          | `(itemId, customerId?) → { price, gstRate, gstCategory }`   | Resolves customer-specific overrides if any                                                                                                                                    |
 
 ---
 
@@ -496,6 +496,33 @@ Append-only outbound email log — no routes of its own; read via `GET /invoices
 | repo | `emailLogs.insertLog`        | `(NewEmailLog) → EmailLog`                           | One row per send attempt, `status: 'sent' \| 'failed'`                                                                                                   |
 | repo | `emailLogs.listForEntity`    | `(businessId, entityType, entityId) → EmailLog[]`    | Newest first                                                                                                                                             |
 | repo | `emailLogs.markReminderSent` | `(businessId, invoiceId, offsetDays, tx?) → boolean` | `INSERT ... ON CONFLICT DO NOTHING` into `invoice_reminders_sent`; returns `true` only on a genuinely new row — the reminders worker's idempotency guard |
+
+---
+
+## Module: `orderLists`
+
+Lightweight named working checklists of stock-order lines (Phase 34) — see ARCHITECTURE.md §4.16. Not a financial document: no GST, no numbering, no `gst.assertPeriodOpen` call anywhere. Mounted at `/order-lists`.
+
+| Kind  | Name                                    | Signature                                                                              | Purpose                                                                                                              |
+| ----- | --------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| route | `GET    /order-lists`                   | `?q&page&pageSize` → `{ items: (OrderList & { lineCount })[], total, page, pageSize }` | `q` searches title                                                                                                   |
+| route | `POST   /order-lists`                   | `OrderListCreate` → `OrderList & { lines: [] }` (201)                                  | —                                                                                                                    |
+| route | `GET    /order-lists/:id`               | → `OrderList & { lines: OrderListLine[] }`                                             | —                                                                                                                    |
+| route | `PATCH  /order-lists/:id`               | `OrderListPatch` → `OrderList`                                                         | —                                                                                                                    |
+| route | `DELETE /order-lists/:id`               | → `204`                                                                                | Soft delete                                                                                                          |
+| route | `POST   /order-lists/:id/lines`         | `OrderLineCreate` → `OrderListLine` (201)                                              | `position` auto-assigned (max existing + 1)                                                                          |
+| route | `PATCH  /order-lists/:id/lines/:lineId` | `OrderLinePatch` → `OrderListLine`                                                     | Includes `paymentStatus`/`stockStatus` — the inline-edited fields on the detail screen                               |
+| route | `DELETE /order-lists/:id/lines/:lineId` | → `204`                                                                                | Hard delete (lines have no soft-delete column — ARCHITECTURE.md §4.16)                                               |
+| svc   | `orderLists.listOrderLists`             | `(businessId, { q, page, pageSize }) → { items, total, page, pageSize }`               | `items` include a `lineCount` per row                                                                                |
+| svc   | `orderLists.getOrderList`               | `(businessId, id) → OrderList & { lines }`                                             | Throws `NotFoundError` for a soft-deleted or cross-business id                                                       |
+| svc   | `orderLists.createOrderList`            | `(businessId, OrderListCreate, ctx) → OrderList & { lines: [] }`                       | Audited `order_list.create`                                                                                          |
+| svc   | `orderLists.patchOrderList`             | `(businessId, id, OrderListPatch, ctx) → OrderList`                                    | Audited `order_list.update`                                                                                          |
+| svc   | `orderLists.softDeleteOrderList`        | `(businessId, id, ctx) → void`                                                         | Audited `order_list.delete`                                                                                          |
+| svc   | `orderLists.addLine`                    | `(businessId, orderListId, OrderLineCreate, ctx) → OrderListLine`                      | Audited `order_list.line_add` (entity_type `order_list`, entity_id = the list's id, line id carried in `after_json`) |
+| svc   | `orderLists.patchLine`                  | `(businessId, orderListId, lineId, OrderLinePatch, ctx) → OrderListLine`               | Audited `order_list.line_update`                                                                                     |
+| svc   | `orderLists.deleteLine`                 | `(businessId, orderListId, lineId, ctx) → void`                                        | Audited `order_list.line_delete`                                                                                     |
+
+`OrderListCreate`/`OrderListPatch`/`OrderLineCreate`/`OrderLinePatch` (`shared/src/orderLists.ts`) — `OrderLineCreate.qty` uses the shared `Qty` primitive (4dp). `OrderListPaymentStatus`: `'pending' | 'paid'`. `OrderListStockStatus`: `'unknown' | 'in_stock' | 'available' | 'not_available'`. `PermissionResource` gains `'orders'` (`shared/src/primitives.ts`).
 
 ---
 

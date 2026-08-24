@@ -30,6 +30,12 @@ const severityMap: Record<string, Severity> = {
   completed: 'contrast',
   archived: 'secondary',
   done: 'success',
+  // Order lists (Phase 34) — paid/pending reuse the invoice-style mapping
+  // above; stock statuses are new.
+  in_stock: 'info',
+  available: 'info',
+  not_available: 'danger',
+  unknown: 'secondary',
 }
 
 const severity = computed<Severity>(() => severityMap[props.status] ?? 'secondary')

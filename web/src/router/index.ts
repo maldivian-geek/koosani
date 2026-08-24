@@ -228,6 +228,17 @@ export const router = createRouter({
           component: () => import('../modules/projects/views/ProjectDetailView.vue'),
           meta: { requiresAuth: true, title: 'Project' },
         },
+        // Order lists (Phase 34)
+        {
+          path: 'order-lists',
+          component: () => import('../modules/orderLists/views/OrderListsView.vue'),
+          meta: { requiresAuth: true, title: 'Order Lists' },
+        },
+        {
+          path: 'order-lists/:id',
+          component: () => import('../modules/orderLists/views/OrderListDetailView.vue'),
+          meta: { requiresAuth: true, title: 'Order List' },
+        },
         // Purchase Orders
         {
           path: 'pos',

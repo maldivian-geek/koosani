@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - App version shown at the bottom of the web sidebar (`SidebarContent.vue`), injected at build time from `web/package.json`'s version via a Vite `define` (`__APP_VERSION__`, declared in `web/src/env.d.ts`). All workspace `package.json` versions bumped to `1.1.0` and are now kept in lockstep with CHANGELOG releases — bump them as part of the release step (CHANGELOG.md protocol).
+- **Phase 34 — Order Lists:** a new lightweight `orderLists` module for named working checklists of stock-order lines, modeled on a spreadsheet the owner already used — see ARCHITECTURE.md §4.16.
+  - New `order_lists`/`order_list_lines` tables (migration `0013_phase34_order_lists.sql`) — not a financial document: no GST, no numbering, no stock movement, `item_name` is free text (not linked to the items master, a deliberate product decision). Each line carries independent `payment_status` (`pending`|`paid`) and `stock_status` (`unknown`|`in_stock`|`available`|`not_available`) enums.
+  - New routes: `GET/POST /order-lists`, `GET/PATCH/DELETE /order-lists/:id`, `POST /order-lists/:id/lines`, `PATCH/DELETE /order-lists/:id/lines/:lineId` (FUNCTIONS.md §orderLists). Every mutation writes an audit row (`order_list.create`/`.update`/`.delete`/`.line_add`/`.line_update`/`.line_delete`). New `'orders'` `PermissionResource` (SECURITY.md §Authorization Model).
+  - Web: a new "Order Lists" sidebar entry (purchases group), a list view, and a detail view where each line's Payment Status and Stock Status are edited inline via `Select` components that PATCH immediately — status colors follow the existing `StatusTag` severity convention (paid → success, not_available → danger, in_stock/available → info, pending/unknown → secondary), not the source spreadsheet's own colors.
+- **Items — Customer Item Name (Phase 34):** items gain an optional `customerItemName` field — how a specific customer refers to the item on their own POs/paperwork. Display/reference only; not wired into any PDF or the customer portal (possible follow-up if that's ever needed). Shown in the item create/edit drawer only — the items list columns were already full, so it's not added there.
 
 ## [1.1.0] - 2026-08-24
 

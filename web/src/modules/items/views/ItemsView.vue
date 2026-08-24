@@ -17,6 +17,7 @@ export interface Item {
   id: string
   sku: string
   name: string
+  customerItemName: string | null
   unit: string
   categoryId: string | null
   gstCategory: string

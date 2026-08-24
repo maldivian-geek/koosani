@@ -16,6 +16,7 @@ import {
   Banknote,
   FolderKanban,
   ShoppingCart,
+  ClipboardList,
   Percent,
   BarChart2,
   ShieldCheck,
@@ -64,6 +65,7 @@ const BASE_GROUPS: NavGroup[] = [
       { label: 'Expenses', to: '/expenses', icon: markRaw(Banknote) },
       { label: 'Projects', to: '/projects', icon: markRaw(FolderKanban) },
       { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart) },
+      { label: 'Order Lists', to: '/order-lists', icon: markRaw(ClipboardList) },
     ],
   },
   {

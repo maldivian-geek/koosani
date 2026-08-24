@@ -29,6 +29,7 @@ import { exchangeRateRoutes } from './modules/exchangeRates/routes.js'
 import { expenseRoutes } from './modules/expenses/routes.js'
 import { projectRoutes, taskRoutes, timeEntryRoutes } from './modules/projects/routes.js'
 import { customFieldRoutes } from './modules/customFields/routes.js'
+import { orderListRoutes } from './modules/orderLists/routes.js'
 import type { AppEnv } from './types.js'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -173,6 +174,9 @@ app.route('/time-entries', timeEntryRoutes)
 
 // Custom fields (Phase 33c, UPGRADE.md G-13/F-24)
 app.route('/custom-fields', customFieldRoutes)
+
+// Order lists (Phase 34)
+app.route('/order-lists', orderListRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

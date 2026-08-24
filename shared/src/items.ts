@@ -10,6 +10,8 @@ export type ItemCategoryCreate = z.infer<typeof ItemCategoryCreate>
 export const ItemCreate = z.object({
   sku: z.string().min(1).max(100),
   name: z.string().min(1).max(300),
+  /** How a customer refers to this item on their own POs/paperwork (Phase 34) — display/reference only, not wired into PDFs or the portal. */
+  customerItemName: z.string().max(300).optional(),
   /** Unit of measure, e.g. 'pcs', 'kg', 'litre', 'box'. */
   unit: z.string().min(1).max(50),
   categoryId: z.string().uuid().optional(),

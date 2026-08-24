@@ -82,6 +82,7 @@ export const permissionResourceEnum = pgEnum('permission_resource', [
   'recurring',
   'expenses',
   'projects',
+  'orders',
 ])
 
 export const permissionActionEnum = pgEnum('permission_action', [
@@ -158,4 +159,15 @@ export const customFieldTypeEnum = pgEnum('custom_field_type', [
   'number',
   'date',
   'boolean',
+])
+
+// Order lists (Phase 34) — a lightweight working checklist, not a financial
+// document: no stock reservation, no GST, no numbering. See ARCHITECTURE.md
+// §4.16.
+export const orderListPaymentStatusEnum = pgEnum('order_list_payment_status', ['pending', 'paid'])
+export const orderListStockStatusEnum = pgEnum('order_list_stock_status', [
+  'unknown',
+  'in_stock',
+  'available',
+  'not_available',
 ])

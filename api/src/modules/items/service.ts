@@ -125,6 +125,7 @@ export async function create(
       businessId,
       sku: data.sku,
       name: data.name,
+      customerItemName: data.customerItemName ?? null,
       unit: data.unit,
       categoryId: data.categoryId ?? null,
       gstCategory: data.gstCategory,
@@ -167,6 +168,7 @@ export async function update(
     const patch: Record<string, unknown> = {}
     if (data.sku !== undefined) patch['sku'] = data.sku
     if (data.name !== undefined) patch['name'] = data.name
+    if (data.customerItemName !== undefined) patch['customerItemName'] = data.customerItemName
     if (data.unit !== undefined) patch['unit'] = data.unit
     if (data.categoryId !== undefined) patch['categoryId'] = data.categoryId
     if (data.gstCategory !== undefined) patch['gstCategory'] = data.gstCategory

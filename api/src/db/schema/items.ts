@@ -23,6 +23,10 @@ export const items = pgTable(
       .references(() => businesses.id),
     sku: text('sku').notNull(),
     name: text('name').notNull(),
+    // Optional cross-reference to how a specific customer refers to this item
+    // on their own POs/paperwork — display/reference only (Phase 34); not
+    // wired into PDFs or the customer portal.
+    customerItemName: text('customer_item_name'),
     unit: text('unit').notNull(),
     categoryId: uuid('category_id').references(() => itemCategories.id),
     gstCategory: gstCategoryEnum('gst_category').notNull(),

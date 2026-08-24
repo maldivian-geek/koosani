@@ -234,6 +234,37 @@ describe('items — CRUD', () => {
     expect(body.gstCategory).toBe('zero')
   })
 
+  it('round-trips customerItemName through create and patch (Phase 34)', async () => {
+    const { app } = await import('../../../server.js')
+    const { token } = await seedBusiness()
+
+    const create = await app.request('/items', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        ...baseItem,
+        sku: `CIN-${Date.now()}`,
+        customerItemName: "Acme Corp's part #4471",
+      }),
+    })
+    expect(create.status).toBe(201)
+    const created = (await create.json()) as { id: string; customerItemName: string | null }
+    expect(created.customerItemName).toBe("Acme Corp's part #4471")
+
+    const patch = await app.request(`/items/${created.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify({ customerItemName: 'Renamed customer ref' }),
+    })
+    expect(patch.status).toBe(200)
+    const patched = (await patch.json()) as { customerItemName: string | null }
+    expect(patched.customerItemName).toBe('Renamed customer ref')
+
+    const get = await app.request(`/items/${created.id}`, { headers: authHeaders(token) })
+    const fetched = (await get.json()) as { customerItemName: string | null }
+    expect(fetched.customerItemName).toBe('Renamed customer ref')
+  })
+
   it('creates and lists item categories', async () => {
     const { app } = await import('../../../server.js')
     const { token } = await seedBusiness()

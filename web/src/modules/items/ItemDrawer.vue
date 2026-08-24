@@ -37,6 +37,7 @@ const GST_OPTIONS = [
 interface FormState {
   sku: string
   name: string
+  customerItemName: string
   unit: string
   categoryId: string
   gstCategory: string
@@ -50,6 +51,7 @@ interface FormState {
 const blank = (): FormState => ({
   sku: '',
   name: '',
+  customerItemName: '',
   unit: '',
   categoryId: '',
   gstCategory: 'general_8',
@@ -85,6 +87,7 @@ watch(
       form.value = {
         sku: it.sku,
         name: it.name,
+        customerItemName: it.customerItemName ?? '',
         unit: it.unit,
         categoryId: it.categoryId ?? '',
         gstCategory: it.gstCategory,
@@ -113,6 +116,7 @@ async function onSave() {
   const payload = {
     sku: form.value.sku,
     name: form.value.name,
+    customerItemName: form.value.customerItemName || undefined,
     unit: form.value.unit,
     categoryId: form.value.categoryId || undefined,
     gstCategory: form.value.gstCategory,
@@ -228,6 +232,19 @@ function onDelete() {
         <label class="font-medium text-sm">Name *</label>
         <InputText v-model="form.name" :invalid="!!errors.name" fluid />
         <small v-if="errors.name" class="text-red-500">{{ errors.name }}</small>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-sm">Customer Item Name</label>
+        <InputText
+          v-model="form.customerItemName"
+          placeholder="How this customer refers to it"
+          :invalid="!!errors.customerItemName"
+          fluid
+        />
+        <small v-if="errors.customerItemName" class="text-red-500">{{
+          errors.customerItemName
+        }}</small>
       </div>
 
       <div class="flex flex-col gap-1">
