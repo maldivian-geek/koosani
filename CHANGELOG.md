@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-24
+
 ### Added
 
 - **Production containers for api/worker/web** (STACK.md "Infrastructure" §): `docker-compose.prod.yml` + `api/Dockerfile.prod` (multi-stage: compiles TS, runs `node dist/*.js`) + `web/Dockerfile.prod` (multi-stage: `vite build`, served via nginx with SPA fallback routing, `web/nginx.conf`) — for a Coolify-style compose-based deploy, separate from the dev-container setup added earlier. `FILES_STORAGE` defaults to `s3` in this file, overridable to `local` as a stopgap (`local` is dev/test-only — see STACK.md).
