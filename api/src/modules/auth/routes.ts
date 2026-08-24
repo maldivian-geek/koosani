@@ -8,7 +8,7 @@ import {
   type RateLimiterAbstract,
 } from 'rate-limiter-flexible'
 import { ChangePasswordBody } from '@koosani/shared'
-import { redis } from '../../lib/redis.js'
+import { redisRateLimiter } from '../../lib/redis.js'
 import { getRealIp } from '../../lib/ip.js'
 import { requireAuth, invalidateSessionCache } from '../../middleware/requireAuth.js'
 import { requireRole } from '../../middleware/authorize.js'
@@ -34,7 +34,7 @@ function makeRedisLimiter(
   durationSec: number,
 ): RateLimiterAbstract {
   return new RateLimiterRedis({
-    storeClient: redis,
+    storeClient: redisRateLimiter,
     keyPrefix,
     points,
     duration: durationSec,

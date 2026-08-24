@@ -427,6 +427,8 @@ PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. W
 
 **Implementation:** `api/src/lib/rateLimiter.ts` provides two limiters. `createRedisRateLimiter(keyPrefix, points, durationSec)` — Redis-backed via `rate-limiter-flexible`, correct across multiple API instances — backs every limiter in this table as of Phase 20 (UPGRADE.md F-7; previously all were in-process `Map`s that reset per instance/restart, multiplying every limit by the instance count). `createRateLimiter(windowMs, max)` (in-process) is deprecated and kept only for any call site not yet migrated.
 
+All Redis-backed limiters use a **dedicated fail-fast ioredis connection** (`redisRateLimiter` in `api/src/lib/redis.ts`: `maxRetriesPerRequest: 2`, `enableOfflineQueue: false`), separate from the BullMQ connection (which requires infinite retries). rate-limiter-flexible only falls over to its in-memory insurance limiter when a Redis command **rejects** — on the shared BullMQ-style connection, a command issued while Redis is down would sit in ioredis's offline queue indefinitely, holding every rate-limited request open instead of degrading. Degradation trade-off is unchanged: during a Redis outage, limits are enforced per-instance in memory.
+
 PDF jobs go through the BullMQ `pdf` queue, rendered by `registerPdfWorker` (Phase 23) with concurrency limited at the worker level, so even if rate limits are bypassed (internal call) the queue absorbs the spike. Routes enqueue and synchronously await completion (`lib/pdfClient.ts`, 20s timeout) rather than polling — the CPU-heavy work still happens in the worker process, not the API's event loop.
 
 ### 13.8 CSP — explicit directives

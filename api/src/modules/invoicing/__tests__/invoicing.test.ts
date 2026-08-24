@@ -1,32 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+import { createTestDatabase } from '../../../db/test-db.js'
 import postgres from 'postgres'
 import * as argon2 from 'argon2'
 import jwt from 'jsonwebtoken'
-import { runMigrations } from '../../../db/test-helpers.js'
 
 // ─── Container setup ──────────────────────────────────────────────────────────
 
-let container: StartedPostgreSqlContainer
 let client: ReturnType<typeof postgres>
 
 const JWT_SECRET = 'test-secret-at-least-32-chars-long-xx'
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start()
-  const url = container.getConnectionUri()
+  const url = await createTestDatabase()
   process.env['DATABASE_URL'] = url
-  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6379'
+  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6380'
   process.env['JWT_SECRET'] = JWT_SECRET
   process.env['FRONTEND_URL'] = 'http://localhost:5173'
   process.env['NODE_ENV'] = 'test'
-  await runMigrations(url)
   client = postgres(url, { max: 1 })
 }, 60_000)
 
 afterAll(async () => {
   await client?.end()
-  await container?.stop()
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

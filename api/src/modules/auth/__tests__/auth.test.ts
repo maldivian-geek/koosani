@@ -1,32 +1,25 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+import { createTestDatabase } from '../../../db/test-db.js'
 import postgres from 'postgres'
 import * as argon2 from 'argon2'
 import jwt from 'jsonwebtoken'
-import { runMigrations } from '../../../db/test-helpers.js'
 
 // ─── Container setup ─────────────────────────────────────────────────────────
 
-let container: StartedPostgreSqlContainer
 let client: ReturnType<typeof postgres>
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start()
-
-  const url = container.getConnectionUri()
+  const url = await createTestDatabase()
   process.env['DATABASE_URL'] = url
-  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6379'
+  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6380'
   process.env['JWT_SECRET'] = 'test-secret-at-least-32-chars-long-xx'
   process.env['FRONTEND_URL'] = 'http://localhost:5173'
   process.env['NODE_ENV'] = 'test'
-
-  await runMigrations(url)
   client = postgres(url, { max: 1 })
 }, 60_000)
 
 afterAll(async () => {
   await client?.end()
-  await container?.stop()
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,31 +126,39 @@ describe('auth — login happy path', () => {
 describe('auth — login lockout', () => {
   it('locks out after 5 failures on same IP+email (per-source)', async () => {
     const { app } = await import('../../../server.js')
+    const svc = await import('../../auth/service.js')
     const { user } = await seedUser()
 
     // Unique IP per test run to avoid cross-test interference
     const ip = `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
 
     for (let i = 0; i < 5; i++) {
-      await app.request('/auth/login', {
+      const attempt = await app.request('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Real-IP': ip },
         body: JSON.stringify({ email: user.email, password: 'wrong' }),
       })
+      expect(attempt.status).toBe(401)
     }
 
-    // 6th attempt should be locked in DB (service checks DB lockout, not rate limiter)
+    // Two independent layers trip at the same 5-in-15-min threshold
+    // (SECURITY.md §Rate Limiting + §Password Authentication). At the route,
+    // the Redis loginLimiter (keyed ip:email) fires first — the 6th HTTP
+    // attempt gets its 429 before the service's DB lockout is ever consulted.
     const res = await app.request('/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Real-IP': ip },
       body: JSON.stringify({ email: user.email, password: 'wrong' }),
     })
+    expect(res.status).toBe(429)
 
-    expect(res.status).toBe(401)
-    const body = (await res.json()) as { error: string }
-    // After 5 failures, service returns locked — which maps to 401 with invalid_credentials
-    // (same response shape — no lockout enumeration per SECURITY.md)
-    expect(['invalid_credentials', 'locked']).toContain(body.error)
+    // The DB-level per-source lockout is the defense-in-depth layer behind it
+    // (it survives Redis restarts and multi-instance drift) — assert it at the
+    // service layer, where it actually decides. The 5 failed route attempts
+    // above each recorded a login_attempts row for this (ip, email) source.
+    const result = await svc.login(user.email, 'wrong', { ip, ua: 'vitest' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('locked')
   })
 })
 

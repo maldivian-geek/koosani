@@ -3,7 +3,7 @@ import {
   RateLimiterMemory,
   type RateLimiterAbstract,
 } from 'rate-limiter-flexible'
-import { redis } from './redis.js'
+import { redisRateLimiter } from './redis.js'
 
 /**
  * Returns a per-key sliding-window rate limiter.
@@ -46,7 +46,7 @@ export function createRedisRateLimiter(
   durationSec: number,
 ): (key: string) => Promise<boolean> {
   const limiter: RateLimiterAbstract = new RateLimiterRedis({
-    storeClient: redis,
+    storeClient: redisRateLimiter,
     keyPrefix,
     points,
     duration: durationSec,
