@@ -172,6 +172,14 @@ export async function insertLine(
   return row
 }
 
+export async function insertLines(
+  rows: Array<Omit<NewOrderListLine, 'id' | 'createdAt' | 'updatedAt'>>,
+  tx: DbTx,
+): Promise<OrderListLine[]> {
+  if (rows.length === 0) return []
+  return tx.insert(orderListLines).values(rows).returning()
+}
+
 export async function updateLine(
   businessId: string,
   orderListId: string,

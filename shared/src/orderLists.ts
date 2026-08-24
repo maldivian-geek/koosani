@@ -34,6 +34,19 @@ export const OrderLineCreate = z.object({
 })
 export type OrderLineCreate = z.infer<typeof OrderLineCreate>
 
+// Paste/CSV import (review-and-confirm flow — SECURITY.md §13.13): the client
+// submits raw pasted text for parsing, edits the returned draft rows, then
+// confirms them as a bulk create.
+export const OrderListParseRequest = z.object({
+  text: z.string().min(1).max(200_000),
+})
+export type OrderListParseRequest = z.infer<typeof OrderListParseRequest>
+
+export const OrderLinesImport = z.object({
+  lines: z.array(OrderLineCreate).min(1).max(500),
+})
+export type OrderLinesImport = z.infer<typeof OrderLinesImport>
+
 export const OrderLinePatch = z.object({
   itemName: z.string().min(1).max(300).optional(),
   qty: Qty.optional(),

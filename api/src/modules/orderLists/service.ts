@@ -1,6 +1,7 @@
 import { db } from '../../db/client.js'
 import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
+import { parseImportText, type ParsedImport } from '../../lib/order-list-import.js'
 import type { AuditCtx } from '../audit/service.js'
 import type { DbTx } from '../../db/client.js'
 import type {
@@ -199,6 +200,60 @@ export async function addLine(
     )
 
     return line
+  })
+}
+
+// ─── parseImport / importLines ────────────────────────────────────────────────
+// Paste/CSV import in two steps (SECURITY.md §13.13 requires review-and-confirm
+// for bulk imports): parseImport turns pasted spreadsheet text into draft rows
+// without persisting anything; after the user reviews/edits them, importLines
+// creates the whole batch in one transaction with a single audit row.
+
+export async function parseImport(
+  businessId: string,
+  orderListId: string,
+  text: string,
+): Promise<ParsedImport> {
+  await assertExists(businessId, orderListId)
+  return parseImportText(text)
+}
+
+export async function importLines(
+  businessId: string,
+  orderListId: string,
+  lines: OrderLineCreate[],
+  ctx: AuditCtx,
+): Promise<OrderListLine[]> {
+  return db.transaction(async (tx) => {
+    await assertExists(businessId, orderListId, tx)
+
+    const base = await repo.nextPosition(businessId, orderListId, tx)
+
+    const inserted = await repo.insertLines(
+      lines.map((line, i) => ({
+        businessId,
+        orderListId,
+        position: base + i,
+        itemName: line.itemName,
+        qty: line.qty,
+        uom: line.uom,
+        note: line.note ?? null,
+        additionalNote: line.additionalNote ?? null,
+      })),
+      tx,
+    )
+
+    await audit.record(
+      'order_list.import',
+      'order_list',
+      orderListId,
+      null,
+      { count: inserted.length },
+      ctx,
+      tx,
+    )
+
+    return inserted
   })
 }
 

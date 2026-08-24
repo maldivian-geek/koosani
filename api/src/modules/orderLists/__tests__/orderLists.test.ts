@@ -300,3 +300,120 @@ describe('orderLists — routes', () => {
     expect(body.total).toBe(1)
   })
 })
+
+// ─── Paste/CSV import ────────────────────────────────────────────────────────
+
+describe('order lists — paste/CSV import', () => {
+  it('parseImportText maps positional columns, skips headers and junk, normalizes qty', async () => {
+    const { parseImportText } = await import('../../../lib/order-list-import.js')
+
+    const text = [
+      'ITEM\tQTY\tUI\tNOTE\tAdditional Notes',
+      'TS BISCOLATA MOOD 135 GM - TIN\t24\tEach',
+      'TS CHICKEN 900G\t54\tEach\t\t20',
+      'TS XL ENERGY DRINK REGULAR 250ML\t1,200.00\tEach',
+      '\t\t',
+      'TS DENIM AFTER SHAVE BLACK 100ML\tabc\tEach\tBLACK',
+    ].join('\n')
+
+    const { lines, skipped } = parseImportText(text)
+    expect(lines).toHaveLength(4)
+    expect(skipped).toBe(2) // header + empty row
+    expect(lines[0]).toMatchObject({
+      itemName: 'TS BISCOLATA MOOD 135 GM - TIN',
+      qty: '24',
+      uom: 'Each',
+    })
+    expect(lines[1]).toMatchObject({ qty: '54', additionalNote: '20' })
+    expect(lines[2]?.qty).toBe('1200.00')
+    expect(lines[3]).toMatchObject({ qty: '1', note: 'BLACK' }) // non-numeric qty defaults to 1
+  })
+
+  it('parses comma-delimited text when no tabs are present', async () => {
+    const { parseImportText } = await import('../../../lib/order-list-import.js')
+    const { lines } = parseImportText('PRINGLES,48,Each\n"TS SUPER RING 60GR",60,Each,CHEESE BALL')
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toMatchObject({ itemName: 'TS SUPER RING 60GR', note: 'CHEESE BALL' })
+  })
+
+  it('POST /:id/lines/parse returns drafts without persisting; /lines/bulk creates them with one audit row', async () => {
+    const { app } = await import('../../../server.js')
+    const { business, token } = await seedBusiness('admin')
+
+    const createRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Import test' }),
+    })
+    expect(createRes.status).toBe(201)
+    const list = (await createRes.json()) as { id: string }
+
+    const parseRes = await app.request(`/order-lists/${list.id}/lines/parse`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ text: 'A\t2\tEach\nB\t3\tBox\tnote1' }),
+    })
+    expect(parseRes.status).toBe(200)
+    const parsed = (await parseRes.json()) as { lines: unknown[]; skipped: number }
+    expect(parsed.lines).toHaveLength(2)
+
+    // Nothing persisted by parse
+    const detailBefore = await app.request(`/order-lists/${list.id}`, {
+      headers: authHeaders(token),
+    })
+    expect(((await detailBefore.json()) as { lines: unknown[] }).lines).toHaveLength(0)
+
+    const bulkRes = await app.request(`/order-lists/${list.id}/lines/bulk`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ lines: parsed.lines }),
+    })
+    expect(bulkRes.status).toBe(201)
+    const bulk = (await bulkRes.json()) as { lines: Array<{ position: number; itemName: string }> }
+    expect(bulk.lines).toHaveLength(2)
+    expect(bulk.lines.map((l) => l.position)).toEqual([0, 1])
+
+    const auditRows = await auditRowsFor(business.id, 'order_list.import')
+    expect(auditRows).toHaveLength(1)
+    expect((auditRows[0]?.afterJson as { count: number }).count).toBe(2)
+  })
+
+  it('bulk import rejects more than 500 rows and 404s on another business list', async () => {
+    const { app } = await import('../../../server.js')
+    const { token } = await seedBusiness('admin')
+    const other = await seedBusiness('admin')
+
+    const createRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(other.token),
+      body: JSON.stringify({ title: 'Other biz list' }),
+    })
+    const otherList = (await createRes.json()) as { id: string }
+
+    const tooMany = Array.from({ length: 501 }, (_, i) => ({
+      itemName: `X${i}`,
+      qty: '1',
+      uom: 'Each',
+    }))
+    const ownListRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Own list' }),
+    })
+    const ownList = (await ownListRes.json()) as { id: string }
+
+    const capRes = await app.request(`/order-lists/${ownList.id}/lines/bulk`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ lines: tooMany }),
+    })
+    expect(capRes.status).toBe(400)
+
+    const crossRes = await app.request(`/order-lists/${otherList.id}/lines/bulk`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ lines: [{ itemName: 'A', qty: '1', uom: 'Each' }] }),
+    })
+    expect(crossRes.status).toBe(404)
+  })
+})

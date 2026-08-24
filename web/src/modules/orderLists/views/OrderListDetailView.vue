@@ -7,12 +7,13 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import { Plus, ArrowLeft } from '@lucide/vue'
+import { Plus, ArrowLeft, ClipboardPaste } from '@lucide/vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import OrderLineDialog from '../OrderLineDialog.vue'
+import OrderListImportDialog from '../OrderListImportDialog.vue'
 import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
 import { useAuthStore } from '../../../stores/auth.js'
 import { OrderListPatch } from '@koosani/shared'
@@ -70,6 +71,7 @@ const lines = ref<OrderListLine[]>([])
 const loading = ref(false)
 const notFound = ref(false)
 const lineDialogOpen = ref(false)
+const importDialogOpen = ref(false)
 
 const titleDraft = ref('')
 const notesDraft = ref('')
@@ -148,6 +150,11 @@ async function saveHeader() {
 function onLineAdded(line: OrderListLine) {
   lines.value.push(line)
   lineDialogOpen.value = false
+}
+
+function onLinesImported(imported: OrderListLine[]) {
+  lines.value.push(...imported)
+  importDialogOpen.value = false
 }
 
 async function patchLineField(
@@ -270,10 +277,16 @@ onMounted(() => void load())
           class="flex items-center justify-between p-4 border-b border-surface-100 dark:border-surface-800"
         >
           <h3 class="text-base font-medium text-surface-700">Lines</h3>
-          <Button v-if="canAdd" severity="secondary" size="small" @click="lineDialogOpen = true">
-            <Plus class="w-4 h-4" />
-            Add line
-          </Button>
+          <div v-if="canAdd" class="flex gap-2">
+            <Button severity="secondary" size="small" @click="importDialogOpen = true">
+              <ClipboardPaste class="w-4 h-4" />
+              Import
+            </Button>
+            <Button severity="secondary" size="small" @click="lineDialogOpen = true">
+              <Plus class="w-4 h-4" />
+              Add line
+            </Button>
+          </div>
         </div>
 
         <DataTable
@@ -378,6 +391,13 @@ onMounted(() => void load())
       :order-list-id="orderList.id"
       @close="lineDialogOpen = false"
       @added="onLineAdded"
+    />
+
+    <OrderListImportDialog
+      v-if="importDialogOpen && orderList"
+      :order-list-id="orderList.id"
+      @close="importDialogOpen = false"
+      @imported="onLinesImported"
     />
   </div>
 </template>

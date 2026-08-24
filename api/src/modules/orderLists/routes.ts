@@ -1,7 +1,14 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { OrderListCreate, OrderListPatch, OrderLineCreate, OrderLinePatch } from '@koosani/shared'
+import {
+  OrderListCreate,
+  OrderListPatch,
+  OrderLineCreate,
+  OrderLinePatch,
+  OrderListParseRequest,
+  OrderLinesImport,
+} from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
@@ -106,6 +113,50 @@ orderListRoutes.post(
         ctxFrom(c),
       )
       return c.json(line, 201)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
+
+// POST /order-lists/:id/lines/parse — turn pasted spreadsheet/CSV text into
+// draft rows. Persists nothing; the client shows the drafts in a
+// review-and-confirm screen (SECURITY.md §13.13) before calling /lines/bulk.
+orderListRoutes.post(
+  '/:id/lines/parse',
+  requirePermission('orders', 'add'),
+  zValidator('json', OrderListParseRequest),
+  async (c) => {
+    try {
+      const result = await svc.parseImport(
+        c.get('businessId'),
+        c.req.param('id'),
+        c.req.valid('json').text,
+      )
+      return c.json(result)
+    } catch (err) {
+      if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+      throw err
+    }
+  },
+)
+
+// POST /order-lists/:id/lines/bulk — create the reviewed rows in one
+// transaction with a single order_list.import audit row.
+orderListRoutes.post(
+  '/:id/lines/bulk',
+  requirePermission('orders', 'add'),
+  zValidator('json', OrderLinesImport),
+  async (c) => {
+    try {
+      const lines = await svc.importLines(
+        c.get('businessId'),
+        c.req.param('id'),
+        c.req.valid('json').lines,
+        ctxFrom(c),
+      )
+      return c.json({ lines }, 201)
     } catch (err) {
       if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
       throw err
