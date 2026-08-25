@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DataTable from 'primevue/datatable'
+import type { DataTableCellEditCompleteEvent, DataTableCellEditInitEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -232,6 +233,88 @@ function rowClass(data: OrderListLine) {
   return data.stockStatus === 'not_available' ? 'text-surface-400 dark:text-surface-500' : ''
 }
 
+// ─── Inline cell editing (DataTable editMode="cell") ─────────────────────────
+// Click a cell → edit → commit (enter/blur) PATCHes just that field, mirroring
+// the status dropdowns' optimistic-then-revert behavior.
+
+type EditableField = 'itemName' | 'qty' | 'uom' | 'note' | 'additionalNote'
+const EDITABLE_FIELDS: readonly EditableField[] = [
+  'itemName',
+  'qty',
+  'uom',
+  'note',
+  'additionalNote',
+]
+
+function setField(row: OrderListLine, field: EditableField, value: string | null) {
+  if (field === 'note' || field === 'additionalNote') row[field] = value
+  else row[field] = value ?? ''
+}
+
+// The editors write into the live row while typing, so snapshot the original
+// value at edit start — event.value can already reflect the mutation.
+let editSnapshot: string | null = null
+function onCellEditInit(event: DataTableCellEditInitEvent) {
+  const field = event.field as EditableField
+  if (!EDITABLE_FIELDS.includes(field)) return
+  editSnapshot = (event.data as OrderListLine)[field] ?? null
+}
+
+async function onCellEditComplete(event: DataTableCellEditCompleteEvent) {
+  const field = event.field as EditableField
+  if (!EDITABLE_FIELDS.includes(field)) return
+  const row = event.data as OrderListLine
+  const oldValue = editSnapshot
+  const raw = ((event.newValue ?? row[field]) as string | null) ?? ''
+  const next = raw.trim()
+
+  let patchValue: string | null = next
+  if (field === 'itemName') {
+    if (!next) {
+      setField(row, field, oldValue)
+      return
+    }
+  } else if (field === 'qty') {
+    const cleaned = next.replace(/[,\s]/g, '')
+    if (!/^\d+(\.\d{1,4})?$/.test(cleaned)) {
+      setField(row, field, oldValue)
+      toast.add({
+        severity: 'warn',
+        summary: 'Invalid quantity',
+        detail: 'Enter a number, e.g. 24 or 1.5.',
+        life: 4000,
+      })
+      return
+    }
+    patchValue = cleaned
+  } else if (field === 'uom') {
+    patchValue = next || 'Each'
+  } else {
+    patchValue = next || null
+  }
+
+  if (patchValue === oldValue) {
+    setField(row, field, oldValue)
+    return
+  }
+
+  setField(row, field, patchValue)
+  try {
+    await apiFetch(`/order-lists/${id.value}/lines/${row.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ [field]: patchValue }),
+    })
+  } catch {
+    setField(row, field, oldValue)
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: "Couldn't save the change. Please try again.",
+      life: 5000,
+    })
+  }
+}
+
 onMounted(() => void load())
 </script>
 
@@ -294,6 +377,7 @@ onMounted(() => void load())
           :row-class="rowClass"
           striped-rows
           scrollable
+          :edit-mode="canEdit ? 'cell' : undefined"
           :pt="{
             root: { class: 'text-sm!' },
             thead: { class: 'hidden! md:table-header-group!' },
@@ -303,6 +387,8 @@ onMounted(() => void load())
                 'flex! flex-col gap-1 mb-3 p-3 border border-surface-200 dark:border-surface-700 rounded-lg md:table-row! md:flex-none md:gap-0 md:mb-0 md:p-0 md:border-0 md:rounded-none',
             },
           }"
+          @cell-edit-init="onCellEditInit"
+          @cell-edit-complete="onCellEditComplete"
         >
           <template #empty>
             <div class="text-center py-12 text-surface-400 text-sm">No lines yet.</div>
@@ -311,22 +397,68 @@ onMounted(() => void load())
           <Column header="#" style="width: 50px" :pt="stackPt">
             <template #body="{ data }">{{ (data as OrderListLine).position + 1 }}</template>
           </Column>
-          <Column header="Item" :pt="stackPt">
+          <Column field="itemName" header="Item" :pt="stackPt">
             <template #body="{ data }">{{ (data as OrderListLine).itemName }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).itemName"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).itemName = v ?? '')"
+              />
+            </template>
           </Column>
-          <Column header="Qty" style="width: 90px" :pt="stackPt">
+          <Column field="qty" header="Qty" style="width: 90px" :pt="stackPt">
             <template #body="{ data }">{{ formatQty((data as OrderListLine).qty) }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).qty"
+                inputmode="decimal"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).qty = v ?? '')"
+              />
+            </template>
           </Column>
-          <Column header="UOM" style="width: 90px" :pt="stackPt">
+          <Column field="uom" header="UOM" style="width: 90px" :pt="stackPt">
             <template #body="{ data }">{{ (data as OrderListLine).uom }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).uom"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).uom = v ?? '')"
+              />
+            </template>
           </Column>
-          <Column header="Note" :pt="stackPt">
+          <Column field="note" header="Note" :pt="stackPt">
             <template #body="{ data }">{{ (data as OrderListLine).note ?? '—' }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).note ?? ''"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).note = v || null)"
+              />
+            </template>
           </Column>
-          <Column header="Additional Note" :pt="stackPt">
+          <Column field="additionalNote" header="Additional Note" :pt="stackPt">
             <template #body="{ data }">{{
               (data as OrderListLine).additionalNote ?? '—'
             }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).additionalNote ?? ''"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).additionalNote = v || null)"
+              />
+            </template>
           </Column>
           <Column header="Payment Status" style="width: 160px" :pt="stackPt">
             <template #body="{ data }">
