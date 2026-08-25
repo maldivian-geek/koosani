@@ -22,10 +22,10 @@ vi.mock('../../lib/ocr-engine.js', () => ({
 // intra-word gaps than large inter-cell gaps, so the median-based clustering
 // threshold lands cleanly).
 const MOCK_WORDS: OcrWord[] = [
-  { text: 'RICE', x0: 0, y0: 0, x1: 30, y1: 20 },
-  { text: '25', x0: 34, y0: 0, x1: 50, y1: 20 },
-  { text: 'KG', x0: 54, y0: 0, x1: 80, y1: 20 },
-  { text: '10', x0: 300, y0: 0, x1: 320, y1: 20 },
+  { text: 'RICE', x0: 0, y0: 0, x1: 30, y1: 20, lineId: 0 },
+  { text: '25', x0: 34, y0: 0, x1: 50, y1: 20, lineId: 0 },
+  { text: 'KG', x0: 54, y0: 0, x1: 80, y1: 20, lineId: 0 },
+  { text: '10', x0: 300, y0: 0, x1: 320, y1: 20, lineId: 0 },
 ]
 
 // Minimal valid 1x1 PNG (verified against the installed `file-type` package

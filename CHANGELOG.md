@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Image import: OCR tuned against a real gridded order sheet — from ~40% garbage to 27/27 rows, names, and quantities on the reference fixture.** The first real-world test (a bordered Excel screenshot, tight ~20px rows, 12px text) produced fused rows, glued words, and zero quantities. Four root causes fixed in `lib/ocr-engine.ts` / `lib/order-list-ocr.ts`: (1) **grid rulings are now erased before recognition** — detected as columns/rows that are consistently non-white across ≥70% of the image (anti-aliased 1px borders sit at ~170 gray, far above any "dark" threshold) and blanked at original resolution before upscaling; (2) **PSM 6 (single uniform block) + `user_defined_dpi`** — the default auto page segmentation carved the bordered table into per-column blocks; (3) **rows now come from tesseract's own line segmentation** (`OcrWord.lineId`, merged only when line centers sit within 35% of the median inter-line pitch) instead of re-clustering word y-centers, whose overlap-prone boxes glued adjacent rows; (4) **a signal-priority quantity repair**: standalone number followed by a unit cell beats a fused "54 Each" cell, which beats a bare number (a stray note like "20" can no longer steal the qty column), plus splitting fused "qty uom"/"uom note" cells, peeling "48 Each" off a fully-fused row, keeping "&" in names, stripping border-artifact characters, and a hard cell-split floor so two-word rows can split at all. Upscale floor raised to 2800px.
+
 ### Added
 
 - **Phase 36 — Order lists: "import from image" (OCR).** A new image path alongside the existing paste/CSV import (ARCHITECTURE.md §4.16, FUNCTIONS.md §orderLists): `POST /order-lists/:id/lines/extract-image` (multipart, png/jpeg/webp ≤10MB) OCRs a photo/screenshot of an order table and feeds the SAME `{ lines, skipped }` draft shape into the SAME review-and-confirm screen `/lines/parse` already uses — no parallel UI or persistence path.
