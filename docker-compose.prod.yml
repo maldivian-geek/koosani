@@ -1,4 +1,4 @@
-﻿# Production stack â€” for Coolify (or any Docker-Compose-based host), not
+# Production stack â€” for Coolify (or any Docker-Compose-based host), not
 # local dev (use docker-compose.yml for that). Builds real production images
 # (compiled JS via api/Dockerfile.prod, a static nginx-served bundle via
 # web/Dockerfile.prod) instead of the dev-mode tsx-watch/vite-dev-server

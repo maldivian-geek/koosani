@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Production deploy failed with `no service selected` — UTF-8 BOM in the compose files.** Recent edits made via PowerShell `Set-Content -Encoding utf8` (Windows PowerShell 5.1 always writes a BOM) left `docker-compose.prod.yml` and `docker-compose.yml` starting with `EF BB BF`. The deployment server's docker compose fails to recognize the top-level `services:` key behind a BOM and parses zero services, aborting the deploy _after_ Coolify had already removed the old containers (downtime until redeploy). Local Docker Desktop tolerated the BOM, which is why every local `docker compose` use kept working. Both files rewritten BOM-less; verified `docker compose -f docker-compose.prod.yml config --services` lists all six services. Lesson recorded here: when editing files other tools parse, write via a BOM-less method (Node, the Write tool, `[IO.File]::WriteAllText` with `UTF8Encoding($false)`) — never PS 5.1 `Set-Content -Encoding utf8`.
+
 ### Security
 
 - **`pnpm audit` is now fully clean — zero findings across the entire graph, dev tooling included.** Added the last override floor: `esbuild@0.18 → ^0.25.0` (`pnpm-workspace.yaml`), covering the dev-only dev-server advisory in the esbuild pinned by drizzle-kit's deprecated `@esbuild-kit` loader. The advisory's nominal fix version (0.24.3) was never published — 0.25.x is the nearest real patched line. Verified `drizzle-kit migrate` still works through the bumped loader. Remove the floor when drizzle-kit drops the legacy loader.
