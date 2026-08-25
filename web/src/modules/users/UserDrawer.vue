@@ -32,24 +32,33 @@ const ROLE_OPTIONS: Array<{ label: string; value: Role }> = [
   { label: 'Staff', value: 'staff' },
 ]
 
-// Matches shared/src/primitives.ts PermissionResource, minus 'gst' rate/period
-// admin actions which are role-gated (requireRole), not permission-gated.
-const RESOURCE_ROWS: Array<{ resource: PermissionResource; label: string }> = [
-  { resource: 'customers', label: 'Customers' },
-  { resource: 'suppliers', label: 'Suppliers' },
-  { resource: 'items', label: 'Items' },
-  { resource: 'inventory', label: 'Inventory' },
-  { resource: 'invoices', label: 'Invoices & Credit Notes' },
-  { resource: 'estimates', label: 'Estimates' },
-  { resource: 'recurring', label: 'Recurring Invoices' },
-  { resource: 'bills', label: 'Bills' },
-  { resource: 'expenses', label: 'Expenses' },
-  { resource: 'projects', label: 'Projects & Time Tracking' },
-  { resource: 'po', label: 'Purchase Orders' },
-  { resource: 'orders', label: 'Order Lists' },
-  { resource: 'gst', label: 'GST' },
-  { resource: 'reports', label: 'Reports' },
-]
+// Labels for every PermissionResource (shared/src/primitives.ts), in display
+// order (object literal insertion order is preserved). Typed as an exhaustive
+// Record so adding a resource to the shared enum WITHOUT a row here fails
+// vue-tsc — a resource can never silently go missing from this editor again
+// (the way 'orders' did in Phase 34). GST's rate/period admin actions are
+// role-gated (requireRole), not permission-gated, so 'gst' here covers only
+// its permission-gated actions.
+const RESOURCE_LABELS: Record<PermissionResource, string> = {
+  customers: 'Customers',
+  suppliers: 'Suppliers',
+  items: 'Items',
+  inventory: 'Inventory',
+  invoices: 'Invoices & Credit Notes',
+  estimates: 'Estimates',
+  recurring: 'Recurring Invoices',
+  bills: 'Bills',
+  expenses: 'Expenses',
+  projects: 'Projects & Time Tracking',
+  po: 'Purchase Orders',
+  orders: 'Order Lists',
+  gst: 'GST',
+  reports: 'Reports',
+}
+
+const RESOURCE_ROWS: Array<{ resource: PermissionResource; label: string }> = (
+  Object.keys(RESOURCE_LABELS) as PermissionResource[]
+).map((resource) => ({ resource, label: RESOURCE_LABELS[resource] }))
 
 interface FormState {
   email: string
