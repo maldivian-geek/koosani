@@ -74,6 +74,17 @@ export async function getById(
   }
 }
 
+// ─── findByCustomerItemNames ──────────────────────────────────────────────────
+// Read-only lookup for resolving a customer's wording (order-list lines) to
+// catalogue items. Cross-module callers use this, not the repository (CLAUDE.md §4).
+
+export async function findByCustomerItemNames(
+  businessId: string,
+  namesLower: string[],
+): Promise<Array<{ id: string; name: string; customerItemName: string | null }>> {
+  return repo.findByCustomerItemNames(businessId, namesLower)
+}
+
 // ─── listCategories ───────────────────────────────────────────────────────────
 
 export async function listCategories(businessId: string): Promise<CategoryRow[]> {

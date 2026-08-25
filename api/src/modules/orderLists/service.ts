@@ -1,6 +1,7 @@
 import { db } from '../../db/client.js'
 import * as repo from './repository.js'
 import * as audit from '../audit/service.js'
+import * as items from '../items/service.js'
 import { parseImportText, type ParsedImport } from '../../lib/order-list-import.js'
 import type { AuditCtx } from '../audit/service.js'
 import type { DbTx } from '../../db/client.js'
@@ -46,6 +47,33 @@ async function assertExists(businessId: string, id: string, tx?: DbTx) {
   return list
 }
 
+// ─── withSystemNames ──────────────────────────────────────────────────────────
+// A line's item_name is the CUSTOMER's wording; resolve it (case-insensitive)
+// against the item master's customer_item_name and attach the catalogue name.
+// Derived at read time — never stored — so it stays live as the catalogue
+// changes. Ties on a shared customer_item_name resolve to the alphabetically
+// first item name, deterministically.
+
+export type OrderListLineWithSystemName = OrderListLine & { systemItemName: string | null }
+
+async function withSystemNames(
+  businessId: string,
+  lines: OrderListLine[],
+): Promise<OrderListLineWithSystemName[]> {
+  if (lines.length === 0) return []
+  const names = [...new Set(lines.map((l) => l.itemName.trim().toLowerCase()))]
+  const matches = await items.findByCustomerItemNames(businessId, names)
+  const byCustomerName = new Map<string, string>()
+  for (const m of matches) {
+    const key = (m.customerItemName ?? '').trim().toLowerCase()
+    if (key && !byCustomerName.has(key)) byCustomerName.set(key, m.name)
+  }
+  return lines.map((l) => ({
+    ...l,
+    systemItemName: byCustomerName.get(l.itemName.trim().toLowerCase()) ?? null,
+  }))
+}
+
 // ─── listOrderLists ───────────────────────────────────────────────────────────
 
 export async function listOrderLists(
@@ -63,10 +91,10 @@ export async function listOrderLists(
 export async function getOrderList(
   businessId: string,
   id: string,
-): Promise<OrderList & { lines: OrderListLine[] }> {
+): Promise<OrderList & { lines: OrderListLineWithSystemName[] }> {
   const list = await assertExists(businessId, id)
   const lines = await repo.getLinesByOrderList(businessId, id)
-  return { ...list, lines }
+  return { ...list, lines: await withSystemNames(businessId, lines) }
 }
 
 // ─── createOrderList ──────────────────────────────────────────────────────────
@@ -169,8 +197,8 @@ export async function addLine(
   orderListId: string,
   data: OrderLineCreate,
   ctx: AuditCtx,
-): Promise<OrderListLine> {
-  return db.transaction(async (tx) => {
+): Promise<OrderListLineWithSystemName> {
+  const line = await db.transaction(async (tx) => {
     await assertExists(businessId, orderListId, tx)
 
     const position = await repo.nextPosition(businessId, orderListId, tx)
@@ -201,6 +229,10 @@ export async function addLine(
 
     return line
   })
+
+  const [enriched] = await withSystemNames(businessId, [line])
+  if (!enriched) throw new Error('addLine: enrichment returned no row')
+  return enriched
 }
 
 // ─── parseImport / importLines ────────────────────────────────────────────────
@@ -223,8 +255,8 @@ export async function importLines(
   orderListId: string,
   lines: OrderLineCreate[],
   ctx: AuditCtx,
-): Promise<OrderListLine[]> {
-  return db.transaction(async (tx) => {
+): Promise<OrderListLineWithSystemName[]> {
+  const inserted = await db.transaction(async (tx) => {
     await assertExists(businessId, orderListId, tx)
 
     const base = await repo.nextPosition(businessId, orderListId, tx)
@@ -255,6 +287,8 @@ export async function importLines(
 
     return inserted
   })
+
+  return withSystemNames(businessId, inserted)
 }
 
 // ─── patchLine ────────────────────────────────────────────────────────────────
@@ -265,8 +299,8 @@ export async function patchLine(
   lineId: string,
   data: OrderLinePatch,
   ctx: AuditCtx,
-): Promise<OrderListLine> {
-  return db.transaction(async (tx) => {
+): Promise<OrderListLineWithSystemName> {
+  const updated = await db.transaction(async (tx) => {
     await assertExists(businessId, orderListId, tx)
 
     const before = await repo.getLineById(businessId, orderListId, lineId, tx)
@@ -300,6 +334,10 @@ export async function patchLine(
 
     return updated
   })
+
+  const [enriched] = await withSystemNames(businessId, [updated])
+  if (!enriched) throw new Error('patchLine: enrichment returned no row')
+  return enriched
 }
 
 // ─── deleteLine ───────────────────────────────────────────────────────────────

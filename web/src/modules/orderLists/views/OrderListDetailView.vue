@@ -30,6 +30,10 @@ export interface OrderListLine {
   orderListId: string
   position: number
   itemName: string
+  // The catalogue item's name, resolved server-side by matching itemName
+  // (the customer's wording) against items.customer_item_name. Derived,
+  // read-only — null when nothing in the item master matches.
+  systemItemName: string | null
   qty: string
   uom: string
   note: string | null
@@ -300,10 +304,12 @@ async function onCellEditComplete(event: DataTableCellEditCompleteEvent) {
 
   setField(row, field, patchValue)
   try {
-    await apiFetch(`/order-lists/${id.value}/lines/${row.id}`, {
+    const saved = await apiFetch<OrderListLine>(`/order-lists/${id.value}/lines/${row.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ [field]: patchValue }),
     })
+    // Renaming the item can change which catalogue item it resolves to.
+    if (field === 'itemName') row.systemItemName = saved.systemItemName ?? null
   } catch {
     setField(row, field, oldValue)
     toast.add({
@@ -407,6 +413,17 @@ onMounted(() => void load())
                 autofocus
                 @update:model-value="(v) => ((data as OrderListLine).itemName = v ?? '')"
               />
+            </template>
+          </Column>
+          <Column header="System Item" :pt="stackPt">
+            <template #body="{ data }">
+              <span
+                v-if="(data as OrderListLine).systemItemName"
+                class="text-surface-500 dark:text-surface-400"
+              >
+                {{ (data as OrderListLine).systemItemName }}
+              </span>
+              <span v-else class="text-surface-300 dark:text-surface-600">—</span>
             </template>
           </Column>
           <Column field="qty" header="Qty" style="width: 90px" :pt="stackPt">

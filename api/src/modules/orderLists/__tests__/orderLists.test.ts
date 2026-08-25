@@ -417,3 +417,72 @@ describe('order lists — paste/CSV import', () => {
     expect(crossRes.status).toBe(404)
   })
 })
+
+// ─── System item name resolution ─────────────────────────────────────────────
+
+describe('order lists — system item name resolution', () => {
+  it('resolves a line item name (customer wording) to the catalogue name, case-insensitively', async () => {
+    const { app } = await import('../../../server.js')
+    const { db: appDb } = await import('../../../db/client.js')
+    const schema = await import('../../../db/schema/index.js')
+    const { business, token } = await seedBusiness('admin')
+
+    await appDb.insert(schema.items).values({
+      businessId: business.id,
+      sku: `SKU-${Date.now()}`,
+      name: 'Chicken Whole 900g (Frozen)',
+      customerItemName: 'TS CHICKEN 900G',
+      unit: 'pcs',
+      gstCategory: 'general_8',
+      createdBy: business.id,
+      updatedBy: business.id,
+    })
+
+    const createRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Resolution test' }),
+    })
+    const list = (await createRes.json()) as { id: string }
+
+    // Line matching the customer item name in a different case
+    const addRes = await app.request(`/order-lists/${list.id}/lines`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ itemName: 'ts chicken 900g', qty: '54', uom: 'Each' }),
+    })
+    expect(addRes.status).toBe(201)
+    const added = (await addRes.json()) as { systemItemName: string | null }
+    expect(added.systemItemName).toBe('Chicken Whole 900g (Frozen)')
+
+    // Line with no catalogue match
+    await app.request(`/order-lists/${list.id}/lines`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ itemName: 'UNMATCHED THING', qty: '1', uom: 'Each' }),
+    })
+
+    const detail = await app.request(`/order-lists/${list.id}`, { headers: authHeaders(token) })
+    const body = (await detail.json()) as {
+      lines: Array<{ itemName: string; systemItemName: string | null }>
+    }
+    expect(body.lines.find((l) => l.itemName === 'ts chicken 900g')?.systemItemName).toBe(
+      'Chicken Whole 900g (Frozen)',
+    )
+    expect(body.lines.find((l) => l.itemName === 'UNMATCHED THING')?.systemItemName).toBeNull()
+
+    // Renaming the line via PATCH re-resolves
+    const lineId = (
+      (await (
+        await app.request(`/order-lists/${list.id}`, { headers: authHeaders(token) })
+      ).json()) as { lines: Array<{ id: string; itemName: string }> }
+    ).lines.find((l) => l.itemName === 'UNMATCHED THING')?.id
+    const patchRes = await app.request(`/order-lists/${list.id}/lines/${lineId}`, {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify({ itemName: 'TS CHICKEN 900G' }),
+    })
+    const patched = (await patchRes.json()) as { systemItemName: string | null }
+    expect(patched.systemItemName).toBe('Chicken Whole 900g (Frozen)')
+  })
+})

@@ -1,4 +1,16 @@
-import { and, count, desc, eq, ilike, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm'
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import Decimal from 'decimal.js'
 import { db } from '../../db/client.js'
 import type { DbTx } from '../../db/client.js'
@@ -26,6 +38,28 @@ export type ListParams = {
 }
 
 // ─── List / lookup ────────────────────────────────────────────────────────────
+
+// Case-insensitive lookup by customer_item_name — used (via the items service)
+// to resolve an order-list line's customer wording to the catalogue item.
+// namesLower must already be lowercased/trimmed by the caller.
+export async function findByCustomerItemNames(
+  businessId: string,
+  namesLower: string[],
+): Promise<Array<{ id: string; name: string; customerItemName: string | null }>> {
+  if (namesLower.length === 0) return []
+  return db
+    .select({ id: items.id, name: items.name, customerItemName: items.customerItemName })
+    .from(items)
+    .where(
+      and(
+        eq(items.businessId, businessId),
+        isNull(items.deletedAt),
+        isNotNull(items.customerItemName),
+        inArray(sql`lower(${items.customerItemName})`, namesLower),
+      ),
+    )
+    .orderBy(items.name)
+}
 
 export async function listItems(
   businessId: string,
