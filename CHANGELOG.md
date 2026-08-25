@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **`pnpm audit` is now fully clean — zero findings across the entire graph, dev tooling included.** Added the last override floor: `esbuild@0.18 → ^0.25.0` (`pnpm-workspace.yaml`), covering the dev-only dev-server advisory in the esbuild pinned by drizzle-kit's deprecated `@esbuild-kit` loader. The advisory's nominal fix version (0.24.3) was never published — 0.25.x is the nearest real patched line. Verified `drizzle-kit migrate` still works through the bumped loader. Remove the floor when drizzle-kit drops the legacy loader.
+
 ## [1.2.0] - 2026-08-25
 
 ### Added

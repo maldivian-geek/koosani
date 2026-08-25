@@ -21,6 +21,13 @@ overrides:
   'tmp@0': '^0.2.6'
   '@grpc/grpc-js@1': '^1.14.4'
   'uuid@11': '^11.1.1'
+  # drizzle-kit's deprecated @esbuild-kit loader pins esbuild ~0.18 (dev-server
+  # CORS advisory — dev-only; drizzle-kit never runs esbuild's serve mode). The
+  # advisory's nominal fix boundary (0.24.3) was never published; 0.25.x is the
+  # nearest real patched line, already used elsewhere in this graph. Verified by
+  # running drizzle-kit migrate after the bump. Remove when drizzle-kit drops
+  # the legacy loader.
+  'esbuild@0.18': '^0.25.0'
 allowBuilds:
   argon2: true
   # cpu-features is an optional native accelerator for ssh2 (itself only
