@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
+import { fileTypeFromBuffer } from 'file-type'
 import {
   OrderListCreate,
   OrderListPatch,
@@ -12,9 +13,17 @@ import {
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
+import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
+import { extractAndWait } from '../../lib/extractClient.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 import type { Context } from 'hono'
+
+// Per-user: 10 image-OCR extracts per hour (SECURITY.md, rate limit table) —
+// OCR is CPU-heavy, same reasoning as the pdf/report limiters.
+const ocrLimiter = createRedisRateLimiter('rl:orderlist-ocr', 10, 3600)
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const ALLOWED_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 const ListOrderListsQuery = z.object({
   q: z.string().optional(),
@@ -141,6 +150,45 @@ orderListRoutes.post(
     }
   },
 )
+
+// POST /order-lists/:id/lines/extract-image — OCR an uploaded screenshot/
+// photo of an order table into draft rows, feeding the SAME
+// { lines, skipped } shape into the SAME review-and-confirm step as
+// /lines/parse (ARCHITECTURE.md §4.16). The image is transient: held in
+// memory, sent through the `extract` BullMQ queue, and never written to
+// storage or disk (SECURITY.md §13.5 area note) — magic-byte + size checks
+// still apply since it's still an untrusted upload.
+orderListRoutes.post('/:id/lines/extract-image', requirePermission('orders', 'add'), async (c) => {
+  const orderListId = c.req.param('id')
+
+  try {
+    await svc.assertOrderListExists(c.get('businessId'), orderListId)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+
+  if (!(await ocrLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+
+  const body = await c.req.parseBody()
+  const entry = body['file']
+  if (!entry || !(entry instanceof File)) return c.json({ error: 'file field required' }, 400)
+
+  const buffer = Buffer.from(await entry.arrayBuffer())
+  if (buffer.byteLength > MAX_IMAGE_BYTES) {
+    return c.json({ error: 'file_too_large' }, 413)
+  }
+
+  // Magic-byte sniff (SECURITY.md §13.5 rule 1) — never trust the browser's
+  // declared Content-Type for the part.
+  const detected = await fileTypeFromBuffer(buffer)
+  if (!detected || !ALLOWED_IMAGE_MIME.has(detected.mime)) {
+    return c.json({ error: 'unsupported_media_type' }, 415)
+  }
+
+  const result = await extractAndWait({ imageBase64: buffer.toString('base64') })
+  return c.json(result)
+})
 
 // POST /order-lists/:id/lines/bulk — create the reviewed rows in one
 // transaction with a single order_list.import audit row.

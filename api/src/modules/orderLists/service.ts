@@ -86,6 +86,15 @@ export async function listOrderLists(
   return { items: rows, total, page, pageSize }
 }
 
+// ─── assertOrderListExists ────────────────────────────────────────────────────
+// Thin, exported existence check for callers that only need the 404 guard,
+// not the full list+lines read — used by the image-import route (Phase 36)
+// before it spends the OCR rate-limit budget on a nonexistent list.
+
+export async function assertOrderListExists(businessId: string, id: string): Promise<void> {
+  await assertExists(businessId, id)
+}
+
 // ─── getOrderList ─────────────────────────────────────────────────────────────
 
 export async function getOrderList(

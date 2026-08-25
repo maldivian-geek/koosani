@@ -40,4 +40,8 @@ allowBuilds:
   msgpackr-extract: true
   protobufjs: true
   ssh2: true
+  # tesseract.js's postinstall (opencollective-postinstall) only prints a
+  # funding message ('|| true' makes it non-fatal even if it fails) — no
+  # functional purpose, blocked same as cpu-features above.
+  tesseract.js: false
   vue-demi: true

@@ -7,7 +7,7 @@ import Textarea from 'primevue/textarea'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import { useToast } from 'primevue/usetoast'
-import { Trash2 } from '@lucide/vue'
+import { Trash2, ImageUp } from '@lucide/vue'
 import { OrderLinesImport, type OrderLineCreate } from '@koosani/shared'
 import { apiFetch, ApiError } from '../../lib/apiFetch.js'
 import type { OrderListLine } from './views/OrderListDetailView.vue'
@@ -21,6 +21,13 @@ const emit = defineEmits<{ close: []; imported: [OrderListLine[]] }>()
 
 type DraftRow = OrderLineCreate & { key: number }
 
+// Image import (Phase 36, ARCHITECTURE.md §4.16) — OCR runs server-side in
+// the worker (several seconds), so this shows its own "Reading image…" state
+// distinct from the paste-parse `loading` flag and disables the paste
+// controls meanwhile.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
 const toast = useToast()
 const visible = ref(true)
 const step = ref<'paste' | 'review'>('paste')
@@ -29,8 +36,11 @@ const error = ref('')
 const text = ref('')
 const drafts = ref<DraftRow[]>([])
 const skipped = ref(0)
+const fileInput = ref<HTMLInputElement | null>(null)
+const readingImage = ref(false)
 
 const canImport = computed(() => drafts.value.length > 0 && drafts.value.length <= 500)
+const busy = computed(() => loading.value || readingImage.value)
 
 async function parse() {
   error.value = ''
@@ -59,6 +69,59 @@ async function parse() {
         : 'Something went wrong. Please try again.'
   } finally {
     loading.value = false
+  }
+}
+
+function triggerImagePick() {
+  fileInput.value?.click()
+}
+
+async function onImageSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // allow re-picking the same file later
+  if (!file) return
+
+  error.value = ''
+
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    error.value = 'Unsupported image type. Use PNG, JPEG, or WEBP.'
+    return
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    error.value = 'Image is too large (max 10 MB).'
+    return
+  }
+
+  readingImage.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const result = await apiFetch<{ lines: OrderLineCreate[]; skipped: number }>(
+      `/order-lists/${props.orderListId}/lines/extract-image`,
+      { method: 'POST', body: formData },
+    )
+    drafts.value = result.lines.map((line, i) => ({ ...line, key: i }))
+    skipped.value = result.skipped
+    if (drafts.value.length === 0) {
+      error.value = 'No rows could be read from that image. Try a clearer photo or crop it tighter.'
+      return
+    }
+    step.value = 'review'
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 413) {
+      error.value = 'Image is too large (max 10 MB).'
+    } else if (err instanceof ApiError && err.status === 415) {
+      error.value = 'Unsupported image type. Use PNG, JPEG, or WEBP.'
+    } else if (err instanceof ApiError && err.status === 429) {
+      error.value = 'Too many image imports this hour — try again later.'
+    } else if (err instanceof ApiError && err.status === 403) {
+      error.value = "You don't have permission to do that."
+    } else {
+      error.value = 'Something went wrong reading that image. Please try again.'
+    }
+  } finally {
+    readingImage.value = false
   }
 }
 
@@ -128,8 +191,31 @@ async function confirmImport() {
         rows="12"
         class="w-full resize-none font-mono text-xs"
         autofocus
+        :disabled="readingImage"
         placeholder="TS BISCOLATA MOOD 135 GM - TIN&#9;24&#9;Each&#10;TS CHICKEN 900G&#9;54&#9;Each&#9;&#9;20"
       />
+      <div class="flex items-center gap-3">
+        <div class="h-px flex-1 bg-surface-200" />
+        <span class="text-xs text-surface-400">or</span>
+        <div class="h-px flex-1 bg-surface-200" />
+      </div>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        class="hidden"
+        @change="onImageSelected"
+      />
+      <Button
+        severity="secondary"
+        class="w-full"
+        :loading="readingImage"
+        :disabled="readingImage"
+        @click="triggerImagePick"
+      >
+        <ImageUp class="w-4 h-4" />
+        {{ readingImage ? 'Reading image…' : 'Upload a photo or screenshot' }}
+      </Button>
     </template>
 
     <template v-else>
@@ -185,15 +271,21 @@ async function confirmImport() {
 
     <template #footer>
       <div class="flex justify-end gap-2">
-        <Button label="Cancel" severity="secondary" @click="emit('close')" />
+        <Button label="Cancel" severity="secondary" :disabled="busy" @click="emit('close')" />
         <Button
           v-if="step === 'review'"
           label="Back"
           severity="secondary"
-          :disabled="loading"
+          :disabled="busy"
           @click="step = 'paste'"
         />
-        <Button v-if="step === 'paste'" label="Preview" :loading="loading" @click="parse" />
+        <Button
+          v-if="step === 'paste'"
+          label="Preview"
+          :loading="loading"
+          :disabled="readingImage"
+          @click="parse"
+        />
         <Button
           v-else
           :label="`Import ${drafts.length} line${drafts.length === 1 ? '' : 's'}`"

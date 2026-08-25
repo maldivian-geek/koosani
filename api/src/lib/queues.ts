@@ -26,3 +26,11 @@ export const emailQueue = new Queue('email', { connection: redis })
 // Scans every business's issued/partially-paid invoices for due reminders and
 // enqueues `email` jobs (Phase 24, UPGRADE.md G-4).
 export const remindersQueue = new Queue('reminders', { connection: redis })
+
+// Order-list "import from image" OCR (Phase 36, ARCHITECTURE.md §4.16). The
+// image is transient — decoded from base64 in the job payload, never written
+// to storage (SECURITY.md §13.5 area note) — and OCR is CPU-heavy, so it runs
+// in the worker like pdf/gst. Routes enqueue and synchronously await
+// completion (lib/extractClient.ts), same pattern as lib/pdfClient.ts.
+export const extractQueue = new Queue('extract', { connection: redis })
+export const extractQueueEvents = new QueueEvents('extract', { connection: redis })

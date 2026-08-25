@@ -399,6 +399,8 @@ This app accepts uploads (supplier invoice PDFs, SOA files for extraction, possi
 7. **SHA-256 of uploaded bytes stored on the row.** Dedup + tamper evidence. Computed over the post-EXIF-strip buffer for images.
 8. **Strip EXIF from images** before storage — re-encoded via `sharp` (which drops metadata by default), then hashed and stored.
 
+**13.5a Transient images — order-list image import (Phase 36).** `POST /order-lists/:id/lines/extract-image` (ARCHITECTURE.md §4.16) accepts an image upload but is **not** part of the `files` module pipeline above: the image is never written to object storage, never virus-scanned via `virusScan.ts`, and never given a `files` row. It exists only in memory for the duration of the request/job — decoded, size-capped (10 MB), magic-byte sniffed (png/jpeg/webp only, via `file-type`, same library as rule 1), base64'd into a BullMQ `extract` job, OCR'd by the worker (`lib/ocr-engine.ts`, tesseract.js — STACK.md), and discarded once the job resolves. This is a deliberate scope reduction, not an oversight: nothing from the image is ever persisted or served back to any client — only the OCR'd _text_ (as draft order-list lines, already Zod-validated by the existing `order-list-import.ts` parser) survives the request, and that text goes through the same review-and-confirm screen as the paste-import path (§13.13) before anything is written to the database. Size cap and magic-byte checks still apply exactly as they would for a stored upload, since the bytes are still untrusted input from the network even though nothing downstream of the worker keeps them.
+
 ### 13.6 PII and financial export controls
 
 Bulk exports (full customer list CSV, GST return ZIPs, GL exports) carry concentrated PII and tax data.
@@ -411,19 +413,20 @@ Bulk exports (full customer list CSV, GST return ZIPs, GL exports) carry concent
 
 PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. Without limits a logged-in user can drive the box to 100% CPU.
 
-| Endpoint                            | Limiter      | Window | Max | Status      |
-| ----------------------------------- | ------------ | ------ | --- | ----------- |
-| `GET /invoices/:id/pdf`             | per-user     | 1 min  | 20  | ✅ Phase 18 |
-| `GET /pos/:id/pdf`                  | per-user     | 1 min  | 20  | ✅ Phase 18 |
-| `GET /customers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
-| `GET /suppliers/:id/soa?format=pdf` | per-user     | 1 min  | 10  | ✅ Phase 23 |
-| `POST /invoices/:id/send`           | per-user     | 1 min  | 20  | ✅ Phase 24 |
-| `POST /customers/:id/soa/send`      | per-user     | 1 min  | 10  | ✅ Phase 24 |
-| `GET /estimates/:id/pdf`            | per-user     | 1 min  | 20  | ✅ Phase 25 |
-| `POST /estimates/:id/send`          | per-user     | 1 min  | 20  | ✅ Phase 25 |
-| `POST /gst/periods/:id/build`       | per-business | 5 min  | 3   | ✅ Phase 16 |
-| `GET /reports/*?format=csv`         | per-user     | 1 min  | 20  | ✅ Phase 18 |
-| `GET /reports/*?format=csv` (bulk)  | per-user     | 1 hour | 10  | ✅ Phase 20 |
+| Endpoint                                    | Limiter      | Window | Max | Status      |
+| ------------------------------------------- | ------------ | ------ | --- | ----------- |
+| `GET /invoices/:id/pdf`                     | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /pos/:id/pdf`                          | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /customers/:id/soa?format=pdf`         | per-user     | 1 min  | 10  | ✅ Phase 23 |
+| `GET /suppliers/:id/soa?format=pdf`         | per-user     | 1 min  | 10  | ✅ Phase 23 |
+| `POST /invoices/:id/send`                   | per-user     | 1 min  | 20  | ✅ Phase 24 |
+| `POST /customers/:id/soa/send`              | per-user     | 1 min  | 10  | ✅ Phase 24 |
+| `GET /estimates/:id/pdf`                    | per-user     | 1 min  | 20  | ✅ Phase 25 |
+| `POST /estimates/:id/send`                  | per-user     | 1 min  | 20  | ✅ Phase 25 |
+| `POST /gst/periods/:id/build`               | per-business | 5 min  | 3   | ✅ Phase 16 |
+| `GET /reports/*?format=csv`                 | per-user     | 1 min  | 20  | ✅ Phase 18 |
+| `GET /reports/*?format=csv` (bulk)          | per-user     | 1 hour | 10  | ✅ Phase 20 |
+| `POST /order-lists/:id/lines/extract-image` | per-user     | 1 hour | 10  | ✅ Phase 36 |
 
 **Implementation:** `api/src/lib/rateLimiter.ts` provides two limiters. `createRedisRateLimiter(keyPrefix, points, durationSec)` — Redis-backed via `rate-limiter-flexible`, correct across multiple API instances — backs every limiter in this table as of Phase 20 (UPGRADE.md F-7; previously all were in-process `Map`s that reset per instance/restart, multiplying every limit by the instance count). `createRateLimiter(windowMs, max)` (in-process) is deprecated and kept only for any call site not yet migrated.
 

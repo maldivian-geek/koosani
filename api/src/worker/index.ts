@@ -4,6 +4,7 @@ import { soaExtractWorker } from './soa-extract.js'
 import { registerPdfWorker } from './pdf.js'
 import { registerEmailWorker } from './email.js'
 import { registerRemindersWorker } from './reminders.js'
+import { registerExtractWorker } from './extract.js'
 import { reconcileQueue, remindersQueue } from '../lib/queues.js'
 import { MV_TZ } from '@koosani/shared'
 
@@ -32,5 +33,6 @@ export async function registerWorkers() {
     pdf: registerPdfWorker(),
     email: registerEmailWorker(),
     reminders: registerRemindersWorker(),
+    extract: registerExtractWorker(),
   }
 }
