@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-25
+
 ### Added
 
 - **Order lists: derived "System Item" column** (ARCHITECTURE.md §4.16, FUNCTIONS.md §orderLists/§items). A line's `itemName` is the customer's wording; every line-returning response now also carries `systemItemName` — the catalogue item's name, resolved at read time by a case-insensitive match against `items.customer_item_name` (new read-only `items.findByCustomerItemNames` service lookup; never stored, so it tracks catalogue changes). Shown as a muted read-only column on the detail screen; renaming a line inline re-resolves it from the PATCH response.
