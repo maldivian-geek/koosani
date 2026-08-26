@@ -26,7 +26,7 @@ function nextTestIp(): string {
 beforeAll(async () => {
   const url = await createTestDatabase()
   process.env['DATABASE_URL'] = url
-  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6380'
+  process.env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://localhost:6380/1'
   process.env['JWT_SECRET'] = JWT_SECRET
   process.env['PORTAL_JWT_SECRET'] = PORTAL_JWT_SECRET
   process.env['FRONTEND_URL'] = 'http://localhost:5173'
