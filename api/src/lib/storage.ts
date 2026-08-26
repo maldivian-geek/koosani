@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
@@ -44,6 +44,23 @@ export function isAllowedMime(mimeType: string): boolean {
 
 const LOCAL_ROOT = join(tmpdir(), 'koosani-uploads')
 
+// Local "signed URL" support: HMAC-expiring links served by the public
+// GET /files/local route (files/routes.ts, mounted without cookie auth — the
+// signature IS the authorization, mirroring S3's signed-URL semantics
+// including the expiry). Signed with the existing JWT_SECRET; only the server
+// can mint a valid (key, exp, sig) triple. Still a dev/test-only backend —
+// production uses S3 (STACK.md).
+export function signLocalKey(key: string, exp: number): string {
+  return createHmac('sha256', config.JWT_SECRET).update(`${key}\n${exp}`).digest('hex')
+}
+
+export function verifyLocalKey(key: string, exp: number, sig: string): boolean {
+  if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false
+  const expected = Buffer.from(signLocalKey(key, exp))
+  const provided = Buffer.from(sig)
+  return expected.length === provided.length && timingSafeEqual(expected, provided)
+}
+
 class LocalStorage implements StorageBackend {
   async put(key: string, data: Buffer): Promise<void> {
     const fullPath = join(LOCAL_ROOT, key)
@@ -55,9 +72,11 @@ class LocalStorage implements StorageBackend {
     return readFile(join(LOCAL_ROOT, key))
   }
 
-  async getSignedUrl(key: string, _expiresInSeconds: number): Promise<string> {
-    // Local dev: return a data URI so tests can verify the URL was generated
-    return `local://${key}`
+  async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
+    const exp = Math.floor(Date.now() / 1000) + expiresInSeconds
+    const sig = signLocalKey(key, exp)
+    const base = config.API_PUBLIC_URL ?? `http://localhost:${config.PORT}`
+    return `${base}/files/local?key=${encodeURIComponent(key)}&exp=${exp}&sig=${sig}`
   }
 }
 

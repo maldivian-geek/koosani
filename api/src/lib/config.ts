@@ -41,6 +41,10 @@ const configSchema = z.object({
   // Object-storage CDN hostname for CSP img-src / connect-src (SECURITY.md §13.8)
   STORAGE_HOSTNAME: z.string().default(''),
   PORT: z.coerce.number().int().positive().default(3000),
+  // Public base URL of the API process itself — used only by the LOCAL
+  // storage backend to build its dev signed-download URLs. Optional;
+  // defaults to http://localhost:<PORT>.
+  API_PUBLIC_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   FILES_STORAGE: z.enum(['local', 's3']).default('local'),
   S3_BUCKET: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),

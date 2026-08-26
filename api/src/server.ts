@@ -14,7 +14,7 @@ import { inventoryRoutes } from './modules/inventory/routes.js'
 import { gstRoutes } from './modules/gst/routes.js'
 import { invoiceRoutes, creditNoteRoutes, deliveryNoteRoutes } from './modules/invoicing/routes.js'
 import { billRoutes } from './modules/purchases/routes.js'
-import { fileRoutes } from './modules/files/routes.js'
+import { fileRoutes, localFileRoutes } from './modules/files/routes.js'
 import { poRoutes, grnRoutes } from './modules/po/routes.js'
 import { reportRoutes } from './modules/reports/routes.js'
 import { userRoutes } from './modules/users/routes.js'
@@ -145,6 +145,9 @@ app.route('/invoices', invoiceRoutes)
 app.route('/credit-notes', creditNoteRoutes)
 app.route('/delivery-notes', deliveryNoteRoutes)
 app.route('/bills', billRoutes)
+// Signature-authenticated local-storage downloads — must mount BEFORE the
+// cookie-auth'd /files router so it matches first (files/routes.ts).
+app.route('/files/local', localFileRoutes)
 app.route('/files', fileRoutes)
 app.route('/pos', poRoutes)
 app.route('/grns', grnRoutes)
