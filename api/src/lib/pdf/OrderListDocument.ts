@@ -11,19 +11,35 @@ const h = React.createElement
 // Additional Note, Payment, Stock) don't fit the shared colDescription/
 // colQty/... styles in styles.ts (those are sized for a 5-column priced
 // table), so this template defines its own column widths locally.
+// Flex weights are shared with the wrap-aware one-page fitting below — keep
+// COL_FLEX and the StyleSheet in sync. Item gets the lion's share: product
+// names are the longest field and wrapping them doubles row height.
+const COL_FLEX = {
+  hash: 0.4,
+  item: 2.6,
+  systemItem: 1.3,
+  qty: 0.55,
+  uom: 0.6,
+  note: 1.1,
+  additionalNote: 1.0,
+  payment: 0.75,
+  stock: 0.95,
+}
+const FLEX_SUM = Object.values(COL_FLEX).reduce((a, b) => a + b, 0)
+
 const localStyles = StyleSheet.create({
   notesTop: {
     marginBottom: 16,
   },
-  colHash: { flex: 0.4 },
-  colItem: { flex: 1.8 },
-  colSystemItem: { flex: 1.6 },
-  colQty: { flex: 0.6, textAlign: 'right' },
-  colUom: { flex: 0.7 },
-  colNote: { flex: 1.3 },
-  colAdditionalNote: { flex: 1.3 },
-  colPayment: { flex: 0.9 },
-  colStock: { flex: 1.1 },
+  colHash: { flex: COL_FLEX.hash },
+  colItem: { flex: COL_FLEX.item },
+  colSystemItem: { flex: COL_FLEX.systemItem },
+  colQty: { flex: COL_FLEX.qty, textAlign: 'right' },
+  colUom: { flex: COL_FLEX.uom },
+  colNote: { flex: COL_FLEX.note },
+  colAdditionalNote: { flex: COL_FLEX.additionalNote },
+  colPayment: { flex: COL_FLEX.payment },
+  colStock: { flex: COL_FLEX.stock },
 })
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -43,6 +59,79 @@ const STOCK_STATUS_LABELS: Record<string, string> = {
 // (web/src/modules/orderLists/views/OrderListDetailView.vue).
 function formatQty(q: string): string {
   return q.includes('.') ? q.replace(/0+$/, '').replace(/\.$/, '') : q
+}
+
+// One-page fit: these lists get printed and carried around, so the table
+// densifies as it grows instead of spilling to page 2. Tier selection is
+// WRAP-AWARE — it estimates each row's height from the actual text widths
+// against the real column geometry (long product names wrapping to a second
+// line is what actually blows the page budget, not the row count), then
+// picks the largest font that fits. Floors at 5.5pt; past that a second
+// page is unavoidable at readable sizes.
+const A4_WIDTH = 595.28
+const A4_HEIGHT = 841.89
+const PAGE_PADDING = 40
+const HEADER_ALLOWANCE = 75 // business/title header + its margin
+const NOTES_ALLOWANCE = 40 // notes block when present
+const TABLE_CHROME = 16 // table margin + borders
+const AVG_CHAR_FACTOR = 0.52 // Helvetica average glyph width ≈ 0.52 × fontSize
+const LINE_HEIGHT = 1.2
+
+const TIERS: Array<{ fontSize: number; paddingVertical: number }> = [
+  { fontSize: 9, paddingVertical: 4 },
+  { fontSize: 8, paddingVertical: 3 },
+  { fontSize: 7.5, paddingVertical: 2.5 },
+  { fontSize: 7, paddingVertical: 2 },
+  { fontSize: 6.5, paddingVertical: 2 },
+  { fontSize: 6, paddingVertical: 1.5 },
+  { fontSize: 5.5, paddingVertical: 1.5 },
+]
+
+function tableScale(
+  lines: OrderListLinePdfData[],
+  hasNotes: boolean,
+): { fontSize: number; paddingVertical: number } {
+  const usableWidth = A4_WIDTH - 2 * PAGE_PADDING
+  const colWidth = (flex: number) => (usableWidth * flex) / FLEX_SUM
+  const widths = {
+    item: colWidth(COL_FLEX.item),
+    systemItem: colWidth(COL_FLEX.systemItem),
+    note: colWidth(COL_FLEX.note),
+    additionalNote: colWidth(COL_FLEX.additionalNote),
+  }
+  const budget =
+    A4_HEIGHT -
+    2 * PAGE_PADDING -
+    HEADER_ALLOWANCE -
+    (hasNotes ? NOTES_ALLOWANCE : 0) -
+    TABLE_CHROME
+
+  for (const tier of TIERS) {
+    const charWidth = tier.fontSize * AVG_CHAR_FACTOR
+    const textLines = (text: string | null, width: number) =>
+      Math.max(1, Math.ceil(((text ?? '').length * charWidth) / width))
+    const headerRowHeight = tier.fontSize * LINE_HEIGHT + 2 * tier.paddingVertical
+    const rowsHeight = lines.reduce((sum, line) => {
+      const rowLines = Math.max(
+        textLines(line.itemName, widths.item),
+        textLines(line.systemItemName, widths.systemItem),
+        textLines(line.note, widths.note),
+        textLines(line.additionalNote, widths.additionalNote),
+      )
+      return sum + rowLines * tier.fontSize * LINE_HEIGHT + 2 * tier.paddingVertical + 0.5
+    }, 0)
+    if (headerRowHeight + rowsHeight <= budget) return tier
+  }
+  return TIERS[TIERS.length - 1] as { fontSize: number; paddingVertical: number }
+}
+
+// Row tints mirroring the owner's original spreadsheet: paid rows green,
+// not-available rows red (red wins when both apply — unavailability is the
+// more actionable signal). Light tints so black text stays printable.
+function rowTint(line: OrderListLinePdfData): string | null {
+  if (line.stockStatus === 'not_available') return '#fdecea'
+  if (line.paymentStatus === 'paid') return '#e8f5e9'
+  return null
 }
 
 export type OrderListLinePdfData = {
@@ -65,6 +154,8 @@ export type OrderListPdfData = {
 }
 
 export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
+  const scale = tableScale(data.lines, !!data.notes)
+  const scaleStyle = { fontSize: scale.fontSize, paddingVertical: scale.paddingVertical }
   return h(
     Document,
     null,
@@ -104,7 +195,7 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
         { style: styles.table },
         h(
           View,
-          { style: styles.tableHeaderRow },
+          { style: [styles.tableHeaderRow, scaleStyle] },
           h(Text, { style: localStyles.colHash }, '#'),
           h(Text, { style: localStyles.colItem }, 'Item'),
           h(Text, { style: localStyles.colSystemItem }, 'System Item'),
@@ -115,10 +206,16 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
           h(Text, { style: localStyles.colPayment }, 'Payment'),
           h(Text, { style: localStyles.colStock }, 'Stock'),
         ),
-        ...data.lines.map((line, i) =>
-          h(
+        ...data.lines.map((line, i) => {
+          const tint = rowTint(line)
+          return h(
             View,
-            { key: i, style: styles.tableRow },
+            {
+              key: i,
+              style: tint
+                ? [styles.tableRow, scaleStyle, { backgroundColor: tint }]
+                : [styles.tableRow, scaleStyle],
+            },
             h(Text, { style: localStyles.colHash }, String(line.position + 1)),
             h(Text, { style: localStyles.colItem }, line.itemName),
             h(Text, { style: localStyles.colSystemItem }, line.systemItemName ?? '—'),
@@ -128,8 +225,8 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
             h(Text, { style: localStyles.colAdditionalNote }, line.additionalNote ?? ''),
             h(Text, { style: localStyles.colPayment }, PAYMENT_STATUS_LABELS[line.paymentStatus]),
             h(Text, { style: localStyles.colStock }, STOCK_STATUS_LABELS[line.stockStatus]),
-          ),
-        ),
+          )
+        }),
       ),
       h(
         Text,
