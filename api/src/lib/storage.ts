@@ -66,8 +66,10 @@ const LOCAL_ROOT = join(tmpdir(), 'koosani-uploads')
 // GET /files/local route (files/routes.ts, mounted without cookie auth — the
 // signature IS the authorization, mirroring S3's signed-URL semantics
 // including the expiry). Signed with the existing JWT_SECRET; only the server
-// can mint a valid (key, exp, sig) triple. Still a dev/test-only backend —
-// production uses S3 (STACK.md).
+// can mint a valid (key, exp, sig) triple. Primarily a dev/test backend;
+// production should use S3 (STACK.md), but when it runs local as a stopgap
+// the api and worker containers must share the uploads volume
+// (docker-compose.prod.yml) and URLs are minted on the public /api base.
 export function signLocalKey(key: string, exp: number, name = ''): string {
   return createHmac('sha256', config.JWT_SECRET).update(`${key}\n${exp}\n${name}`).digest('hex')
 }
@@ -98,7 +100,15 @@ class LocalStorage implements StorageBackend {
     const exp = Math.floor(Date.now() / 1000) + expiresInSeconds
     const name = downloadName ? sanitizeDownloadName(downloadName) : ''
     const sig = signLocalKey(key, exp, name)
-    const base = config.API_PUBLIC_URL ?? `http://localhost:${config.PORT}`
+    // Base URL priority: explicit API_PUBLIC_URL; else in production the api
+    // is reachable under the web app's own domain at /api (SECURITY.md
+    // §13.12, web/nginx.conf) so derive from FRONTEND_URL; dev falls back to
+    // the local api port (the vite dev server has no /api proxy).
+    const base =
+      config.API_PUBLIC_URL ??
+      (config.NODE_ENV === 'production'
+        ? `${config.FRONTEND_URL.replace(/\/+$/, '')}/api`
+        : `http://localhost:${config.PORT}`)
     const namePart = name ? `&name=${encodeURIComponent(name)}` : ''
     return `${base}/files/local?key=${encodeURIComponent(key)}&exp=${exp}${namePart}&sig=${sig}`
   }

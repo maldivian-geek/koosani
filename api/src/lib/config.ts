@@ -42,8 +42,9 @@ const configSchema = z.object({
   STORAGE_HOSTNAME: z.string().default(''),
   PORT: z.coerce.number().int().positive().default(3000),
   // Public base URL of the API process itself — used only by the LOCAL
-  // storage backend to build its dev signed-download URLs. Optional;
-  // defaults to http://localhost:<PORT>.
+  // storage backend to build its signed-download URLs. Optional; when unset,
+  // production derives FRONTEND_URL + /api (the api's public address behind
+  // web/nginx — SECURITY.md §13.12) and dev/test use http://localhost:<PORT>.
   API_PUBLIC_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   FILES_STORAGE: z.enum(['local', 's3']).default('local'),
   S3_BUCKET: z.string().optional(),

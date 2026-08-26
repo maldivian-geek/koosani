@@ -44,9 +44,13 @@
 # AWS_SECRET_ACCESS_KEY (read directly by the AWS SDK, not by this app's own
 # config) for file uploads/PDF downloads to actually work. Until then, set
 # FILES_STORAGE=local as a stopgap â€” api/src/lib/storage.ts's local backend
-# is explicitly dev/test-only (its "signed URLs" are fake `local://` strings,
-# not real download links), so uploads/downloads silently won't work, but
-# everything else in the app runs fine.
+# now serves real HMAC-signed download links (SECURITY.md 13.5 rule 5). For
+# local mode to work here, two things below matter: (1) api and worker share
+# the `uploads_data` volume (the worker renders PDFs into it, the api serves
+# the signed downloads from it), and (2) signed URLs use API_PUBLIC_URL when
+# set, else derive `FRONTEND_URL + /api` in production (the api's public
+# address via web/nginx.conf). Files live on this one host's volume, so S3
+# remains the recommended production backend.
 # Optional: PORTAL_JWT_SECRET/PORTAL_FRONTEND_URL (customer portal), RESEND_API_KEY
 # (email), GEO_PROVIDER.
 #
@@ -148,6 +152,9 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
+      # Public base URL for local-storage signed downloads; when unset the
+      # api derives FRONTEND_URL + /api in production (storage.ts).
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-}
       ADMIN_BUSINESS_NAME: ${ADMIN_BUSINESS_NAME:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_NAME: ${ADMIN_NAME:-}
@@ -164,6 +171,11 @@ services:
     # after forcing api's priority explicitly (SECURITY.md Â§13.12).
     expose:
       - '3000'
+    # Shared with `worker`: with FILES_STORAGE=local the worker writes
+    # rendered PDFs here and the api serves the signed downloads from it.
+    # Named volume, so uploaded files also survive redeploys.
+    volumes:
+      - uploads_data:/tmp/koosani-uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -214,6 +226,10 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       STORAGE_HOSTNAME: ${STORAGE_HOSTNAME:-}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-}
+    # Same uploads volume as `api` — see the comment there.
+    volumes:
+      - uploads_data:/tmp/koosani-uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -248,6 +264,7 @@ services:
 volumes:
   redis_data:
   clamav_data:
+  uploads_data:
 
 networks:
   # Coolify's own shared network â€” external because Coolify creates it, not
