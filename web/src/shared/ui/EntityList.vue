@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useSlots } from 'vue'
 import DataTable from 'primevue/datatable'
 import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
@@ -53,6 +53,20 @@ const totalRecords = computed(() => props.total ?? props.rows.length)
 function onPage(event: { page: number; rows: number }) {
   emit('page', { page: event.page + 1, pageSize: event.rows })
 }
+
+// Opt-in mobile card rendering (DESIGN.md §11): when a view provides a
+// #mobileCard slot, the DataTable (and its paginator) hide below `md` in
+// favor of purpose-built tappable cards + a simple Prev/Next pager. Views
+// without the slot keep the labeled stacked-table fallback unchanged —
+// designed cards beat a collapsed table for entities with only a few fields,
+// while wide entities still benefit from the stacked fallback.
+const slots = useSlots()
+const hasMobileCards = computed(() => !!slots['mobileCard'])
+const lastPage = computed(() => Math.max(1, Math.ceil(totalRecords.value / (props.pageSize ?? 20))))
+
+function goToPage(target: number) {
+  emit('page', { page: target, pageSize: props.pageSize ?? 20 })
+}
 </script>
 
 <template>
@@ -68,14 +82,14 @@ function onPage(event: { page: number; rows: number }) {
       <Button v-if="q" label="Reset" severity="secondary" text @click="clearSearch" />
       <slot name="filters" />
       <span class="ml-auto text-xs text-surface-400">{{ totalRecords }} {{ entity }}s</span>
-      <Button v-if="canCreate" @click="$emit('create')">
+      <Button v-if="canCreate" class="w-full md:w-auto" @click="$emit('create')">
         <Plus class="w-4 h-4" />
         New {{ entity }}
       </Button>
     </div>
 
     <!-- table card -->
-    <div class="card overflow-hidden p-0!">
+    <div class="card overflow-hidden p-0!" :class="hasMobileCards ? 'hidden md:block' : ''">
       <DataTable
         :value="rows"
         :loading="loading"
@@ -110,6 +124,42 @@ function onPage(event: { page: number; rows: number }) {
         </template>
         <slot />
       </DataTable>
+    </div>
+
+    <!-- mobile card list (only when the view opts in with #mobileCard) -->
+    <div v-if="hasMobileCards" class="md:hidden space-y-2">
+      <div v-if="loading" class="card p-8 text-center text-sm text-surface-400">Loading…</div>
+      <div v-else-if="rows.length === 0" class="card p-8 text-center text-sm text-surface-400">
+        {{ q ? 'No results for your search.' : `No ${entity}s yet.` }}
+      </div>
+      <template v-else>
+        <button
+          v-for="(row, i) in rows"
+          :key="i"
+          type="button"
+          class="card w-full text-left p-4 active:bg-surface-100 dark:active:bg-surface-800 transition-colors"
+          @click="$emit('rowClick', row)"
+        >
+          <slot name="mobileCard" :row="row" />
+        </button>
+      </template>
+      <div v-if="totalRecords > (pageSize ?? 20)" class="flex items-center justify-between pt-1">
+        <Button
+          label="Previous"
+          severity="secondary"
+          size="small"
+          :disabled="(page ?? 1) <= 1"
+          @click="goToPage((page ?? 1) - 1)"
+        />
+        <span class="text-xs text-surface-400">Page {{ page }} of {{ lastPage }}</span>
+        <Button
+          label="Next"
+          severity="secondary"
+          size="small"
+          :disabled="(page ?? 1) >= lastPage"
+          @click="goToPage((page ?? 1) + 1)"
+        />
+      </div>
     </div>
   </div>
 </template>

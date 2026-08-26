@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
+import { ChevronRight } from '@lucide/vue'
 import EntityList from '../../../shared/ui/EntityList.vue'
 import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import DateCell from '../../../shared/ui/DateCell.vue'
@@ -111,6 +112,22 @@ onMounted(() => void load())
           <DateCell :date="(data as OrderListRow).updatedAt" />
         </template>
       </Column>
+
+      <template #mobileCard="{ row }">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-medium text-surface-900 dark:text-surface-50 truncate">
+              {{ (row as OrderListRow).title }}
+            </p>
+            <p class="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+              {{ (row as OrderListRow).lineCount }}
+              {{ (row as OrderListRow).lineCount === 1 ? 'line' : 'lines' }}
+              · updated <DateCell :date="(row as OrderListRow).updatedAt" />
+            </p>
+          </div>
+          <ChevronRight class="w-4 h-4 text-surface-400 shrink-0" />
+        </div>
+      </template>
     </EntityList>
 
     <OrderListCreateDialog v-if="dialogOpen" @close="dialogOpen = false" @created="onCreated" />
