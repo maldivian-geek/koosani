@@ -3,6 +3,7 @@ import { createTestDatabase } from '../../../db/test-db.js'
 import postgres from 'postgres'
 import * as argon2 from 'argon2'
 import jwt from 'jsonwebtoken'
+import type { PermissionResource, PermissionAction } from '@koosani/shared'
 
 // Phase 34 — see ARCHITECTURE.md §4.16. Order lists are a lightweight,
 // non-financial checklist: no GST, no numbering, no stock movement.
@@ -298,6 +299,67 @@ describe('orderLists — routes', () => {
     expect(listRes.status).toBe(200)
     const body = (await listRes.json()) as { items: unknown[]; total: number }
     expect(body.total).toBe(1)
+  })
+})
+
+// ─── Phase 37 — staff view gating on GET /order-lists ────────────────────────
+
+async function grantPermission(
+  businessId: string,
+  userId: string,
+  resource: PermissionResource,
+  action: PermissionAction,
+) {
+  const { db: appDb } = await import('../../../db/client.js')
+  const schema = await import('../../../db/schema/index.js')
+  await appDb.insert(schema.userPermissions).values({
+    businessId,
+    userId,
+    resource,
+    action,
+    grantedBy: userId,
+  })
+}
+
+describe('orderLists — Phase 37 staff view gating', () => {
+  it('staff with no grants gets 403 on GET /order-lists', async () => {
+    const { token } = await seedBusiness('staff')
+    const { app } = await import('../../../server.js')
+
+    const res = await app.request('/order-lists', { headers: authHeaders(token) })
+    expect(res.status).toBe(403)
+  })
+
+  it('staff with only {orders,view} gets 200 on GET but 403 on POST', async () => {
+    const { business, user, token } = await seedBusiness('staff')
+    await grantPermission(business.id, user.id, 'orders', 'view')
+    const { app } = await import('../../../server.js')
+
+    const getRes = await app.request('/order-lists', { headers: authHeaders(token) })
+    expect(getRes.status).toBe(200)
+
+    const postRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Staff view-only attempt' }),
+    })
+    expect(postRes.status).toBe(403)
+  })
+
+  it('staff with {orders,add} gets 200 on GET (implied view)', async () => {
+    const { business, user, token } = await seedBusiness('staff')
+    await grantPermission(business.id, user.id, 'orders', 'add')
+    const { app } = await import('../../../server.js')
+
+    const getRes = await app.request('/order-lists', { headers: authHeaders(token) })
+    expect(getRes.status).toBe(200)
+
+    const postRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Staff with add grant' }),
+    })
+    expect(postRes.status).toBe(201)
   })
 })
 

@@ -30,14 +30,19 @@ export const itemRoutes = new Hono<AppEnv>()
 itemRoutes.use('*', requireAuth)
 
 // GET /items
-itemRoutes.get('/', zValidator('query', ListQuery), async (c) => {
-  const { q, categoryId, active, page, pageSize } = c.req.valid('query')
-  const result = await svc.list(c.get('businessId'), { q, categoryId, active, page, pageSize })
-  return c.json(result)
-})
+itemRoutes.get(
+  '/',
+  requirePermission('items', 'view'),
+  zValidator('query', ListQuery),
+  async (c) => {
+    const { q, categoryId, active, page, pageSize } = c.req.valid('query')
+    const result = await svc.list(c.get('businessId'), { q, categoryId, active, page, pageSize })
+    return c.json(result)
+  },
+)
 
 // GET /items/:id
-itemRoutes.get('/:id', async (c) => {
+itemRoutes.get('/:id', requirePermission('items', 'view'), async (c) => {
   const id = c.req.param('id')
   try {
     const item = await svc.getById(c.get('businessId'), id)
@@ -121,7 +126,7 @@ export const categoryRoutes = new Hono<AppEnv>()
 categoryRoutes.use('*', requireAuth)
 
 // GET /item-categories
-categoryRoutes.get('/', async (c) => {
+categoryRoutes.get('/', requirePermission('items', 'view'), async (c) => {
   const categories = await svc.listCategories(c.get('businessId'))
   return c.json(categories)
 })

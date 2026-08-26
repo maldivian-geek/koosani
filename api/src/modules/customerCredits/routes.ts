@@ -22,7 +22,7 @@ export const customerCreditRoutes = new Hono<AppEnv>()
 customerCreditRoutes.use('*', requireAuth)
 
 // GET /customers/:id/credits — balance + ledger
-customerCreditRoutes.get('/:id/credits', async (c) => {
+customerCreditRoutes.get('/:id/credits', requirePermission('customers', 'view'), async (c) => {
   const customerId = c.req.param('id')
   try {
     await customersSvc.assertExists(customerId, c.get('businessId'))

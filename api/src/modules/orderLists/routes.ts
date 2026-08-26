@@ -44,15 +44,20 @@ function ctxFrom(c: Context<AppEnv>) {
 }
 
 // GET /order-lists
-orderListRoutes.get('/', zValidator('query', ListOrderListsQuery), async (c) => {
-  const q = c.req.valid('query')
-  const result = await svc.listOrderLists(c.get('businessId'), {
-    q: q.q,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json(result)
-})
+orderListRoutes.get(
+  '/',
+  requirePermission('orders', 'view'),
+  zValidator('query', ListOrderListsQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const result = await svc.listOrderLists(c.get('businessId'), {
+      q: q.q,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json(result)
+  },
+)
 
 // POST /order-lists
 orderListRoutes.post(
@@ -66,7 +71,7 @@ orderListRoutes.post(
 )
 
 // GET /order-lists/:id
-orderListRoutes.get('/:id', async (c) => {
+orderListRoutes.get('/:id', requirePermission('orders', 'view'), async (c) => {
   try {
     const list = await svc.getOrderList(c.get('businessId'), c.req.param('id'))
     return c.json(list)

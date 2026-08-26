@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
-import { TrendingUp, TrendingDown, Package, ExternalLink } from '@lucide/vue'
+import { TrendingUp, TrendingDown, Package, ExternalLink, LockKeyhole } from '@lucide/vue'
 import MoneyCell from '../../../shared/ui/MoneyCell.vue'
 import BarChart from '../../../shared/ui/BarChart.vue'
 import { apiFetch } from '../../../lib/apiFetch.js'
@@ -58,6 +58,12 @@ const lowStockItems = ref<OnHandItem[]>([])
 const gstPreview = ref<GstSummaryResult | null>(null)
 const loading = ref(false)
 
+// Phase 37 — the dashboard's data all comes from 'reports'-view-gated
+// endpoints (plus the low-stock widget, which reuses the same reports-style
+// summary treatment for simplicity). Without that grant, skip the fetches
+// entirely and show a friendly placeholder instead of a wall of 403 toasts.
+const hasReportsAccess = computed(() => authStore.hasPermission('reports', 'view'))
+
 const totalSales = computed(() =>
   salesRows.value.reduce((s, r) => s + parseFloat(r.total), 0).toFixed(2),
 )
@@ -76,6 +82,7 @@ const chartDatasets = computed(() => [
 ])
 
 async function loadAll() {
+  if (!hasReportsAccess.value) return
   loading.value = true
   const qs = `from=${monthStart}&to=${today}`
   const [salesData, purchasesData, arData, stockData, gstData] = await Promise.allSettled([
@@ -121,169 +128,190 @@ onMounted(() => void loadAll())
       </p>
     </div>
 
-    <!-- KPI cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div class="card p-5">
-        <div class="flex items-center justify-between mb-2">
-          <p class="text-xs text-surface-500 dark:text-surface-400 uppercase tracking-wide">
-            Sales (this month)
+    <template v-if="hasReportsAccess">
+      <!-- KPI cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-surface-500 dark:text-surface-400 uppercase tracking-wide">
+              Sales (this month)
+            </p>
+            <TrendingUp class="w-4 h-4 text-indigo-500" />
+          </div>
+          <p class="text-2xl font-semibold tabular-nums text-surface-900 dark:text-surface-50">
+            <MoneyCell :amount="totalSales" />
           </p>
-          <TrendingUp class="w-4 h-4 text-indigo-500" />
         </div>
-        <p class="text-2xl font-semibold tabular-nums text-surface-900 dark:text-surface-50">
-          <MoneyCell :amount="totalSales" />
-        </p>
-      </div>
-      <div class="card p-5">
-        <div class="flex items-center justify-between mb-2">
-          <p class="text-xs text-surface-500 dark:text-surface-400 uppercase tracking-wide">
-            Purchases (this month)
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-surface-500 dark:text-surface-400 uppercase tracking-wide">
+              Purchases (this month)
+            </p>
+            <TrendingDown class="w-4 h-4 text-rose-500" />
+          </div>
+          <p class="text-2xl font-semibold tabular-nums text-surface-900 dark:text-surface-50">
+            <MoneyCell :amount="totalPurchases" />
           </p>
-          <TrendingDown class="w-4 h-4 text-rose-500" />
         </div>
-        <p class="text-2xl font-semibold tabular-nums text-surface-900 dark:text-surface-50">
-          <MoneyCell :amount="totalPurchases" />
-        </p>
-      </div>
-    </div>
-
-    <!-- Sales chart -->
-    <div class="card p-6">
-      <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300 mb-4">
-        Daily Sales —
-        {{ new Date(monthStart).toLocaleString('en', { month: 'long', year: 'numeric' }) }}
-      </h3>
-      <div v-if="salesRows.length > 0">
-        <BarChart :labels="chartLabels" :datasets="chartDatasets" :height="200" />
-      </div>
-      <div v-else class="text-center py-10 text-sm text-surface-400">
-        No sales data for this period.
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Top 5 AR customers -->
-      <div class="card overflow-hidden p-0!">
-        <div
-          class="px-6 py-4 border-b border-surface-100 dark:border-surface-800 flex items-center justify-between"
-        >
-          <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
-            Top 5 Outstanding AR
-          </h3>
-          <button
-            class="text-xs text-indigo-500 hover:underline"
-            @click="() => void router.push('/reports/aged-receivables')"
-          >
-            View report
-          </button>
-        </div>
-        <DataTable :value="top5Ar" :loading="loading" :pt="{ root: { class: 'text-sm!' } }">
-          <template #empty>
-            <div class="text-center py-8 text-sm text-surface-400">No outstanding receivables.</div>
-          </template>
-          <Column field="entityName" header="Customer" />
-          <Column field="total" header="Outstanding" class="text-right" style="width: 140px">
-            <template #body="{ data }">
-              <span class="tabular-nums font-medium text-amber-600 dark:text-amber-400">
-                <MoneyCell :amount="(data as AgedEntityRow).total" />
-              </span>
-            </template>
-          </Column>
-          <Column header="" style="width: 44px">
-            <template #body="{ data }">
-              <button
-                class="text-surface-400 hover:text-indigo-500"
-                @click="
-                  () => void router.push(`/customers/${(data as AgedEntityRow).entityId}/soa`)
-                "
-              >
-                <ExternalLink class="w-3.5 h-3.5" />
-              </button>
-            </template>
-          </Column>
-        </DataTable>
       </div>
 
-      <!-- Low stock items -->
-      <div class="card overflow-hidden p-0!">
-        <div
-          class="px-6 py-4 border-b border-surface-100 dark:border-surface-800 flex items-center justify-between"
-        >
-          <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
-            <Package class="w-4 h-4 inline-block mr-1.5 text-amber-500" />Low Stock
-          </h3>
-          <button
-            class="text-xs text-indigo-500 hover:underline"
-            @click="() => void router.push('/reports/stock-valuation')"
-          >
-            View report
-          </button>
-        </div>
-        <DataTable :value="lowStockItems" :loading="loading" :pt="{ root: { class: 'text-sm!' } }">
-          <template #empty>
-            <div class="text-center py-8 text-sm text-surface-400">
-              All items are sufficiently stocked.
-            </div>
-          </template>
-          <Column field="item.name" header="Item" />
-          <Column field="item.sku" header="SKU" style="width: 120px">
-            <template #body="{ data }">
-              <span class="font-mono text-xs text-surface-500">{{
-                (data as OnHandItem).item.sku
-              }}</span>
-            </template>
-          </Column>
-          <Column field="qty" header="On Hand" class="text-right" style="width: 100px">
-            <template #body="{ data }">
-              <span class="tabular-nums font-medium text-rose-600 dark:text-rose-400">
-                {{ (data as OnHandItem).qty }}
-              </span>
-            </template>
-          </Column>
-        </DataTable>
-      </div>
-    </div>
-
-    <!-- GST preview -->
-    <div v-if="gstPreview" class="card p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
-          GST Preview — this month
+      <!-- Sales chart -->
+      <div class="card p-6">
+        <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300 mb-4">
+          Daily Sales —
+          {{ new Date(monthStart).toLocaleString('en', { month: 'long', year: 'numeric' }) }}
         </h3>
-        <button
-          class="text-xs text-indigo-500 hover:underline"
-          @click="() => void router.push('/gst')"
-        >
-          View periods
-        </button>
+        <div v-if="salesRows.length > 0">
+          <BarChart :labels="chartLabels" :datasets="chartDatasets" :height="200" />
+        </div>
+        <div v-else class="text-center py-10 text-sm text-surface-400">
+          No sales data for this period.
+        </div>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Output Tax</p>
-          <p class="text-base font-semibold tabular-nums text-surface-900 dark:text-surface-50">
-            <MoneyCell :amount="gstPreview.totalOutputTax" />
-          </p>
-        </div>
-        <div>
-          <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Input Tax</p>
-          <p class="text-base font-semibold tabular-nums text-surface-900 dark:text-surface-50">
-            <MoneyCell :amount="gstPreview.totalInputTax" />
-          </p>
-        </div>
-        <div>
-          <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Net Payable</p>
-          <p
-            class="text-base font-semibold tabular-nums"
-            :class="
-              parseFloat(gstPreview.netPayable) > 0
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-green-600 dark:text-green-400'
-            "
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Top 5 AR customers -->
+        <div class="card overflow-hidden p-0!">
+          <div
+            class="px-6 py-4 border-b border-surface-100 dark:border-surface-800 flex items-center justify-between"
           >
-            <MoneyCell :amount="gstPreview.netPayable" />
-          </p>
+            <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
+              Top 5 Outstanding AR
+            </h3>
+            <button
+              class="text-xs text-indigo-500 hover:underline"
+              @click="() => void router.push('/reports/aged-receivables')"
+            >
+              View report
+            </button>
+          </div>
+          <DataTable :value="top5Ar" :loading="loading" :pt="{ root: { class: 'text-sm!' } }">
+            <template #empty>
+              <div class="text-center py-8 text-sm text-surface-400">
+                No outstanding receivables.
+              </div>
+            </template>
+            <Column field="entityName" header="Customer" />
+            <Column field="total" header="Outstanding" class="text-right" style="width: 140px">
+              <template #body="{ data }">
+                <span class="tabular-nums font-medium text-amber-600 dark:text-amber-400">
+                  <MoneyCell :amount="(data as AgedEntityRow).total" />
+                </span>
+              </template>
+            </Column>
+            <Column header="" style="width: 44px">
+              <template #body="{ data }">
+                <button
+                  class="text-surface-400 hover:text-indigo-500"
+                  @click="
+                    () => void router.push(`/customers/${(data as AgedEntityRow).entityId}/soa`)
+                  "
+                >
+                  <ExternalLink class="w-3.5 h-3.5" />
+                </button>
+              </template>
+            </Column>
+          </DataTable>
+        </div>
+
+        <!-- Low stock items -->
+        <div class="card overflow-hidden p-0!">
+          <div
+            class="px-6 py-4 border-b border-surface-100 dark:border-surface-800 flex items-center justify-between"
+          >
+            <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
+              <Package class="w-4 h-4 inline-block mr-1.5 text-amber-500" />Low Stock
+            </h3>
+            <button
+              class="text-xs text-indigo-500 hover:underline"
+              @click="() => void router.push('/reports/stock-valuation')"
+            >
+              View report
+            </button>
+          </div>
+          <DataTable
+            :value="lowStockItems"
+            :loading="loading"
+            :pt="{ root: { class: 'text-sm!' } }"
+          >
+            <template #empty>
+              <div class="text-center py-8 text-sm text-surface-400">
+                All items are sufficiently stocked.
+              </div>
+            </template>
+            <Column field="item.name" header="Item" />
+            <Column field="item.sku" header="SKU" style="width: 120px">
+              <template #body="{ data }">
+                <span class="font-mono text-xs text-surface-500">{{
+                  (data as OnHandItem).item.sku
+                }}</span>
+              </template>
+            </Column>
+            <Column field="qty" header="On Hand" class="text-right" style="width: 100px">
+              <template #body="{ data }">
+                <span class="tabular-nums font-medium text-rose-600 dark:text-rose-400">
+                  {{ (data as OnHandItem).qty }}
+                </span>
+              </template>
+            </Column>
+          </DataTable>
         </div>
       </div>
+
+      <!-- GST preview -->
+      <div v-if="gstPreview" class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-medium text-surface-700 dark:text-surface-300">
+            GST Preview — this month
+          </h3>
+          <button
+            class="text-xs text-indigo-500 hover:underline"
+            @click="() => void router.push('/gst')"
+          >
+            View periods
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Output Tax</p>
+            <p class="text-base font-semibold tabular-nums text-surface-900 dark:text-surface-50">
+              <MoneyCell :amount="gstPreview.totalOutputTax" />
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Input Tax</p>
+            <p class="text-base font-semibold tabular-nums text-surface-900 dark:text-surface-50">
+              <MoneyCell :amount="gstPreview.totalInputTax" />
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-surface-500 uppercase tracking-wide mb-0.5">Net Payable</p>
+            <p
+              class="text-base font-semibold tabular-nums"
+              :class="
+                parseFloat(gstPreview.netPayable) > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-green-600 dark:text-green-400'
+              "
+            >
+              <MoneyCell :amount="gstPreview.netPayable" />
+            </p>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- No reports access — friendly placeholder in place of the KPI/chart
+         widgets (Phase 37: staff without a 'reports' grant) -->
+    <div v-else class="card p-10 flex flex-col items-center text-center gap-2">
+      <LockKeyhole class="w-6 h-6 text-surface-400 mb-1" />
+      <p class="text-sm font-medium text-surface-700 dark:text-surface-300">
+        You don't have access to reports yet
+      </p>
+      <p class="text-sm text-surface-500 dark:text-surface-400 max-w-sm">
+        Ask an admin to grant you access if you need to see sales, purchases, and GST summaries
+        here.
+      </p>
     </div>
   </div>
 </template>

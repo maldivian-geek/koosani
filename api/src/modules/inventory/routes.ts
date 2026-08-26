@@ -28,24 +28,34 @@ export const inventoryRoutes = new Hono<AppEnv>()
 inventoryRoutes.use('*', requireAuth)
 
 // GET /inventory/movements
-inventoryRoutes.get('/movements', zValidator('query', MovementsQuery), async (c) => {
-  const { itemId, from, to, page, pageSize } = c.req.valid('query')
-  const result = await svc.listMovements(c.get('businessId'), {
-    itemId,
-    from: from ? new Date(from) : undefined,
-    to: to ? new Date(to) : undefined,
-    page,
-    pageSize,
-  })
-  return c.json(result)
-})
+inventoryRoutes.get(
+  '/movements',
+  requirePermission('inventory', 'view'),
+  zValidator('query', MovementsQuery),
+  async (c) => {
+    const { itemId, from, to, page, pageSize } = c.req.valid('query')
+    const result = await svc.listMovements(c.get('businessId'), {
+      itemId,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+      page,
+      pageSize,
+    })
+    return c.json(result)
+  },
+)
 
 // GET /inventory/on-hand
-inventoryRoutes.get('/on-hand', zValidator('query', OnHandQuery), async (c) => {
-  const { categoryId, belowReorder } = c.req.valid('query')
-  const rows = await svc.listOnHand(c.get('businessId'), { categoryId, belowReorder })
-  return c.json(rows)
-})
+inventoryRoutes.get(
+  '/on-hand',
+  requirePermission('inventory', 'view'),
+  zValidator('query', OnHandQuery),
+  async (c) => {
+    const { categoryId, belowReorder } = c.req.valid('query')
+    const rows = await svc.listOnHand(c.get('businessId'), { categoryId, belowReorder })
+    return c.json(rows)
+  },
+)
 
 // POST /inventory/adjustments
 inventoryRoutes.post(

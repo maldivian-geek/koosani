@@ -37,18 +37,23 @@ const ListProjectsQuery = z.object({
 export const projectRoutes = new Hono<AppEnv>()
 projectRoutes.use('*', requireAuth)
 
-projectRoutes.get('/', zValidator('query', ListProjectsQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listProjects(c.get('businessId'), {
-    customerId: q.customerId,
-    status: q.status,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+projectRoutes.get(
+  '/',
+  requirePermission('projects', 'view'),
+  zValidator('query', ListProjectsQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listProjects(c.get('businessId'), {
+      customerId: q.customerId,
+      status: q.status,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
-projectRoutes.get('/:id', async (c) => {
+projectRoutes.get('/:id', requirePermission('projects', 'view'), async (c) => {
   try {
     const project = await svc.getProject(c.get('businessId'), c.req.param('id'))
     const tasks = await svc.listTasksByProject(c.get('businessId'), project.id)
@@ -172,24 +177,30 @@ const ListTimeEntriesQuery = z.object({
 export const timeEntryRoutes = new Hono<AppEnv>()
 timeEntryRoutes.use('*', requireAuth)
 
-timeEntryRoutes.get('/', zValidator('query', ListTimeEntriesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listTimeEntries(c.get('businessId'), {
-    projectId: q.projectId,
-    taskId: q.taskId,
-    userId: q.userId,
-    billable: q.billable,
-    invoiced: q.invoiced,
-    from: q.from,
-    to: q.to,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+timeEntryRoutes.get(
+  '/',
+  requirePermission('projects', 'view'),
+  zValidator('query', ListTimeEntriesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listTimeEntries(c.get('businessId'), {
+      projectId: q.projectId,
+      taskId: q.taskId,
+      userId: q.userId,
+      billable: q.billable,
+      invoiced: q.invoiced,
+      from: q.from,
+      to: q.to,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 timeEntryRoutes.get(
   '/billable',
+  requirePermission('projects', 'view'),
   zValidator('query', z.object({ customerId: z.string().uuid() })),
   async (c) => {
     const { customerId } = c.req.valid('query')
@@ -198,7 +209,7 @@ timeEntryRoutes.get(
   },
 )
 
-timeEntryRoutes.get('/:id', async (c) => {
+timeEntryRoutes.get('/:id', requirePermission('projects', 'view'), async (c) => {
   try {
     const entry = await svc.getTimeEntry(c.get('businessId'), c.req.param('id'))
     return c.json(entry)

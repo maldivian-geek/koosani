@@ -23,20 +23,25 @@ export const recurrenceRoutes = new Hono<AppEnv>()
 recurrenceRoutes.use('*', requireAuth)
 
 // GET /recurrence-profiles
-recurrenceRoutes.get('/', zValidator('query', ListProfilesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listProfiles(c.get('businessId'), {
-    active: q.active,
-    customerId: q.customerId,
-    q: q.q,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+recurrenceRoutes.get(
+  '/',
+  requirePermission('recurring', 'view'),
+  zValidator('query', ListProfilesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listProfiles(c.get('businessId'), {
+      active: q.active,
+      customerId: q.customerId,
+      q: q.q,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 // GET /recurrence-profiles/:id
-recurrenceRoutes.get('/:id', async (c) => {
+recurrenceRoutes.get('/:id', requirePermission('recurring', 'view'), async (c) => {
   try {
     const profile = await svc.getProfile(c.get('businessId'), c.req.param('id'))
     return c.json(profile)

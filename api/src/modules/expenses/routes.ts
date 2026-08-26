@@ -34,26 +34,32 @@ function ctxFrom(c: Context<AppEnv>) {
 }
 
 // GET /expenses
-expenseRoutes.get('/', zValidator('query', ListExpensesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listExpenses(c.get('businessId'), {
-    category: q.category,
-    supplierId: q.supplierId,
-    customerId: q.customerId,
-    billable: q.billable,
-    invoiced: q.invoiced,
-    from: q.from,
-    to: q.to,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+expenseRoutes.get(
+  '/',
+  requirePermission('expenses', 'view'),
+  zValidator('query', ListExpensesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listExpenses(c.get('businessId'), {
+      category: q.category,
+      supplierId: q.supplierId,
+      customerId: q.customerId,
+      billable: q.billable,
+      invoiced: q.invoiced,
+      from: q.from,
+      to: q.to,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 // GET /expenses/billable?customerId= — uninvoiced billable expenses for a
 // customer, used by the invoice editor to prefill line items
 expenseRoutes.get(
   '/billable',
+  requirePermission('expenses', 'view'),
   zValidator('query', z.object({ customerId: z.string().uuid() })),
   async (c) => {
     const { customerId } = c.req.valid('query')
@@ -63,7 +69,7 @@ expenseRoutes.get(
 )
 
 // GET /expenses/:id
-expenseRoutes.get('/:id', async (c) => {
+expenseRoutes.get('/:id', requirePermission('expenses', 'view'), async (c) => {
   try {
     const expense = await svc.getExpense(c.get('businessId'), c.req.param('id'))
     return c.json(expense)
@@ -150,7 +156,7 @@ expenseRoutes.post('/:id/receipt', requirePermission('expenses', 'edit'), async 
 })
 
 // GET /expenses/:id/receipt — signed download URL for the attached receipt
-expenseRoutes.get('/:id/receipt', async (c) => {
+expenseRoutes.get('/:id/receipt', requirePermission('expenses', 'view'), async (c) => {
   try {
     const expense = await svc.getExpense(c.get('businessId'), c.req.param('id'))
     if (!expense.receiptFileId) return c.json({ error: 'not_found' }, 404)

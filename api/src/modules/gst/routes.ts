@@ -21,7 +21,7 @@ export const gstRoutes = new Hono<AppEnv>()
 gstRoutes.use('*', requireAuth)
 
 // GET /gst/rates
-gstRoutes.get('/rates', async (c) => {
+gstRoutes.get('/rates', requirePermission('gst', 'view'), async (c) => {
   const rates = await svc.listRates(c.get('businessId'))
   return c.json(rates)
 })
@@ -40,7 +40,7 @@ gstRoutes.post('/rates', requireRole('admin'), zValidator('json', GstRateCreate)
 })
 
 // GET /gst/periods
-gstRoutes.get('/periods', async (c) => {
+gstRoutes.get('/periods', requirePermission('gst', 'view'), async (c) => {
   const periods = await svc.listPeriods(c.get('businessId'))
   return c.json(periods)
 })
@@ -124,7 +124,7 @@ gstRoutes.post('/periods/:id/build', requirePermission('gst', 'edit'), async (c)
 })
 
 // GET /gst/periods/:id/return — returns built artefacts with signed URLs
-gstRoutes.get('/periods/:id/return', async (c) => {
+gstRoutes.get('/periods/:id/return', requirePermission('gst', 'view'), async (c) => {
   const businessId = c.get('businessId')
   const periodId = c.req.param('id')
 

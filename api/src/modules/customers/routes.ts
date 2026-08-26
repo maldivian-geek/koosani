@@ -34,14 +34,19 @@ export const customerRoutes = new Hono<AppEnv>()
 customerRoutes.use('*', requireAuth)
 
 // GET /customers
-customerRoutes.get('/', zValidator('query', ListQuery), async (c) => {
-  const { q, page, pageSize, active } = c.req.valid('query')
-  const result = await svc.list(c.get('businessId'), { q, page, pageSize, active })
-  return c.json(result)
-})
+customerRoutes.get(
+  '/',
+  requirePermission('customers', 'view'),
+  zValidator('query', ListQuery),
+  async (c) => {
+    const { q, page, pageSize, active } = c.req.valid('query')
+    const result = await svc.list(c.get('businessId'), { q, page, pageSize, active })
+    return c.json(result)
+  },
+)
 
 // GET /customers/:id
-customerRoutes.get('/:id', async (c) => {
+customerRoutes.get('/:id', requirePermission('customers', 'view'), async (c) => {
   const id = c.req.param('id')
   try {
     const customer = await svc.getById(c.get('businessId'), id)
@@ -114,7 +119,7 @@ customerRoutes.delete('/:id', requirePermission('customers', 'delete'), async (c
 })
 
 // GET /customers/:id/soa
-customerRoutes.get('/:id/soa', async (c) => {
+customerRoutes.get('/:id/soa', requirePermission('customers', 'view'), async (c) => {
   const from = c.req.query('from')
   const to = c.req.query('to')
   const format = c.req.query('format') ?? 'json'

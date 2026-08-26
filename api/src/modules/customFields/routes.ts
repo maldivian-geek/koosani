@@ -96,12 +96,18 @@ customFieldRoutes.delete('/definitions/:id', requireRole('admin'), async (c) => 
   }
 })
 
-// GET /custom-fields/values?docType=&docId=
+// GET /custom-fields/values?docType=&docId= — permission depends on the doc
+// type being read, same dynamic per-request check as PUT /values below
+// (Phase 37: view, not edit).
 customFieldRoutes.get(
   '/values',
   zValidator('query', z.object({ docType: CustomFieldDocType, docId: z.string().uuid() })),
   async (c) => {
     const { docType, docId } = c.req.valid('query')
+    const resource = DOC_TYPE_RESOURCE[docType]
+    if (!resource || !(await hasPermission(c.get('role'), c.get('userId'), resource, 'view'))) {
+      return c.json({ error: 'forbidden' }, 403)
+    }
     const values = await svc.listValuesForDoc(c.get('businessId'), docType, docId)
     return c.json(values)
   },

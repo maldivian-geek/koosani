@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono'
-import { hasExplicitGrant } from '../modules/permissions/repository.js'
+import { hasExplicitGrant, hasAnyGrantOnResource } from '../modules/permissions/repository.js'
 import type { AppEnv } from '../types.js'
 import type { PermissionResource, PermissionAction, Role } from '@koosani/shared'
 
@@ -23,13 +23,15 @@ export function requireRole(minRole: Role): MiddlewareHandler<AppEnv> {
   }
 }
 
-// Role-based default policy, checked in this order:
+// Role-based default policy, checked in this order (Phase 37 — staff view
+// gating, SECURITY.md §Authorization Model):
 //  - admin bypasses every check
-//  - 'view' is always allowed for any authenticated role (DESIGN.md §7 — the
-//    DataTable itself is never hidden; a permission-restricted empty state is
-//    the only UI-level gate, and no route currently implements one)
 //  - 'export' (bulk report CSV) requires an explicit grant even for managers
 //    (SECURITY.md §13.6 — "role admin or explicit reports.export permission")
+//  - 'view': manager gets it by default; staff needs ANY grant on the
+//    resource — an explicit `view` row, or an add/edit/delete grant, which
+//    implies view (a user_permissions row is a row regardless of which
+//    action it names, so one exists-check covers both cases)
 //  - manager gets add/edit/delete by default ("elevated access")
 //  - staff needs an explicit per-user grant for anything beyond view
 export async function hasPermission(
@@ -39,8 +41,11 @@ export async function hasPermission(
   action: PermissionAction,
 ): Promise<boolean> {
   if (role === 'admin') return true
-  if (action === 'view') return true
   if (action === 'export') return hasExplicitGrant(userId, resource, action)
+  if (action === 'view') {
+    if (role === 'manager') return true
+    return hasAnyGrantOnResource(userId, resource)
+  }
   if (role === 'manager') return true
   return hasExplicitGrant(userId, resource, action)
 }

@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { IsoDate } from '@koosani/shared'
 import { requireAuth } from '../../middleware/requireAuth.js'
-import { hasPermission } from '../../middleware/authorize.js'
+import { hasPermission, requirePermission } from '../../middleware/authorize.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
@@ -47,6 +47,10 @@ function csvResponse(body: string, filename: string) {
 
 export const reportRoutes = new Hono<AppEnv>()
 reportRoutes.use('*', requireAuth)
+// Every report route is a read — gate them all on 'reports' view (Phase 37).
+// The csv/bulk branches keep their own additional export check below
+// (assertExportAllowed), unchanged.
+reportRoutes.use('*', requirePermission('reports', 'view'))
 
 // GET /reports/sales
 reportRoutes.get(

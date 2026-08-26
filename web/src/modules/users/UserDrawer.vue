@@ -276,6 +276,7 @@ function onDelete() {
             <thead>
               <tr class="border-b border-surface-100 dark:border-surface-800">
                 <th class="text-left font-medium text-surface-600 px-3 py-2">Resource</th>
+                <th class="font-medium text-surface-600 px-2 py-2 w-16">View</th>
                 <th class="font-medium text-surface-600 px-2 py-2 w-16">Add</th>
                 <th class="font-medium text-surface-600 px-2 py-2 w-16">Edit</th>
                 <th class="font-medium text-surface-600 px-2 py-2 w-16">Delete</th>
@@ -289,6 +290,13 @@ function onDelete() {
                 class="border-b border-surface-50 dark:border-surface-800 last:border-0"
               >
                 <td class="px-3 py-1.5 text-surface-700">{{ row.label }}</td>
+                <td class="text-center px-2 py-1.5">
+                  <Checkbox
+                    :model-value="isGranted(row.resource, 'view')"
+                    binary
+                    @update:model-value="toggleGrant(row.resource, 'view')"
+                  />
+                </td>
                 <td class="text-center px-2 py-1.5">
                   <Checkbox
                     :model-value="isGranted(row.resource, 'add')"
@@ -322,6 +330,9 @@ function onDelete() {
             </tbody>
           </table>
         </div>
+        <p class="text-xs text-surface-400">
+          Granting Add, Edit, or Delete on a resource automatically implies View for that resource.
+        </p>
       </div>
     </form>
 

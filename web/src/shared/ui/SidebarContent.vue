@@ -25,11 +25,16 @@ import {
   LogOut,
 } from '@lucide/vue'
 import { useAuthStore } from '../../stores/auth.js'
+import type { PermissionResource } from '@koosani/shared'
 
 interface NavItem {
   label: string
   to: string
   icon: Component
+  // Absent only for Dashboard, which every authenticated role can see
+  // (Phase 37 — sidebar visibility mirrors route-level view permissions;
+  // this is cosmetic, the route guard/middleware is the real enforcement).
+  resource?: PermissionResource
 }
 
 interface NavGroup {
@@ -44,35 +49,60 @@ const BASE_GROUPS: NavGroup[] = [
   },
   {
     items: [
-      { label: 'Customers', to: '/customers', icon: markRaw(Users) },
-      { label: 'Suppliers', to: '/suppliers', icon: markRaw(Building2) },
-      { label: 'Items', to: '/items', icon: markRaw(Package) },
-      { label: 'Inventory', to: '/inventory', icon: markRaw(Boxes) },
+      { label: 'Customers', to: '/customers', icon: markRaw(Users), resource: 'customers' },
+      { label: 'Suppliers', to: '/suppliers', icon: markRaw(Building2), resource: 'suppliers' },
+      { label: 'Items', to: '/items', icon: markRaw(Package), resource: 'items' },
+      { label: 'Inventory', to: '/inventory', icon: markRaw(Boxes), resource: 'inventory' },
     ],
   },
   {
     items: [
-      { label: 'Estimates', to: '/estimates', icon: markRaw(FileSpreadsheet) },
-      { label: 'Invoices', to: '/invoices', icon: markRaw(FileText) },
-      { label: 'Credit Notes', to: '/credit-notes', icon: markRaw(FileMinus) },
-      { label: 'Delivery Notes', to: '/delivery-notes', icon: markRaw(Truck) },
-      { label: 'Recurring Invoices', to: '/recurring', icon: markRaw(Repeat) },
+      {
+        label: 'Estimates',
+        to: '/estimates',
+        icon: markRaw(FileSpreadsheet),
+        resource: 'estimates',
+      },
+      { label: 'Invoices', to: '/invoices', icon: markRaw(FileText), resource: 'invoices' },
+      {
+        label: 'Credit Notes',
+        to: '/credit-notes',
+        icon: markRaw(FileMinus),
+        resource: 'invoices',
+      },
+      {
+        label: 'Delivery Notes',
+        to: '/delivery-notes',
+        icon: markRaw(Truck),
+        resource: 'invoices',
+      },
+      {
+        label: 'Recurring Invoices',
+        to: '/recurring',
+        icon: markRaw(Repeat),
+        resource: 'recurring',
+      },
     ],
   },
   {
     items: [
-      { label: 'Bills', to: '/bills', icon: markRaw(Receipt) },
-      { label: 'Expenses', to: '/expenses', icon: markRaw(Banknote) },
-      { label: 'Projects', to: '/projects', icon: markRaw(FolderKanban) },
-      { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart) },
-      { label: 'Order Lists', to: '/order-lists', icon: markRaw(ClipboardList) },
+      { label: 'Bills', to: '/bills', icon: markRaw(Receipt), resource: 'bills' },
+      { label: 'Expenses', to: '/expenses', icon: markRaw(Banknote), resource: 'expenses' },
+      { label: 'Projects', to: '/projects', icon: markRaw(FolderKanban), resource: 'projects' },
+      { label: 'Purchase Orders', to: '/pos', icon: markRaw(ShoppingCart), resource: 'po' },
+      {
+        label: 'Order Lists',
+        to: '/order-lists',
+        icon: markRaw(ClipboardList),
+        resource: 'orders',
+      },
     ],
   },
   {
-    items: [{ label: 'GST', to: '/gst', icon: markRaw(Percent) }],
+    items: [{ label: 'GST', to: '/gst', icon: markRaw(Percent), resource: 'gst' }],
   },
   {
-    items: [{ label: 'Reports', to: '/reports', icon: markRaw(BarChart2) }],
+    items: [{ label: 'Reports', to: '/reports', icon: markRaw(BarChart2), resource: 'reports' }],
   },
 ]
 
@@ -87,9 +117,20 @@ const ADMIN_GROUP: NavGroup = {
 const route = useRoute()
 const authStore = useAuthStore()
 
-const groups = computed<NavGroup[]>(() =>
-  authStore.user?.role === 'admin' ? [...BASE_GROUPS, ADMIN_GROUP] : BASE_GROUPS,
-)
+// Filter out items the user has no view access to (Phase 37) — cosmetic
+// only, the route guard/middleware is what actually enforces this. Groups
+// that end up with no visible items are dropped entirely so no empty
+// divider renders.
+function visibleItems(items: NavItem[]): NavItem[] {
+  return items.filter((item) => !item.resource || authStore.hasPermission(item.resource, 'view'))
+}
+
+const groups = computed<NavGroup[]>(() => {
+  const base = authStore.user?.role === 'admin' ? [...BASE_GROUPS, ADMIN_GROUP] : BASE_GROUPS
+  return base
+    .map((group) => ({ items: visibleItems(group.items) }))
+    .filter((group) => group.items.length > 0)
+})
 
 function isActive(to: string): boolean {
   return route.path === to || route.path.startsWith(to + '/')

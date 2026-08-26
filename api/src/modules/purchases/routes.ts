@@ -23,21 +23,26 @@ export const billRoutes = new Hono<AppEnv>()
 billRoutes.use('*', requireAuth)
 
 // GET /bills
-billRoutes.get('/', zValidator('query', ListBillsQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listBills(c.get('businessId'), {
-    status: q.status,
-    supplierId: q.supplierId,
-    from: q.from,
-    to: q.to,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+billRoutes.get(
+  '/',
+  requirePermission('bills', 'view'),
+  zValidator('query', ListBillsQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listBills(c.get('businessId'), {
+      status: q.status,
+      supplierId: q.supplierId,
+      from: q.from,
+      to: q.to,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 // GET /bills/:id
-billRoutes.get('/:id', async (c) => {
+billRoutes.get('/:id', requirePermission('bills', 'view'), async (c) => {
   try {
     const bill = await svc.getBill(c.get('businessId'), c.req.param('id'))
     return c.json(bill)
@@ -225,7 +230,7 @@ billRoutes.post('/soa-extract', requirePermission('bills', 'add'), async (c) => 
 })
 
 // GET /soa-extract/:jobId — poll
-billRoutes.get('/soa-extract/:jobId', async (c) => {
+billRoutes.get('/soa-extract/:jobId', requirePermission('bills', 'view'), async (c) => {
   const job = await soaExtractQueue.getJob(c.req.param('jobId'))
   if (!job) return c.json({ error: 'not_found' }, 404)
 

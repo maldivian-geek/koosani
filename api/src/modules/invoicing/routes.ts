@@ -51,22 +51,27 @@ export const invoiceRoutes = new Hono<AppEnv>()
 invoiceRoutes.use('*', requireAuth)
 
 // GET /invoices
-invoiceRoutes.get('/', zValidator('query', ListInvoicesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listInvoices(c.get('businessId'), {
-    status: q.status,
-    customerId: q.customerId,
-    from: q.from,
-    to: q.to,
-    q: q.q,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+invoiceRoutes.get(
+  '/',
+  requirePermission('invoices', 'view'),
+  zValidator('query', ListInvoicesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listInvoices(c.get('businessId'), {
+      status: q.status,
+      customerId: q.customerId,
+      from: q.from,
+      to: q.to,
+      q: q.q,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 // GET /invoices/:id
-invoiceRoutes.get('/:id', async (c) => {
+invoiceRoutes.get('/:id', requirePermission('invoices', 'view'), async (c) => {
   try {
     const invoice = await svc.getInvoice(c.get('businessId'), c.req.param('id'))
     return c.json(invoice)
@@ -167,7 +172,7 @@ invoiceRoutes.post(
 )
 
 // GET /invoices/:id/pdf — renders via the pdf worker queue (Phase 23, UPGRADE.md)
-invoiceRoutes.get('/:id/pdf', async (c) => {
+invoiceRoutes.get('/:id/pdf', requirePermission('invoices', 'view'), async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   const invoiceId = c.req.param('id')
   try {
@@ -357,7 +362,7 @@ invoiceRoutes.patch(
 )
 
 // GET /invoices/:id/emails — delivery history (sends, receipts, reminders)
-invoiceRoutes.get('/:id/emails', async (c) => {
+invoiceRoutes.get('/:id/emails', requirePermission('invoices', 'view'), async (c) => {
   const invoiceId = c.req.param('id')
   try {
     await svc.getInvoice(c.get('businessId'), invoiceId)
@@ -375,18 +380,23 @@ export const creditNoteRoutes = new Hono<AppEnv>()
 creditNoteRoutes.use('*', requireAuth)
 
 // GET /credit-notes
-creditNoteRoutes.get('/', zValidator('query', ListCreditNotesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const notes = await svc.listCreditNotes(c.get('businessId'), {
-    customerId: q.customerId,
-    from: q.from,
-    to: q.to,
-  })
-  return c.json(notes)
-})
+creditNoteRoutes.get(
+  '/',
+  requirePermission('invoices', 'view'),
+  zValidator('query', ListCreditNotesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const notes = await svc.listCreditNotes(c.get('businessId'), {
+      customerId: q.customerId,
+      from: q.from,
+      to: q.to,
+    })
+    return c.json(notes)
+  },
+)
 
 // GET /credit-notes/:id
-creditNoteRoutes.get('/:id', async (c) => {
+creditNoteRoutes.get('/:id', requirePermission('invoices', 'view'), async (c) => {
   try {
     const cn = await svc.getCreditNote(c.get('businessId'), c.req.param('id'))
     return c.json(cn)
@@ -440,7 +450,7 @@ creditNoteRoutes.post('/:id/issue', requirePermission('invoices', 'edit'), async
 
 // GET /credit-notes/:id/pdf — renders via the pdf worker queue (Phase 33,
 // UPGRADE.md G-13/F-24 — credit notes had no PDF support before)
-creditNoteRoutes.get('/:id/pdf', async (c) => {
+creditNoteRoutes.get('/:id/pdf', requirePermission('invoices', 'view'), async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   const creditNoteId = c.req.param('id')
   try {
@@ -471,14 +481,19 @@ const ListDeliveryNotesQuery = z.object({
 })
 
 // GET /delivery-notes
-deliveryNoteRoutes.get('/', zValidator('query', ListDeliveryNotesQuery), async (c) => {
-  const { customerId } = c.req.valid('query')
-  const notes = await svc.listDeliveryNotes(c.get('businessId'), { customerId })
-  return c.json(notes)
-})
+deliveryNoteRoutes.get(
+  '/',
+  requirePermission('invoices', 'view'),
+  zValidator('query', ListDeliveryNotesQuery),
+  async (c) => {
+    const { customerId } = c.req.valid('query')
+    const notes = await svc.listDeliveryNotes(c.get('businessId'), { customerId })
+    return c.json(notes)
+  },
+)
 
 // GET /delivery-notes/:id
-deliveryNoteRoutes.get('/:id', async (c) => {
+deliveryNoteRoutes.get('/:id', requirePermission('invoices', 'view'), async (c) => {
   try {
     const dn = await svc.getDeliveryNote(c.get('businessId'), c.req.param('id'))
     return c.json(dn)
@@ -489,7 +504,7 @@ deliveryNoteRoutes.get('/:id', async (c) => {
 })
 
 // GET /delivery-notes/:id/pdf
-deliveryNoteRoutes.get('/:id/pdf', async (c) => {
+deliveryNoteRoutes.get('/:id/pdf', requirePermission('invoices', 'view'), async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   const deliveryNoteId = c.req.param('id')
   try {

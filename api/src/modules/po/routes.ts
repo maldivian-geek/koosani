@@ -29,7 +29,7 @@ export const poRoutes = new Hono<AppEnv>()
 poRoutes.use('*', requireAuth)
 
 // GET /pos
-poRoutes.get('/', zValidator('query', ListPosQuery), async (c) => {
+poRoutes.get('/', requirePermission('po', 'view'), zValidator('query', ListPosQuery), async (c) => {
   const q = c.req.valid('query')
   const { rows, total } = await svc.listPos(c.get('businessId'), {
     status: q.status,
@@ -43,7 +43,7 @@ poRoutes.get('/', zValidator('query', ListPosQuery), async (c) => {
 })
 
 // GET /pos/:id
-poRoutes.get('/:id', async (c) => {
+poRoutes.get('/:id', requirePermission('po', 'view'), async (c) => {
   try {
     const po = await svc.getPo(c.get('businessId'), c.req.param('id'))
     return c.json(po)
@@ -138,7 +138,7 @@ poRoutes.post(
 )
 
 // GET /pos/:id/pdf — renders via the pdf worker queue (Phase 23, UPGRADE.md)
-poRoutes.get('/:id/pdf', async (c) => {
+poRoutes.get('/:id/pdf', requirePermission('po', 'view'), async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   const poId = c.req.param('id')
   try {
@@ -205,7 +205,7 @@ export const grnRoutes = new Hono<AppEnv>()
 grnRoutes.use('*', requireAuth)
 
 // GET /grns/:id
-grnRoutes.get('/:id', async (c) => {
+grnRoutes.get('/:id', requirePermission('po', 'view'), async (c) => {
   try {
     const grn = await svc.getGrn(c.get('businessId'), c.req.param('id'))
     return c.json(grn)

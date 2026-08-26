@@ -2,10 +2,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createTestDatabase } from '../../db/test-db.js'
 import postgres from 'postgres'
 
-// UPGRADE.md F-2 — verifies the role/permission default policy documented in
-// SECURITY.md §Authorization Model: admin bypasses everything; 'view' is
-// always allowed; manager gets add/edit/delete by default; staff needs an
-// explicit grant; 'export' requires an explicit grant regardless of role.
+// UPGRADE.md F-2, extended Phase 37 — verifies the role/permission default
+// policy documented in SECURITY.md §Authorization Model: admin bypasses
+// everything; manager gets view/add/edit/delete by default; staff needs an
+// explicit or implied grant for view, and an explicit grant for anything
+// else; 'export' requires an explicit grant regardless of role.
 
 let client: ReturnType<typeof postgres>
 
@@ -68,11 +69,11 @@ describe('authorize — hasPermission', () => {
     expect(await hasPermission('admin', user.id, 'reports', 'export')).toBe(true)
   })
 
-  it('view is always allowed regardless of role', async () => {
+  it('manager gets view by default without an explicit grant', async () => {
     const { hasPermission } = await import('../authorize.js')
-    const { user } = await seedUser('staff')
+    const { user } = await seedUser('manager')
 
-    expect(await hasPermission('staff', user.id, 'invoices', 'view')).toBe(true)
+    expect(await hasPermission('manager', user.id, 'invoices', 'view')).toBe(true)
   })
 
   it('manager gets add/edit/delete by default without an explicit grant', async () => {
@@ -82,6 +83,49 @@ describe('authorize — hasPermission', () => {
     expect(await hasPermission('manager', user.id, 'invoices', 'add')).toBe(true)
     expect(await hasPermission('manager', user.id, 'po', 'edit')).toBe(true)
     expect(await hasPermission('manager', user.id, 'customers', 'delete')).toBe(true)
+  })
+
+  it('staff is denied view with no grants on the resource', async () => {
+    const { hasPermission } = await import('../authorize.js')
+    const { user } = await seedUser('staff')
+
+    expect(await hasPermission('staff', user.id, 'invoices', 'view')).toBe(false)
+  })
+
+  it('staff is allowed view once an explicit view grant exists', async () => {
+    const { hasPermission } = await import('../authorize.js')
+    const { db } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { user } = await seedUser('staff')
+
+    await db.insert(schema.userPermissions).values({
+      businessId: user.businessId,
+      userId: user.id,
+      resource: 'invoices',
+      action: 'view',
+      grantedBy: user.id,
+    })
+
+    expect(await hasPermission('staff', user.id, 'invoices', 'view')).toBe(true)
+    // Scoped to the resource, not other resources
+    expect(await hasPermission('staff', user.id, 'bills', 'view')).toBe(false)
+  })
+
+  it('staff is allowed view via an edit grant (add/edit/delete imply view)', async () => {
+    const { hasPermission } = await import('../authorize.js')
+    const { db } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { user } = await seedUser('staff')
+
+    await db.insert(schema.userPermissions).values({
+      businessId: user.businessId,
+      userId: user.id,
+      resource: 'invoices',
+      action: 'edit',
+      grantedBy: user.id,
+    })
+
+    expect(await hasPermission('staff', user.id, 'invoices', 'view')).toBe(true)
   })
 
   it('manager still needs an explicit grant for reports.export', async () => {

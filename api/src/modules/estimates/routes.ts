@@ -29,22 +29,27 @@ export const estimateRoutes = new Hono<AppEnv>()
 estimateRoutes.use('*', requireAuth)
 
 // GET /estimates
-estimateRoutes.get('/', zValidator('query', ListEstimatesQuery), async (c) => {
-  const q = c.req.valid('query')
-  const { rows, total } = await svc.listEstimates(c.get('businessId'), {
-    status: q.status,
-    customerId: q.customerId,
-    from: q.from,
-    to: q.to,
-    q: q.q,
-    page: q.page,
-    pageSize: q.pageSize,
-  })
-  return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
-})
+estimateRoutes.get(
+  '/',
+  requirePermission('estimates', 'view'),
+  zValidator('query', ListEstimatesQuery),
+  async (c) => {
+    const q = c.req.valid('query')
+    const { rows, total } = await svc.listEstimates(c.get('businessId'), {
+      status: q.status,
+      customerId: q.customerId,
+      from: q.from,
+      to: q.to,
+      q: q.q,
+      page: q.page,
+      pageSize: q.pageSize,
+    })
+    return c.json({ items: rows, total, page: q.page, pageSize: q.pageSize })
+  },
+)
 
 // GET /estimates/:id
-estimateRoutes.get('/:id', async (c) => {
+estimateRoutes.get('/:id', requirePermission('estimates', 'view'), async (c) => {
   try {
     const estimate = await svc.getEstimate(c.get('businessId'), c.req.param('id'))
     return c.json(estimate)
@@ -177,7 +182,7 @@ estimateRoutes.post('/:id/convert', requirePermission('invoices', 'add'), async 
 })
 
 // GET /estimates/:id/pdf
-estimateRoutes.get('/:id/pdf', async (c) => {
+estimateRoutes.get('/:id/pdf', requirePermission('estimates', 'view'), async (c) => {
   if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
   const estimateId = c.req.param('id')
   try {
@@ -197,7 +202,7 @@ estimateRoutes.get('/:id/pdf', async (c) => {
 })
 
 // GET /estimates/:id/emails — delivery history
-estimateRoutes.get('/:id/emails', async (c) => {
+estimateRoutes.get('/:id/emails', requirePermission('estimates', 'view'), async (c) => {
   const estimateId = c.req.param('id')
   try {
     await svc.getEstimate(c.get('businessId'), estimateId)

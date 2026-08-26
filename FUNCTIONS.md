@@ -10,7 +10,7 @@
 >
 > Every authenticated route receives an implicit `ctx` with `{ userId, businessId, role, ip }`. Not shown in signatures.
 >
-> **Authorization middleware** (`api/src/middleware/authorize.ts`, Phase 20 — SECURITY.md §Authorization Model): `requireRole(minRole)` and `requirePermission(resource, action)` are applied per-route alongside `requireAuth`, not shown per-row below except where they gate an otherwise-undocumented action (e.g. admin-only). `hasPermission(role, userId, resource, action)` is the underlying check, also used directly by `reports` routes for the `export` action.
+> **Authorization middleware** (`api/src/middleware/authorize.ts`, Phase 20, `view` policy rewritten Phase 37 — SECURITY.md §Authorization Model): `requireRole(minRole)` and `requirePermission(resource, action)` are applied per-route alongside `requireAuth`, not shown per-row below except where they gate an otherwise-undocumented action (e.g. admin-only). `hasPermission(role, userId, resource, action)` is the underlying check, also used directly by `reports` routes for the `export` action and by `customFields` routes for the dynamic per-`docType` `view`/`edit` check. As of Phase 37, `requirePermission(resource, 'view')` is also applied to every list/detail/pdf/soa/csv-style GET route of every permission-gated module — also not shown per-row below, same convention as the existing mutation gates.
 
 ---
 
@@ -57,12 +57,14 @@ Admin only, every route (FUNCTIONS.md convention: user management is not permiss
 
 ## Module: `permissions`
 
-Not exposed via routes — a thin service/repository backing `user_permissions`, called by `middleware/authorize.ts` (`hasExplicitGrant`), `users` (`replaceForUser`/`listForUser`), and `auth` (`listForUser` for `/me` and login responses).
+Not exposed via routes — a thin service/repository backing `user_permissions`, called by `middleware/authorize.ts` (`hasExplicitGrant`, `hasAnyGrantOnResource` — Phase 37), `users` (`replaceForUser`/`listForUser`), and `auth` (`listForUser` for `/me` and login responses).
 
-| Kind | Name                         | Signature                                                  | Purpose                                                                 |
-| ---- | ---------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| svc  | `permissions.listForUser`    | `(userId, tx?) → Permission[]`                             | Pass `tx` when reading back inside the same transaction that just wrote |
-| svc  | `permissions.replaceForUser` | `(businessId, userId, Permission[], grantedBy, tx) → void` | Deletes all existing grants for the user, then inserts the new set      |
+| Kind | Name                                | Signature                                                  | Purpose                                                                                                 |
+| ---- | ----------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| repo | `permissions.hasExplicitGrant`      | `(userId, resource, action) → boolean`                     | Exact `(userId, resource, action)` match — backs `add`/`edit`/`delete`/`export`                         |
+| repo | `permissions.hasAnyGrantOnResource` | `(userId, resource) → boolean`                             | Phase 37 — any row for `(userId, resource)`, any action; backs staff `view` (explicit grant or implied) |
+| svc  | `permissions.listForUser`           | `(userId, tx?) → Permission[]`                             | Pass `tx` when reading back inside the same transaction that just wrote                                 |
+| svc  | `permissions.replaceForUser`        | `(businessId, userId, Permission[], grantedBy, tx) → void` | Deletes all existing grants for the user, then inserts the new set                                      |
 
 ---
 

@@ -23,6 +23,22 @@ export async function hasExplicitGrant(
   return rows.length > 0
 }
 
+// Phase 37 — staff view gating. A staff user can view a resource if they
+// have ANY grant on it (an explicit `view` row, or an add/edit/delete grant
+// that implies view) — one exists-check for either case, since an explicit
+// view grant is just a row like any other in `user_permissions`.
+export async function hasAnyGrantOnResource(
+  userId: string,
+  resource: PermissionResource,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: userPermissions.id })
+    .from(userPermissions)
+    .where(and(eq(userPermissions.userId, userId), eq(userPermissions.resource, resource)))
+    .limit(1)
+  return rows.length > 0
+}
+
 // Pass `tx` when reading back inside the same transaction that just wrote
 // (e.g. users.update's response payload) — a separate `db` connection won't
 // see uncommitted changes yet (read-committed isolation).
