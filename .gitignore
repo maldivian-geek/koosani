@@ -22,3 +22,6 @@ coverage/
 # IDE
 .vscode/settings.json
 .idea/
+
+# Local preview files Claude drops for the user - never commit
+_preview-*
