@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Order list PDF: one-page fit + status row tints** (`lib/pdf/OrderListDocument.ts`). The table densifies to keep the whole list on a single A4 page — tier selection is wrap-aware (it estimates per-row height from actual text widths against the real column geometry, since long product names wrapping is what blows the page budget, not row count), stepping the font from 9pt down to a 5.5pt floor. The Item column got a much larger flex share (names rarely wrap now). Rows are tinted like the owner's original spreadsheet: paid → light green (#e8f5e9), not available → light red (#fdecea, winning when both apply); light tints keep black text printable.
+- **Order list PDF: one-page fit + status row tints** (`lib/pdf/OrderListDocument.ts`). The table densifies to keep the whole list on a single A4 page — tier selection is wrap-aware (it estimates per-row height from actual text widths against the real column geometry, since long product names wrapping is what blows the page budget, not row count), stepping the font from 8pt down to a 5.5pt floor. The System Item column is deliberately omitted from the PDF (the printed sheet uses the customer's wording only — the CSV export still carries it), and the Item column got a much larger flex share (names rarely wrap now). Rows are tinted like the owner's original spreadsheet: paid → light green (#e8f5e9), not available → light red (#fdecea, winning when both apply); light tints keep black text printable.
 
 ### Fixed
 

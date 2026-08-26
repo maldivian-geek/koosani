@@ -14,14 +14,15 @@ const h = React.createElement
 // Flex weights are shared with the wrap-aware one-page fitting below — keep
 // COL_FLEX and the StyleSheet in sync. Item gets the lion's share: product
 // names are the longest field and wrapping them doubles row height.
+// System Item is deliberately NOT on the PDF (owner request — the printed
+// sheet uses the customer's wording only; the CSV export still carries it).
 const COL_FLEX = {
   hash: 0.4,
-  item: 2.6,
-  systemItem: 1.3,
+  item: 3.2,
   qty: 0.55,
   uom: 0.6,
-  note: 1.1,
-  additionalNote: 1.0,
+  note: 1.2,
+  additionalNote: 1.1,
   payment: 0.75,
   stock: 0.95,
 }
@@ -33,7 +34,6 @@ const localStyles = StyleSheet.create({
   },
   colHash: { flex: COL_FLEX.hash },
   colItem: { flex: COL_FLEX.item },
-  colSystemItem: { flex: COL_FLEX.systemItem },
   colQty: { flex: COL_FLEX.qty, textAlign: 'right' },
   colUom: { flex: COL_FLEX.uom },
   colNote: { flex: COL_FLEX.note },
@@ -77,8 +77,9 @@ const TABLE_CHROME = 16 // table margin + borders
 const AVG_CHAR_FACTOR = 0.52 // Helvetica average glyph width ≈ 0.52 × fontSize
 const LINE_HEIGHT = 1.2
 
+// Starts at 8pt (owner preference — denser than the shared 9pt document
+// base) and steps down as the wrap-aware fit requires.
 const TIERS: Array<{ fontSize: number; paddingVertical: number }> = [
-  { fontSize: 9, paddingVertical: 4 },
   { fontSize: 8, paddingVertical: 3 },
   { fontSize: 7.5, paddingVertical: 2.5 },
   { fontSize: 7, paddingVertical: 2 },
@@ -95,7 +96,6 @@ function tableScale(
   const colWidth = (flex: number) => (usableWidth * flex) / FLEX_SUM
   const widths = {
     item: colWidth(COL_FLEX.item),
-    systemItem: colWidth(COL_FLEX.systemItem),
     note: colWidth(COL_FLEX.note),
     additionalNote: colWidth(COL_FLEX.additionalNote),
   }
@@ -114,7 +114,6 @@ function tableScale(
     const rowsHeight = lines.reduce((sum, line) => {
       const rowLines = Math.max(
         textLines(line.itemName, widths.item),
-        textLines(line.systemItemName, widths.systemItem),
         textLines(line.note, widths.note),
         textLines(line.additionalNote, widths.additionalNote),
       )
@@ -198,7 +197,6 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
           { style: [styles.tableHeaderRow, scaleStyle] },
           h(Text, { style: localStyles.colHash }, '#'),
           h(Text, { style: localStyles.colItem }, 'Item'),
-          h(Text, { style: localStyles.colSystemItem }, 'System Item'),
           h(Text, { style: localStyles.colQty }, 'Qty'),
           h(Text, { style: localStyles.colUom }, 'UOM'),
           h(Text, { style: localStyles.colNote }, 'Note'),
@@ -218,7 +216,6 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
             },
             h(Text, { style: localStyles.colHash }, String(line.position + 1)),
             h(Text, { style: localStyles.colItem }, line.itemName),
-            h(Text, { style: localStyles.colSystemItem }, line.systemItemName ?? '—'),
             h(Text, { style: localStyles.colQty }, formatQty(line.qty)),
             h(Text, { style: localStyles.colUom }, line.uom),
             h(Text, { style: localStyles.colNote }, line.note ?? ''),
