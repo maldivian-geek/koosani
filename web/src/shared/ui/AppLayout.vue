@@ -1,17 +1,31 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { LayoutDashboard, FileText, Users, Menu as MenuIcon } from '@lucide/vue'
 import SidebarNav from './SidebarNav.vue'
 import TopBar from './TopBar.vue'
 import BreadcrumbBar from './BreadcrumbBar.vue'
+import { useAuthStore } from '../../stores/auth.js'
+import type { PermissionResource } from '@koosani/shared'
 
 const sidebarOpen = ref(false)
+const auth = useAuthStore()
 
-const bottomNavLinks = [
+// Same view-permission filtering as SidebarContent (Phase 37) — a staff user
+// without the invoices/customers view grant shouldn't see those shortcuts.
+const ALL_BOTTOM_LINKS: Array<{
+  label: string
+  to: string
+  icon: typeof LayoutDashboard
+  resource?: PermissionResource
+}> = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { label: 'Invoices', to: '/invoices', icon: FileText },
-  { label: 'Customers', to: '/customers', icon: Users },
+  { label: 'Invoices', to: '/invoices', icon: FileText, resource: 'invoices' },
+  { label: 'Customers', to: '/customers', icon: Users, resource: 'customers' },
 ]
+
+const bottomNavLinks = computed(() =>
+  ALL_BOTTOM_LINKS.filter((l) => !l.resource || auth.hasPermission(l.resource, 'view')),
+)
 </script>
 
 <template>
