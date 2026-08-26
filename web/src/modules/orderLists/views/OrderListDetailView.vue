@@ -214,6 +214,20 @@ function onLineAdded(line: OrderListLine) {
   lineDialogOpen.value = false
 }
 
+// Mobile text edits go through the line dialog (the desktop table keeps
+// inline cell editing, which has no good stacked-card equivalent).
+const editLine = ref<OrderListLine | null>(null)
+
+function openEditLine(line: OrderListLine) {
+  editLine.value = line
+}
+
+function onLineSaved(updated: OrderListLine) {
+  const i = lines.value.findIndex((l) => l.id === updated.id)
+  if (i !== -1) lines.value[i] = updated
+  editLine.value = null
+}
+
 function onLinesImported(imported: OrderListLine[]) {
   lines.value.push(...imported)
   importDialogOpen.value = false
@@ -420,10 +434,10 @@ onMounted(() => void load())
 
       <div class="card p-0! overflow-hidden">
         <div
-          class="flex items-center justify-between p-4 border-b border-surface-100 dark:border-surface-800"
+          class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between p-4 border-b border-surface-100 dark:border-surface-800"
         >
           <h3 class="text-base font-medium text-surface-700">Lines</h3>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <Button
               severity="secondary"
               size="small"
@@ -455,21 +469,110 @@ onMounted(() => void load())
           </div>
         </div>
 
+        <!-- mobile: purpose-built line cards (DESIGN.md §11 — designed cards
+             beat a collapsed 9-column table; empty fields are omitted, not
+             dashed). Text edits go through the line dialog via the pencil. -->
+        <div class="md:hidden p-3 space-y-2">
+          <div v-if="lines.length === 0" class="text-center py-10 text-surface-400 text-sm">
+            No lines yet.
+          </div>
+          <div
+            v-for="line in lines"
+            :key="line.id"
+            class="border border-surface-200 dark:border-surface-700 rounded-lg p-3 space-y-2"
+            :class="line.stockStatus === 'not_available' ? 'opacity-60' : ''"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p
+                  class="text-sm font-medium text-surface-900 dark:text-surface-50 wrap-break-word"
+                >
+                  <span class="text-surface-400 mr-1">{{ line.position + 1 }}.</span
+                  >{{ line.itemName }}
+                </p>
+                <p
+                  v-if="line.systemItemName"
+                  class="text-xs text-surface-500 dark:text-surface-400 mt-0.5"
+                >
+                  {{ line.systemItemName }}
+                </p>
+              </div>
+              <div class="flex shrink-0">
+                <Button
+                  v-if="canEdit"
+                  icon="pi pi-pencil"
+                  text
+                  size="small"
+                  aria-label="Edit line"
+                  @click="openEditLine(line)"
+                />
+                <Button
+                  v-if="canDelete"
+                  icon="pi pi-trash"
+                  severity="danger"
+                  text
+                  size="small"
+                  aria-label="Delete line"
+                  @click="onDeleteLine(line)"
+                />
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2 text-sm min-w-0">
+              <span class="font-semibold whitespace-nowrap"
+                >{{ formatQty(line.qty) }} {{ line.uom }}</span
+              >
+              <span
+                v-if="line.note || line.additionalNote"
+                class="text-xs text-surface-500 dark:text-surface-400 truncate"
+              >
+                {{ [line.note, line.additionalNote].filter(Boolean).join(' · ') }}
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <Select
+                :model-value="line.paymentStatus"
+                :options="PAYMENT_STATUS_OPTIONS"
+                option-label="label"
+                option-value="value"
+                class="flex-1"
+                size="small"
+                :disabled="!canEdit"
+                @update:model-value="
+                  (v) => onPaymentStatusChange(line, v as OrderListLine['paymentStatus'])
+                "
+              >
+                <template #value="{ value }">
+                  <StatusTag v-if="value" :status="value" />
+                </template>
+              </Select>
+              <Select
+                :model-value="line.stockStatus"
+                :options="STOCK_STATUS_OPTIONS"
+                option-label="label"
+                option-value="value"
+                class="flex-1"
+                size="small"
+                :disabled="!canEdit"
+                @update:model-value="
+                  (v) => onStockStatusChange(line, v as OrderListLine['stockStatus'])
+                "
+              >
+                <template #value="{ value }">
+                  <StatusTag v-if="value" :status="value" />
+                </template>
+              </Select>
+            </div>
+          </div>
+        </div>
+
         <DataTable
+          class="hidden! md:block!"
           :value="lines"
           :row-class="rowClass"
           striped-rows
           scrollable
           :edit-mode="canEdit ? 'cell' : undefined"
-          :pt="{
-            root: { class: 'text-sm!' },
-            thead: { class: 'hidden! md:table-header-group!' },
-            tbody: { class: 'block! md:table-row-group!' },
-            bodyRow: {
-              class:
-                'flex! flex-col gap-1 mb-3 p-3 border border-surface-200 dark:border-surface-700 rounded-lg md:table-row! md:flex-none md:gap-0 md:mb-0 md:p-0 md:border-0 md:rounded-none',
-            },
-          }"
+          :pt="{ root: { class: 'text-sm!' } }"
           @cell-edit-init="onCellEditInit"
           @cell-edit-complete="onCellEditComplete"
         >
@@ -613,10 +716,12 @@ onMounted(() => void load())
     </template>
 
     <OrderLineDialog
-      v-if="lineDialogOpen && orderList"
+      v-if="(lineDialogOpen || editLine) && orderList"
       :order-list-id="orderList.id"
-      @close="lineDialogOpen = false"
+      :line="editLine ?? undefined"
+      @close="((lineDialogOpen = false), (editLine = null))"
       @added="onLineAdded"
+      @saved="onLineSaved"
     />
 
     <OrderListImportDialog

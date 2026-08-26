@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **Order list detail: purpose-built mobile line cards** (`OrderListDetailView.vue`). Below `md` the 9-column lines table is replaced by cards — numbered item name (system item as a subline when resolved), bold "qty uom", notes only when present (no dash placeholders), the two status dropdowns side by side, and pencil/trash actions. Text edits on mobile go through `OrderLineDialog`, which gains an edit mode (`line` prop → PATCH) since inline cell editing has no good card equivalent; desktop keeps the table with inline cell editing unchanged. The Lines toolbar wraps properly on narrow screens.
 - **`EntityList` gains an opt-in `#mobileCard` slot** (DESIGN.md §11 pattern): a view that provides it renders purpose-built tappable cards below `md` (with a simple Prev/Next pager) instead of the labeled stacked-table fallback — designed cards beat a collapsed table for entities with only a few fields, while wide entities keep the stacked fallback. The "New {entity}" button is now full-width on mobile for all list views. First adopter: **Order Lists** — title-prominent cards with a "N lines · updated {date}" subline and chevron, replacing the unlabeled value stack.
 
 ### Fixed
