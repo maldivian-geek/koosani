@@ -8,14 +8,14 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import { Plus, ArrowLeft, ClipboardPaste } from '@lucide/vue'
+import { Plus, ArrowLeft, ClipboardPaste, Download, FileSpreadsheet } from '@lucide/vue'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import StatusTag from '../../../shared/ui/StatusTag.vue'
 import { stackPt } from '../../../shared/ui/entityListColumnPt.js'
 import OrderLineDialog from '../OrderLineDialog.vue'
 import OrderListImportDialog from '../OrderListImportDialog.vue'
-import { apiFetch, ApiError } from '../../../lib/apiFetch.js'
+import { apiFetch, apiFetchDownload, ApiError } from '../../../lib/apiFetch.js'
 import { useAuthStore } from '../../../stores/auth.js'
 import { OrderListPatch } from '@koosani/shared'
 
@@ -149,6 +149,63 @@ async function saveHeader() {
       detail: "Couldn't save changes. Please try again.",
       life: 5000,
     })
+  }
+}
+
+// Phase 38 — export. Mirrors EstimateDetailView.vue's downloadPdf handler
+// (loading ref, apiFetch → { url } → window.open) and the reports views'
+// exportCsv handler (apiFetchDownload — credentialed fetch → blob → object-
+// URL anchor click).
+function slugifyTitle(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'list'
+}
+
+const downloadingPdf = ref(false)
+async function downloadPdf() {
+  if (!orderList.value) return
+  downloadingPdf.value = true
+  try {
+    const result = await apiFetch<{ url?: string } | null>(`/order-lists/${id.value}/pdf`)
+    if (result?.url) {
+      window.open(result.url, '_blank')
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to generate PDF.',
+        life: 4000,
+      })
+    }
+  } catch {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to generate PDF.',
+      life: 4000,
+    })
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
+const downloadingCsv = ref(false)
+async function downloadCsv() {
+  if (!orderList.value) return
+  downloadingCsv.value = true
+  try {
+    await apiFetchDownload(
+      `/order-lists/${id.value}/csv`,
+      `order-list-${slugifyTitle(orderList.value.title)}.csv`,
+    )
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error', detail: 'Could not export CSV.', life: 5000 })
+  } finally {
+    downloadingCsv.value = false
   }
 }
 
@@ -366,15 +423,35 @@ onMounted(() => void load())
           class="flex items-center justify-between p-4 border-b border-surface-100 dark:border-surface-800"
         >
           <h3 class="text-base font-medium text-surface-700">Lines</h3>
-          <div v-if="canAdd" class="flex gap-2">
-            <Button severity="secondary" size="small" @click="importDialogOpen = true">
-              <ClipboardPaste class="w-4 h-4" />
-              Import
+          <div class="flex gap-2">
+            <Button
+              severity="secondary"
+              size="small"
+              :loading="downloadingPdf"
+              @click="downloadPdf"
+            >
+              <Download class="w-4 h-4" />
+              PDF
             </Button>
-            <Button severity="secondary" size="small" @click="lineDialogOpen = true">
-              <Plus class="w-4 h-4" />
-              Add line
+            <Button
+              severity="secondary"
+              size="small"
+              :loading="downloadingCsv"
+              @click="downloadCsv"
+            >
+              <FileSpreadsheet class="w-4 h-4" />
+              Excel
             </Button>
+            <template v-if="canAdd">
+              <Button severity="secondary" size="small" @click="importDialogOpen = true">
+                <ClipboardPaste class="w-4 h-4" />
+                Import
+              </Button>
+              <Button severity="secondary" size="small" @click="lineDialogOpen = true">
+                <Plus class="w-4 h-4" />
+                Add line
+              </Button>
+            </template>
           </div>
         </div>
 

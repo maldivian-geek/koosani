@@ -548,3 +548,81 @@ describe('order lists — system item name resolution', () => {
     expect(patched.systemItemName).toBe('Chicken Whole 900g (Frozen)')
   })
 })
+
+// ─── Phase 38 — CSV export ────────────────────────────────────────────────────
+
+describe('order lists — CSV export', () => {
+  it('returns a 200 CSV with the header row and a correctly quoted seeded line', async () => {
+    const { app } = await import('../../../server.js')
+    const { token } = await seedBusiness('admin')
+
+    const createRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'CSV export test' }),
+    })
+    const list = (await createRes.json()) as { id: string }
+
+    // A line whose fields need CSV quoting: a comma in the item name and a
+    // quote in the note.
+    await app.request(`/order-lists/${list.id}/lines`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        itemName: 'Rice, 25kg',
+        qty: '2.5000',
+        uom: 'Bag',
+        note: 'Ask for "fresh" stock',
+      }),
+    })
+
+    const csvRes = await app.request(`/order-lists/${list.id}/csv`, { headers: authHeaders(token) })
+    expect(csvRes.status).toBe(200)
+    expect(csvRes.headers.get('content-type')).toBe('text/csv; charset=utf-8')
+    expect(csvRes.headers.get('content-disposition')).toContain(
+      'attachment; filename="order-list-csv-export-test.csv"',
+    )
+
+    const body = await csvRes.text()
+    const rows = body.split('\n')
+    expect(rows[0]).toBe(
+      '#,Item,System Item,Qty,UOM,Note,Additional Note,Payment Status,Stock Status',
+    )
+    // Comma in item name → quoted; embedded quote → doubled; qty trimmed to "2.5".
+    expect(rows[1]).toBe('1,"Rice, 25kg",,2.5,Bag,"Ask for ""fresh"" stock",,Pending,Unknown')
+  })
+
+  it('returns 403 for staff without any orders grant', async () => {
+    const { token } = await seedBusiness('admin')
+    const { token: staffToken } = await seedBusiness('staff')
+
+    const { app } = await import('../../../server.js')
+    const createRes = await app.request('/order-lists', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ title: 'Staff-blocked list' }),
+    })
+    const list = (await createRes.json()) as { id: string }
+
+    const csvRes = await app.request(`/order-lists/${list.id}/csv`, {
+      headers: authHeaders(staffToken),
+    })
+    expect(csvRes.status).toBe(403)
+  })
+
+  it('returns 404 for a cross-business order list id', async () => {
+    const { business: businessA, user: userA } = await seedBusiness()
+    const { token: tokenB } = await seedBusiness('admin')
+    const svc = await import('../service.js')
+    const { app } = await import('../../../server.js')
+
+    const list = await svc.createOrderList(
+      businessA.id,
+      { title: 'Only visible to A (csv)' },
+      ctxFor(userA.id, businessA.id),
+    )
+
+    const res = await app.request(`/order-lists/${list.id}/csv`, { headers: authHeaders(tokenB) })
+    expect(res.status).toBe(404)
+  })
+})

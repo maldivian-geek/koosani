@@ -429,6 +429,8 @@ PDF generation (invoice PDF, SOA PDF, PO PDF, GST return bundle) is CPU-heavy. W
 | `GET /reports/*?format=csv`                 | per-user     | 1 min  | 20  | ✅ Phase 18 |
 | `GET /reports/*?format=csv` (bulk)          | per-user     | 1 hour | 10  | ✅ Phase 20 |
 | `POST /order-lists/:id/lines/extract-image` | per-user     | 1 hour | 10  | ✅ Phase 36 |
+| `GET /order-lists/:id/pdf`                  | per-user     | 1 min  | 20  | ✅ Phase 38 |
+| `GET /order-lists/:id/csv`                  | per-user     | 1 min  | 20  | ✅ Phase 38 |
 
 **Implementation:** `api/src/lib/rateLimiter.ts` provides two limiters. `createRedisRateLimiter(keyPrefix, points, durationSec)` — Redis-backed via `rate-limiter-flexible`, correct across multiple API instances — backs every limiter in this table as of Phase 20 (UPGRADE.md F-7; previously all were in-process `Map`s that reset per instance/restart, multiplying every limit by the instance count). `createRateLimiter(windowMs, max)` (in-process) is deprecated and kept only for any call site not yet migrated.
 

@@ -376,3 +376,69 @@ export async function deleteLine(
     )
   })
 }
+
+// ─── orderListLinesCsv ────────────────────────────────────────────────────────
+// Excel-compatible CSV export (Phase 38) — pure formatting, same
+// csvEscape/buildCsv shape as reports/service.ts's CSV helpers (no shared csv
+// lib exists; each module hand-rolls the same tiny pair, matching the
+// established convention there). No audit row — a pure read, same reasoning
+// as /lines/parse (ARCHITECTURE.md §4.16).
+
+const PAYMENT_STATUS_LABELS: Record<OrderListLine['paymentStatus'], string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+}
+
+const STOCK_STATUS_LABELS: Record<OrderListLine['stockStatus'], string> = {
+  unknown: 'Unknown',
+  in_stock: 'In Stock',
+  available: 'Available',
+  not_available: 'Not Available',
+}
+
+// Quantities transport as NUMERIC strings ("24.0000") — exported as the plain
+// trimmed number, same rule as the frontend's formatQty and
+// lib/pdf/OrderListDocument.ts's own copy of this helper.
+function formatQtyPlain(q: string): string {
+  return q.includes('.') ? q.replace(/0+$/, '').replace(/\.$/, '') : q
+}
+
+function csvEscape(val: string): string {
+  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+    return `"${val.replace(/"/g, '""')}"`
+  }
+  return val
+}
+
+function buildCsv(headers: string[], rows: string[][]): string {
+  return [headers.map(csvEscape).join(','), ...rows.map((r) => r.map(csvEscape).join(','))].join(
+    '\n',
+  )
+}
+
+export function orderListLinesCsv(lines: OrderListLineWithSystemName[]): string {
+  return buildCsv(
+    [
+      '#',
+      'Item',
+      'System Item',
+      'Qty',
+      'UOM',
+      'Note',
+      'Additional Note',
+      'Payment Status',
+      'Stock Status',
+    ],
+    lines.map((l) => [
+      String(l.position + 1),
+      l.itemName,
+      l.systemItemName ?? '',
+      formatQtyPlain(l.qty),
+      l.uom,
+      l.note ?? '',
+      l.additionalNote ?? '',
+      PAYMENT_STATUS_LABELS[l.paymentStatus],
+      STOCK_STATUS_LABELS[l.stockStatus],
+    ]),
+  )
+}

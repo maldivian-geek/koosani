@@ -10,6 +10,7 @@ import {
   renderEstimatePdf,
   renderCreditNotePdf,
   renderDeliveryNotePdf,
+  renderOrderListPdf,
 } from '../lib/pdf/build.js'
 
 export type PdfJobData =
@@ -34,6 +35,7 @@ export type PdfJobData =
   | { kind: 'estimate'; businessId: string; estimateId: string; userId: string }
   | { kind: 'credit-note'; businessId: string; creditNoteId: string; userId: string }
   | { kind: 'delivery-note'; businessId: string; deliveryNoteId: string; userId: string }
+  | { kind: 'order-list'; businessId: string; orderListId: string; userId: string }
 
 export function registerPdfWorker(): Worker<PdfJobData> {
   return new Worker<PdfJobData>(
@@ -99,6 +101,12 @@ export function registerPdfWorker(): Worker<PdfJobData> {
           filename = `delivery-note-${job.data.deliveryNoteId}.pdf`
           entityType = 'delivery_note'
           entityId = job.data.deliveryNoteId
+          break
+        case 'order-list':
+          buffer = await renderOrderListPdf(businessId, job.data.orderListId)
+          filename = `order-list-${job.data.orderListId}.pdf`
+          entityType = 'order_list'
+          entityId = job.data.orderListId
           break
       }
 

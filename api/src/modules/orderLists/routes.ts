@@ -15,6 +15,8 @@ import { requirePermission } from '../../middleware/authorize.js'
 import { getRealIp } from '../../lib/ip.js'
 import { createRedisRateLimiter } from '../../lib/rateLimiter.js'
 import { extractAndWait } from '../../lib/extractClient.js'
+import { renderAndWaitForFile } from '../../lib/pdfClient.js'
+import * as filesService from '../files/service.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
 import type { Context } from 'hono'
@@ -24,6 +26,30 @@ import type { Context } from 'hono'
 const ocrLimiter = createRedisRateLimiter('rl:orderlist-ocr', 10, 3600)
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const ALLOWED_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+// Phase 38 — export limiters, same 20/min/user shape as every other
+// PDF/CSV route (SECURITY.md §13.7).
+const pdfLimiter = createRedisRateLimiter('rl:orderlist-pdf', 20, 60)
+const csvLimiter = createRedisRateLimiter('rl:orderlist-csv', 20, 60)
+
+function csvResponse(body: string, filename: string) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+
+function slugifyTitle(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'list'
+}
 
 const ListOrderListsQuery = z.object({
   q: z.string().optional(),
@@ -244,6 +270,42 @@ orderListRoutes.delete('/:id/lines/:lineId', requirePermission('orders', 'delete
   try {
     await svc.deleteLine(c.get('businessId'), c.req.param('id'), c.req.param('lineId'), ctxFrom(c))
     return c.body(null, 204)
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
+// GET /order-lists/:id/pdf — renders via the pdf queue, same
+// enqueue-and-wait pattern as every other document PDF (ARCHITECTURE.md §8).
+orderListRoutes.get('/:id/pdf', requirePermission('orders', 'view'), async (c) => {
+  if (!(await pdfLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  const orderListId = c.req.param('id')
+  try {
+    await svc.getOrderList(c.get('businessId'), orderListId)
+    const fileId = await renderAndWaitForFile({
+      kind: 'order-list',
+      businessId: c.get('businessId'),
+      orderListId,
+      userId: c.get('userId'),
+    })
+    const url = await filesService.getSignedUrl(c.get('businessId'), fileId)
+    return c.json({ url })
+  } catch (err) {
+    if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
+    throw err
+  }
+})
+
+// GET /order-lists/:id/csv — Excel-compatible CSV, streamed directly from the
+// api like reports/routes.ts's CSV routes. Pure read, no audit row (same
+// convention as reports.* — ARCHITECTURE.md §3).
+orderListRoutes.get('/:id/csv', requirePermission('orders', 'view'), async (c) => {
+  if (!(await csvLimiter(c.get('userId')))) return c.json({ error: 'rate_limited' }, 429)
+  try {
+    const list = await svc.getOrderList(c.get('businessId'), c.req.param('id'))
+    const body = svc.orderListLinesCsv(list.lines)
+    return csvResponse(body, `order-list-${slugifyTitle(list.title)}.csv`)
   } catch (err) {
     if (err instanceof svc.NotFoundError) return c.json({ error: 'not_found' }, 404)
     throw err

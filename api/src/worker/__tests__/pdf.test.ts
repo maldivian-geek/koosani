@@ -235,3 +235,45 @@ describe('pdf worker — estimate PDF end-to-end', () => {
     expect(rows[0]?.mimeType).toBe('application/pdf')
   }, 30_000)
 })
+
+describe('pdf worker — order list PDF end-to-end (Phase 38)', () => {
+  it('renders a real order-list PDF via the queue and returns a working signed URL', async () => {
+    const { app } = await import('../../server.js')
+    const { business, user, token } = await seedBusinessWithInvoice()
+
+    const orderListsSvc = await import('../../modules/orderLists/service.js')
+    const ctx = { userId: user.id, businessId: business.id, ip: '127.0.0.1', ua: undefined }
+    const list = await orderListsSvc.createOrderList(
+      business.id,
+      { title: 'Weekly stock order', notes: 'from the paper list' },
+      ctx,
+    )
+    await orderListsSvc.addLine(
+      business.id,
+      list.id,
+      { itemName: 'Rice 25kg', qty: '2.0000', uom: 'Bag' },
+      ctx,
+    )
+
+    const res = await app.request(`/order-lists/${list.id}/pdf`, { headers: authHeaders(token) })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { url: string }
+    expect(body.url).toBeTruthy()
+
+    const { db: appDb } = await import('../../db/client.js')
+    const schema = await import('../../db/schema/index.js')
+    const { and, eq } = await import('drizzle-orm')
+    const rows = await appDb
+      .select()
+      .from(schema.files)
+      .where(
+        and(
+          eq(schema.files.businessId, business.id),
+          eq(schema.files.entityType, 'order_list'),
+          eq(schema.files.entityId, list.id),
+        ),
+      )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.mimeType).toBe('application/pdf')
+  }, 30_000)
+})

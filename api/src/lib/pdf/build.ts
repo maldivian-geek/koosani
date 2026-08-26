@@ -10,12 +10,14 @@ import * as purchases from '../../modules/purchases/service.js'
 import * as settings from '../../modules/settings/service.js'
 import * as estimatesService from '../../modules/estimates/service.js'
 import * as customFieldsService from '../../modules/customFields/service.js'
+import * as orderListsService from '../../modules/orderLists/service.js'
 import { InvoiceDocument } from './InvoiceDocument.js'
 import { PoDocument } from './PoDocument.js'
 import { SoaDocument } from './SoaDocument.js'
 import { EstimateDocument } from './EstimateDocument.js'
 import { CreditNoteDocument } from './CreditNoteDocument.js'
 import { DeliveryNoteDocument } from './DeliveryNoteDocument.js'
+import { OrderListDocument } from './OrderListDocument.js'
 import { renderPdfBuffer } from './render.js'
 import type { BusinessInfo } from './types.js'
 import type { CustomFieldPdfData } from './customFieldsSection.js'
@@ -269,6 +271,31 @@ export async function renderDeliveryNotePdf(
     deliverTo: { name: customer.name, tin: customer.tin, address: customer.address },
     lines: dn.lines.map((l) => ({ description: l.description, qty: l.qty })),
     notes: dn.notes,
+  })
+  return renderPdfBuffer(element)
+}
+
+export async function renderOrderListPdf(businessId: string, orderListId: string): Promise<Buffer> {
+  const [business, orderList] = await Promise.all([
+    businessInfo(businessId),
+    orderListsService.getOrderList(businessId, orderListId),
+  ])
+
+  const element = OrderListDocument({
+    business,
+    title: orderList.title,
+    notes: orderList.notes,
+    lines: orderList.lines.map((l) => ({
+      position: l.position,
+      itemName: l.itemName,
+      systemItemName: l.systemItemName,
+      qty: l.qty,
+      uom: l.uom,
+      note: l.note,
+      additionalNote: l.additionalNote,
+      paymentStatus: l.paymentStatus,
+      stockStatus: l.stockStatus,
+    })),
   })
   return renderPdfBuffer(element)
 }
