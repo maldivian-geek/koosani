@@ -15,7 +15,25 @@ import { logger } from './logger.js'
 export interface StorageBackend {
   put(key: string, data: Buffer, contentType: string): Promise<void>
   get(key: string): Promise<Buffer>
-  getSignedUrl(key: string, expiresInSeconds: number): Promise<string>
+  // downloadName, when given, becomes the browser-facing filename via
+  // Content-Disposition — the storage key itself stays the content hash
+  // (SECURITY.md §13.5 rule 6: paths are never user-controlled).
+  getSignedUrl(key: string, expiresInSeconds: number, downloadName?: string): Promise<string>
+}
+
+// Header-safe download filename: HTTP header values are byte strings, so
+// anything outside printable ASCII (em-dashes, Thaana, …) must go, along
+// with quotes/control chars/path separators; whitespace collapses to
+// underscores.
+export function sanitizeDownloadName(name: string): string {
+  return (
+    name
+      .replace(/["\\/:*?<>|]+/g, '')
+
+      .replace(/[^\x20-\x7e]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, '_') || 'download'
+  )
 }
 
 // ─── SHA-256 helper ───────────────────────────────────────────────────────────
@@ -50,13 +68,13 @@ const LOCAL_ROOT = join(tmpdir(), 'koosani-uploads')
 // including the expiry). Signed with the existing JWT_SECRET; only the server
 // can mint a valid (key, exp, sig) triple. Still a dev/test-only backend —
 // production uses S3 (STACK.md).
-export function signLocalKey(key: string, exp: number): string {
-  return createHmac('sha256', config.JWT_SECRET).update(`${key}\n${exp}`).digest('hex')
+export function signLocalKey(key: string, exp: number, name = ''): string {
+  return createHmac('sha256', config.JWT_SECRET).update(`${key}\n${exp}\n${name}`).digest('hex')
 }
 
-export function verifyLocalKey(key: string, exp: number, sig: string): boolean {
+export function verifyLocalKey(key: string, exp: number, sig: string, name = ''): boolean {
   if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false
-  const expected = Buffer.from(signLocalKey(key, exp))
+  const expected = Buffer.from(signLocalKey(key, exp, name))
   const provided = Buffer.from(sig)
   return expected.length === provided.length && timingSafeEqual(expected, provided)
 }
@@ -72,11 +90,17 @@ class LocalStorage implements StorageBackend {
     return readFile(join(LOCAL_ROOT, key))
   }
 
-  async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    expiresInSeconds: number,
+    downloadName?: string,
+  ): Promise<string> {
     const exp = Math.floor(Date.now() / 1000) + expiresInSeconds
-    const sig = signLocalKey(key, exp)
+    const name = downloadName ? sanitizeDownloadName(downloadName) : ''
+    const sig = signLocalKey(key, exp, name)
     const base = config.API_PUBLIC_URL ?? `http://localhost:${config.PORT}`
-    return `${base}/files/local?key=${encodeURIComponent(key)}&exp=${exp}&sig=${sig}`
+    const namePart = name ? `&name=${encodeURIComponent(name)}` : ''
+    return `${base}/files/local?key=${encodeURIComponent(key)}&exp=${exp}${namePart}&sig=${sig}`
   }
 }
 
@@ -120,13 +144,20 @@ class S3Storage implements StorageBackend {
     return Buffer.concat(chunks)
   }
 
-  async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    expiresInSeconds: number,
+    downloadName?: string,
+  ): Promise<string> {
+    const disposition = downloadName
+      ? `attachment; filename="${sanitizeDownloadName(downloadName)}"`
+      : 'attachment'
     return getSignedUrl(
       this.client,
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
-        ResponseContentDisposition: 'attachment',
+        ResponseContentDisposition: disposition,
       }),
       { expiresIn: expiresInSeconds },
     )

@@ -77,6 +77,24 @@ describe('local storage signed downloads', () => {
     expect((await app.request('/files/local?' + qs.toString())).status).toBe(403)
   })
 
+  it('carries a tamper-proof download filename when one is provided', async () => {
+    const { storage } = await import('../../../lib/storage.js')
+    const { app } = await import('../../../server.js')
+
+    const key = `test-biz/uploads/${Date.now()}-named.pdf`
+    await storage.put(key, PDF_BYTES, 'application/pdf')
+    const signedUrl = await storage.getSignedUrl(key, 300, 'ORDER_LIST_Trip order — August.pdf')
+    const u = new URL(signedUrl)
+
+    const res = await app.request(u.pathname + u.search)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).toContain('ORDER_LIST_Trip_order')
+
+    // Changing the name without re-signing must fail — it's part of the HMAC.
+    u.searchParams.set('name', 'evil.exe')
+    expect((await app.request(u.pathname + '?' + u.searchParams.toString())).status).toBe(403)
+  })
+
   it('does not require a session cookie (signature is the authorization)', async () => {
     const { storage } = await import('../../../lib/storage.js')
     const { app } = await import('../../../server.js')

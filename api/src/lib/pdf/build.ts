@@ -275,7 +275,12 @@ export async function renderDeliveryNotePdf(
   return renderPdfBuffer(element)
 }
 
-export async function renderOrderListPdf(businessId: string, orderListId: string): Promise<Buffer> {
+// Returns the list title alongside the bytes so the worker can name the
+// stored file after the list ("ORDER_LIST_<title>.pdf") without a second read.
+export async function renderOrderListPdf(
+  businessId: string,
+  orderListId: string,
+): Promise<{ buffer: Buffer; title: string }> {
   const [business, orderList] = await Promise.all([
     businessInfo(businessId),
     orderListsService.getOrderList(businessId, orderListId),
@@ -297,5 +302,5 @@ export async function renderOrderListPdf(businessId: string, orderListId: string
       stockStatus: l.stockStatus,
     })),
   })
-  return renderPdfBuffer(element)
+  return { buffer: await renderPdfBuffer(element), title: orderList.title }
 }

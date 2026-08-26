@@ -140,7 +140,9 @@ export async function getSignedUrl(businessId: string, fileId: string): Promise<
   const file = await repo.findById(businessId, fileId)
   if (!file) throw new NotFoundError(`File ${fileId} not found`)
   if (file.scanResult !== 'clean') throw new NotFoundError(`File ${fileId} not found`)
-  return storage.getSignedUrl(file.storageKey, SIGNED_URL_TTL_SEC)
+  // Download under the file's original name (sanitized by the storage layer)
+  // rather than the content-hash storage key.
+  return storage.getSignedUrl(file.storageKey, SIGNED_URL_TTL_SEC, file.originalName)
 }
 
 // ─── attachToEntity ───────────────────────────────────────────────────────────

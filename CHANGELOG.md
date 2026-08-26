@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Downloads now carry their real filename** — signed URLs (both S3 and the local dev backend) set `Content-Disposition` from the file row's `original_name` (sanitized to a header-safe ASCII name; part of the local URL's HMAC so it can't be tampered with) instead of exposing the content-hash storage key. Order-list PDFs are named **`ORDER_LIST_<list title>.pdf`** (owner request); invoice/estimate/etc. PDFs and uploaded supplier files now download under their stored names too.
 - **Order list PDF: one-page fit + status row tints** (`lib/pdf/OrderListDocument.ts`). The table densifies to keep the whole list on a single A4 page — tier selection is wrap-aware (it estimates per-row height from actual text widths against the real column geometry, since long product names wrapping is what blows the page budget, not row count), stepping the font from 8pt down to a 5.5pt floor. The System Item column is deliberately omitted from the PDF (the printed sheet uses the customer's wording only — the CSV export still carries it), and the Item column got a much larger flex share (names rarely wrap now). Rows are tinted like the owner's original spreadsheet: paid → light green (#e8f5e9), not available → light red (#fdecea, winning when both apply); light tints keep black text printable.
 
 ### Fixed

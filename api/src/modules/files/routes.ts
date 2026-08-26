@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { fileTypeFromBuffer } from 'file-type'
 import { requireAuth } from '../../middleware/requireAuth.js'
 import { getRealIp } from '../../lib/ip.js'
-import { storage, verifyLocalKey } from '../../lib/storage.js'
+import { storage, verifyLocalKey, sanitizeDownloadName } from '../../lib/storage.js'
 import { config } from '../../lib/config.js'
 import * as svc from './service.js'
 import type { AppEnv } from '../../types.js'
@@ -19,10 +19,11 @@ localFileRoutes.get('/', async (c) => {
   const key = c.req.query('key') ?? ''
   const exp = Number(c.req.query('exp') ?? '')
   const sig = c.req.query('sig') ?? ''
-  // Signature already binds the exact server-minted key, but reject path
-  // traversal outright as defense-in-depth (keys are server-generated and
-  // never contain '..').
-  if (!key || key.includes('..') || !sig || !verifyLocalKey(key, exp, sig)) {
+  const name = c.req.query('name') ?? ''
+  // Signature binds key + expiry + download name (so the filename can't be
+  // tampered with either); reject path traversal outright as defense-in-depth
+  // (keys are server-generated and never contain '..').
+  if (!key || key.includes('..') || !sig || !verifyLocalKey(key, exp, sig, name)) {
     return c.json({ error: 'forbidden' }, 403)
   }
 
@@ -34,7 +35,7 @@ localFileRoutes.get('/', async (c) => {
   }
 
   const detected = await fileTypeFromBuffer(data)
-  const filename = key.split('/').pop() ?? 'download'
+  const filename = name ? sanitizeDownloadName(name) : (key.split('/').pop() ?? 'download')
   c.header('Content-Type', detected?.mime ?? 'application/octet-stream')
   c.header('Content-Disposition', `attachment; filename="${filename}"`)
   c.header('X-Content-Type-Options', 'nosniff')

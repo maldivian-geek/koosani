@@ -102,12 +102,16 @@ export function registerPdfWorker(): Worker<PdfJobData> {
           entityType = 'delivery_note'
           entityId = job.data.deliveryNoteId
           break
-        case 'order-list':
-          buffer = await renderOrderListPdf(businessId, job.data.orderListId)
-          filename = `order-list-${job.data.orderListId}.pdf`
+        case 'order-list': {
+          const rendered = await renderOrderListPdf(businessId, job.data.orderListId)
+          buffer = rendered.buffer
+          // Named after the list itself (owner request) — the storage layer
+          // sanitizes this into a header-safe download filename.
+          filename = `ORDER_LIST_${rendered.title}.pdf`
           entityType = 'order_list'
           entityId = job.data.orderListId
           break
+        }
       }
 
       const file = await filesService.uploadFile(
