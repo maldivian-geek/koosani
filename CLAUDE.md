@@ -71,6 +71,12 @@ Each bullet: imperative voice, links the relevant doc section.
 
 On release: rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD`, add a new empty `[Unreleased]` block at top.
 
+**Every update that gets pushed cuts a release — the version number must change.** The sidebar shows the app version (from `web`'s package version), so an update without a bump looks like nothing shipped. In the same push (or a `Release X.Y.Z` commit immediately after):
+
+1. Pick the bump from the `[Unreleased]` contents, per SemVer: only `Fixed`/`Security` → **patch**; anything in `Added`/`Changed`/`Deprecated`/`Removed` → **minor**; `Breaking` → **major**, unless the owner opts to ship it as minor in the same conversation (precedent: 1.3.0 carried a Breaking entry as a minor bump — ask when unsure).
+2. Bump the `version` field in ALL FIVE package.json files in lockstep: root, `api`, `web`, `shared`, `portal`.
+3. Do the CHANGELOG release rename above with today's date.
+
 ---
 
 ## 4. Hard rules — code
@@ -155,6 +161,7 @@ If you find yourself reading more than ~5 source files in a task, you are doing 
 - [ ] No new endpoint without `FUNCTIONS.md` row.
 - [ ] If touching auth/files/audit: re-read SECURITY.md §relevant before submitting.
 - [ ] **Git commit created** — one commit per completed phase (message: `Phase N: <summary>`).
+- [ ] **If pushing: version bumped + release cut** per the SemVer rule in §3 (all five package.json files + CHANGELOG release rename).
 
 ---
 
