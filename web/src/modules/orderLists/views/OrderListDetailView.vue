@@ -5,6 +5,7 @@ import DataTable from 'primevue/datatable'
 import type { DataTableCellEditCompleteEvent, DataTableCellEditInitEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
+import Checkbox from 'primevue/checkbox'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -40,6 +41,8 @@ export interface OrderListLine {
   additionalNote: string | null
   paymentStatus: 'pending' | 'paid'
   stockStatus: 'unknown' | 'in_stock' | 'available' | 'not_available'
+  boxNo: string | null
+  loaded: boolean
 }
 
 export interface OrderListDetail {
@@ -237,7 +240,8 @@ async function patchLineField(
   lineId: string,
   patch:
     | { paymentStatus: OrderListLine['paymentStatus'] }
-    | { stockStatus: OrderListLine['stockStatus'] },
+    | { stockStatus: OrderListLine['stockStatus'] }
+    | { loaded: boolean },
   apply: (row: OrderListLine) => void,
   revert: (row: OrderListLine) => void,
 ) {
@@ -281,6 +285,16 @@ function onStockStatusChange(line: OrderListLine, value: OrderListLine['stockSta
   )
 }
 
+function onLoadedChange(line: OrderListLine, value: boolean) {
+  const previous = line.loaded
+  void patchLineField(
+    line.id,
+    { loaded: value },
+    (row) => (row.loaded = value),
+    (row) => (row.loaded = previous),
+  )
+}
+
 function onDeleteLine(line: OrderListLine) {
   confirm.require({
     header: 'Delete line',
@@ -312,17 +326,18 @@ function rowClass(data: OrderListLine) {
 // Click a cell → edit → commit (enter/blur) PATCHes just that field, mirroring
 // the status dropdowns' optimistic-then-revert behavior.
 
-type EditableField = 'itemName' | 'qty' | 'uom' | 'note' | 'additionalNote'
+type EditableField = 'itemName' | 'qty' | 'uom' | 'note' | 'additionalNote' | 'boxNo'
 const EDITABLE_FIELDS: readonly EditableField[] = [
   'itemName',
   'qty',
   'uom',
   'note',
   'additionalNote',
+  'boxNo',
 ]
 
 function setField(row: OrderListLine, field: EditableField, value: string | null) {
-  if (field === 'note' || field === 'additionalNote') row[field] = value
+  if (field === 'note' || field === 'additionalNote' || field === 'boxNo') row[field] = value
   else row[field] = value ?? ''
 }
 
@@ -527,6 +542,22 @@ onMounted(() => void load())
               >
                 {{ [line.note, line.additionalNote].filter(Boolean).join(' · ') }}
               </span>
+              <span
+                class="ml-auto flex items-center gap-3 whitespace-nowrap text-xs text-surface-600 dark:text-surface-300"
+              >
+                <span v-if="line.boxNo">Box {{ line.boxNo }}</span>
+                <label class="flex items-center gap-1.5">
+                  <Checkbox
+                    :model-value="line.loaded"
+                    binary
+                    size="small"
+                    :disabled="!canEdit"
+                    :aria-label="`Loaded: ${line.itemName}`"
+                    @update:model-value="(v) => onLoadedChange(line, !!v)"
+                  />
+                  Loaded
+                </label>
+              </span>
             </div>
             <div class="flex gap-2">
               <Select
@@ -698,6 +729,29 @@ onMounted(() => void load())
                   <StatusTag v-if="value" :status="value" />
                 </template>
               </Select>
+            </template>
+          </Column>
+          <Column field="boxNo" header="Box No." style="width: 90px" :pt="stackPt">
+            <template #body="{ data }">{{ (data as OrderListLine).boxNo ?? '—' }}</template>
+            <template #editor="{ data }">
+              <InputText
+                :model-value="(data as OrderListLine).boxNo ?? ''"
+                class="w-full"
+                size="small"
+                autofocus
+                @update:model-value="(v) => ((data as OrderListLine).boxNo = v || null)"
+              />
+            </template>
+          </Column>
+          <Column header="Loaded" style="width: 80px" :pt="stackPt">
+            <template #body="{ data }">
+              <Checkbox
+                :model-value="(data as OrderListLine).loaded"
+                binary
+                :disabled="!canEdit"
+                :aria-label="`Loaded: ${(data as OrderListLine).itemName}`"
+                @update:model-value="(v) => onLoadedChange(data as OrderListLine, !!v)"
+              />
             </template>
           </Column>
           <Column v-if="canDelete" header="" style="width: 50px" :pt="stackPt">

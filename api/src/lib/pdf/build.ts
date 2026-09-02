@@ -300,6 +300,8 @@ export async function renderOrderListPdf(
       additionalNote: l.additionalNote,
       paymentStatus: l.paymentStatus,
       stockStatus: l.stockStatus,
+      boxNo: l.boxNo,
+      loaded: l.loaded,
     })),
   })
   return { buffer: await renderPdfBuffer(element), title: orderList.title }

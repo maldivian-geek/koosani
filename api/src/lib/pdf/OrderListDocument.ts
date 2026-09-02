@@ -25,6 +25,8 @@ const COL_FLEX = {
   additionalNote: 1.1,
   payment: 0.75,
   stock: 0.95,
+  box: 0.5,
+  loaded: 0.55,
 }
 const FLEX_SUM = Object.values(COL_FLEX).reduce((a, b) => a + b, 0)
 
@@ -40,6 +42,8 @@ const localStyles = StyleSheet.create({
   colAdditionalNote: { flex: COL_FLEX.additionalNote },
   colPayment: { flex: COL_FLEX.payment },
   colStock: { flex: COL_FLEX.stock },
+  colBox: { flex: COL_FLEX.box },
+  colLoaded: { flex: COL_FLEX.loaded },
 })
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
@@ -126,11 +130,37 @@ function tableScale(
 
 // Row tints mirroring the owner's original spreadsheet: paid rows green,
 // not-available rows red (red wins when both apply — unavailability is the
-// more actionable signal). Light tints so black text stays printable.
+// more actionable signal). Red is a deliberately stronger tint (owner
+// request: the light one was too easy to miss on paper) while staying light
+// enough that black text prints legibly.
 function rowTint(line: OrderListLinePdfData): string | null {
-  if (line.stockStatus === 'not_available') return '#fdecea'
+  if (line.stockStatus === 'not_available') return '#ef9a9a'
   if (line.paymentStatus === 'paid') return '#e8f5e9'
   return null
+}
+
+// A printable checkbox for the Loaded column — Helvetica has no ☐/☑ glyphs,
+// so draw a bordered square and put an X in it when loaded.
+function loadedCheckbox(loaded: boolean, fontSize: number): React.ReactElement {
+  const side = fontSize + 1.5
+  return h(
+    View,
+    { style: localStyles.colLoaded },
+    h(
+      View,
+      {
+        style: {
+          width: side,
+          height: side,
+          borderWidth: 0.8,
+          borderColor: '#444444',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+      },
+      loaded ? h(Text, { style: { fontSize: fontSize - 0.5 } }, 'X') : null,
+    ),
+  )
 }
 
 export type OrderListLinePdfData = {
@@ -143,6 +173,8 @@ export type OrderListLinePdfData = {
   additionalNote: string | null
   paymentStatus: string
   stockStatus: string
+  boxNo: string | null
+  loaded: boolean
 }
 
 export type OrderListPdfData = {
@@ -203,6 +235,8 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
           h(Text, { style: localStyles.colAdditionalNote }, 'Additional Note'),
           h(Text, { style: localStyles.colPayment }, 'Payment'),
           h(Text, { style: localStyles.colStock }, 'Stock'),
+          h(Text, { style: localStyles.colBox }, 'Box'),
+          h(Text, { style: localStyles.colLoaded }, 'Loaded'),
         ),
         ...data.lines.map((line, i) => {
           const tint = rowTint(line)
@@ -222,6 +256,8 @@ export function OrderListDocument(data: OrderListPdfData): React.ReactElement {
             h(Text, { style: localStyles.colAdditionalNote }, line.additionalNote ?? ''),
             h(Text, { style: localStyles.colPayment }, PAYMENT_STATUS_LABELS[line.paymentStatus]),
             h(Text, { style: localStyles.colStock }, STOCK_STATUS_LABELS[line.stockStatus]),
+            h(Text, { style: localStyles.colBox }, line.boxNo ?? ''),
+            loadedCheckbox(line.loaded, scale.fontSize),
           )
         }),
       ),

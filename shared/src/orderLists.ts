@@ -31,6 +31,11 @@ export const OrderLineCreate = z.object({
   uom: z.string().min(1).max(50).default('Each'),
   note: z.string().max(1000).optional(),
   additionalNote: z.string().max(1000).optional(),
+  // Loading workflow: which box the item was packed into, and whether it's
+  // on the vehicle — free text / checkbox, same non-financial spirit as the
+  // status columns.
+  boxNo: z.string().max(50).optional(),
+  loaded: z.boolean().optional(),
 })
 export type OrderLineCreate = z.infer<typeof OrderLineCreate>
 
@@ -55,5 +60,7 @@ export const OrderLinePatch = z.object({
   additionalNote: z.string().max(1000).nullable().optional(),
   paymentStatus: OrderListPaymentStatus.optional(),
   stockStatus: OrderListStockStatus.optional(),
+  boxNo: z.string().max(50).nullable().optional(),
+  loaded: z.boolean().optional(),
 })
 export type OrderLinePatch = z.infer<typeof OrderLinePatch>

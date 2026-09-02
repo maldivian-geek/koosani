@@ -167,6 +167,46 @@ describe('orderLists — service happy paths', () => {
     expect(lineUpdateRows[0]?.entityId).toBe(list.id)
   })
 
+  it('defaults boxNo/loaded on add and patches them', async () => {
+    const { business, user } = await seedBusiness()
+    const svc = await import('../service.js')
+
+    const list = await svc.createOrderList(
+      business.id,
+      { title: 'Loading test' },
+      ctxFor(user.id, business.id),
+    )
+    const line = await svc.addLine(
+      business.id,
+      list.id,
+      { itemName: 'Sugar 1kg', qty: '10', uom: 'Each' },
+      ctxFor(user.id, business.id),
+    )
+    expect(line.boxNo).toBeNull()
+    expect(line.loaded).toBe(false)
+
+    const patched = await svc.patchLine(
+      business.id,
+      list.id,
+      line.id,
+      { boxNo: 'B12', loaded: true },
+      ctxFor(user.id, business.id),
+    )
+    expect(patched.boxNo).toBe('B12')
+    expect(patched.loaded).toBe(true)
+
+    // Clearing the box number back to null round-trips too.
+    const cleared = await svc.patchLine(
+      business.id,
+      list.id,
+      line.id,
+      { boxNo: null },
+      ctxFor(user.id, business.id),
+    )
+    expect(cleared.boxNo).toBeNull()
+    expect(cleared.loaded).toBe(true)
+  })
+
   it('deletes a line and soft-deletes a list', async () => {
     const { business, user } = await seedBusiness()
     const svc = await import('../service.js')
@@ -614,6 +654,8 @@ describe('order lists — CSV export', () => {
         qty: '2.5000',
         uom: 'Bag',
         note: 'Ask for "fresh" stock',
+        boxNo: 'B3',
+        loaded: true,
       }),
     })
 
@@ -627,10 +669,12 @@ describe('order lists — CSV export', () => {
     const body = await csvRes.text()
     const rows = body.split('\n')
     expect(rows[0]).toBe(
-      '#,Item,System Item,Qty,UOM,Note,Additional Note,Payment Status,Stock Status',
+      '#,Item,System Item,Qty,UOM,Note,Additional Note,Payment Status,Stock Status,Box No.,Loaded',
     )
     // Comma in item name → quoted; embedded quote → doubled; qty trimmed to "2.5".
-    expect(rows[1]).toBe('1,"Rice, 25kg",,2.5,Bag,"Ask for ""fresh"" stock",,Pending,Unknown')
+    expect(rows[1]).toBe(
+      '1,"Rice, 25kg",,2.5,Bag,"Ask for ""fresh"" stock",,Pending,Unknown,B3,Yes',
+    )
   })
 
   it('returns 403 for staff without any orders grant', async () => {

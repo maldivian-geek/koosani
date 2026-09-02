@@ -1,4 +1,4 @@
-import { integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { timestamps, auditedBy } from './helpers.js'
 import { orderListPaymentStatusEnum, orderListStockStatusEnum } from './enums.js'
 import { businesses } from './businesses.js'
@@ -42,6 +42,10 @@ export const orderListLines = pgTable('order_list_lines', {
   additionalNote: text('additional_note'),
   paymentStatus: orderListPaymentStatusEnum('payment_status').default('pending').notNull(),
   stockStatus: orderListStockStatusEnum('stock_status').default('unknown').notNull(),
+  // Loading workflow: box the item was packed into (free text) and whether
+  // it's been loaded onto the vehicle.
+  boxNo: text('box_no'),
+  loaded: boolean('loaded').default(false).notNull(),
   ...timestamps,
 })
 

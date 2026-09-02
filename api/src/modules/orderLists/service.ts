@@ -222,6 +222,8 @@ export async function addLine(
         uom: data.uom,
         note: data.note ?? null,
         additionalNote: data.additionalNote ?? null,
+        boxNo: data.boxNo ?? null,
+        loaded: data.loaded ?? false,
       },
       tx,
     )
@@ -280,6 +282,8 @@ export async function importLines(
         uom: line.uom,
         note: line.note ?? null,
         additionalNote: line.additionalNote ?? null,
+        boxNo: line.boxNo ?? null,
+        loaded: line.loaded ?? false,
       })),
       tx,
     )
@@ -327,6 +331,8 @@ export async function patchLine(
         ...(data.additionalNote !== undefined ? { additionalNote: data.additionalNote } : {}),
         ...(data.paymentStatus !== undefined ? { paymentStatus: data.paymentStatus } : {}),
         ...(data.stockStatus !== undefined ? { stockStatus: data.stockStatus } : {}),
+        ...(data.boxNo !== undefined ? { boxNo: data.boxNo } : {}),
+        ...(data.loaded !== undefined ? { loaded: data.loaded } : {}),
       },
       tx,
     )
@@ -428,6 +434,8 @@ export function orderListLinesCsv(lines: OrderListLineWithSystemName[]): string 
       'Additional Note',
       'Payment Status',
       'Stock Status',
+      'Box No.',
+      'Loaded',
     ],
     lines.map((l) => [
       String(l.position + 1),
@@ -439,6 +447,8 @@ export function orderListLinesCsv(lines: OrderListLineWithSystemName[]): string 
       l.additionalNote ?? '',
       PAYMENT_STATUS_LABELS[l.paymentStatus],
       STOCK_STATUS_LABELS[l.stockStatus],
+      l.boxNo ?? '',
+      l.loaded ? 'Yes' : 'No',
     ]),
   )
 }

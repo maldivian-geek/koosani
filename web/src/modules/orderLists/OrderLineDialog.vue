@@ -4,6 +4,7 @@ import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
+import Checkbox from 'primevue/checkbox'
 import { useToast } from 'primevue/usetoast'
 import { OrderLineCreate, OrderLinePatch } from '@koosani/shared'
 import { apiFetch, ApiError } from '../../lib/apiFetch.js'
@@ -24,6 +25,8 @@ const form = ref({
   uom: props.line?.uom ?? 'Each',
   note: props.line?.note ?? '',
   additionalNote: props.line?.additionalNote ?? '',
+  boxNo: props.line?.boxNo ?? '',
+  loaded: props.line?.loaded ?? false,
 })
 
 async function submit() {
@@ -36,6 +39,8 @@ async function submit() {
       uom: form.value.uom || 'Each',
       note: form.value.note || null,
       additionalNote: form.value.additionalNote || null,
+      boxNo: form.value.boxNo || null,
+      loaded: form.value.loaded,
     }
     const parsed = OrderLinePatch.safeParse(payload)
     if (!parsed.success) {
@@ -67,6 +72,8 @@ async function submit() {
     uom: form.value.uom || 'Each',
     note: form.value.note || undefined,
     additionalNote: form.value.additionalNote || undefined,
+    boxNo: form.value.boxNo || undefined,
+    loaded: form.value.loaded,
   }
   const parsed = OrderLineCreate.safeParse(payload)
   if (!parsed.success) {
@@ -128,6 +135,17 @@ async function submit() {
     <div class="space-y-1.5">
       <label class="block text-sm font-semibold text-surface-800">Additional Note</label>
       <Textarea v-model="form.additionalNote" rows="2" class="w-full resize-none" />
+    </div>
+
+    <div class="flex gap-3 items-end">
+      <div class="flex-1 space-y-1.5">
+        <label class="block text-sm font-semibold text-surface-800">Box No.</label>
+        <InputText v-model="form.boxNo" class="w-full" />
+      </div>
+      <label class="flex flex-1 items-center gap-2 pb-2.5 text-sm font-semibold text-surface-800">
+        <Checkbox v-model="form.loaded" binary />
+        Loaded
+      </label>
     </div>
 
     <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
