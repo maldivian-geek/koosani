@@ -391,6 +391,47 @@ describe('order lists — paste/CSV import', () => {
     expect(lines[3]).toMatchObject({ qty: '1', note: 'BLACK' }) // non-numeric qty defaults to 1
   })
 
+  it('strips a leading row-number column, whether a separate cell or glued onto the name', async () => {
+    const { parseImportText } = await import('../../../lib/order-list-import.js')
+
+    // Separate-cell shape (Excel paste with its own 1..N numbering column)
+    const cellText = [
+      '1\tTS AXE BODY SPRAY 150ML\t120\tEach',
+      '2\tTS BISCUIT BETTER 22 GR\t120\tEach',
+      '3\tTS FUDGEE BAR\t400\t1X100NOS',
+    ].join('\n')
+    const cell = parseImportText(cellText)
+    expect(cell.lines.map((l) => l.itemName)).toEqual([
+      'TS AXE BODY SPRAY 150ML',
+      'TS BISCUIT BETTER 22 GR',
+      'TS FUDGEE BAR',
+    ])
+    expect(cell.lines.map((l) => l.qty)).toEqual(['120', '120', '400'])
+
+    // Glued-prefix shape (OCR merges the number into the name cell)
+    const glued = parseImportText(
+      ['1 TS AXE BODY SPRAY 150ML\t120\tEach', '2 TS DOVE SHAMPOO 330 ML\t12\tEach'].join('\n'),
+    )
+    expect(glued.lines.map((l) => l.itemName)).toEqual([
+      'TS AXE BODY SPRAY 150ML',
+      'TS DOVE SHAMPOO 330 ML',
+    ])
+  })
+
+  it('keeps digit-leading item names when the block is not a numbered list', async () => {
+    const { parseImportText } = await import('../../../lib/order-list-import.js')
+
+    // Numbers present but not strictly increasing — real product names.
+    const { lines } = parseImportText(
+      ['3 PLY MASK BLUE\t48\tEach', '3 PLY MASK BLACK\t24\tEach', '7UP 330ML\t12\tEach'].join('\n'),
+    )
+    expect(lines.map((l) => l.itemName)).toEqual([
+      '3 PLY MASK BLUE',
+      '3 PLY MASK BLACK',
+      '7UP 330ML',
+    ])
+  })
+
   it('parses comma-delimited text when no tabs are present', async () => {
     const { parseImportText } = await import('../../../lib/order-list-import.js')
     const { lines } = parseImportText('PRINGLES,48,Each\n"TS SUPER RING 60GR",60,Each,CHEESE BALL')
