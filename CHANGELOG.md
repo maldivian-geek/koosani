@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-02
+
 ### Breaking
 
 - **Staff users now need an explicit or implied `view` grant to read any permission-gated resource** (SECURITY.md §Authorization Model). Previously `view` was allowed unconditionally for any authenticated role; as of Phase 37, staff must hold either an explicit `(resource, 'view')` grant or any other grant (`add`/`edit`/`delete`) on that resource — `add`/`edit`/`delete` now imply `view`. **Existing production staff users with no grants at all lose read access to every gated module (customers, suppliers, items, inventory, invoices, estimates, recurring, bills, expenses, projects, po, gst, reports, orders) until an admin grants them view (or another) access via the Users screen.** Admins and managers are unaffected — managers keep default `view` access, same as before. `requirePermission(resource, 'view')` is now wired onto every list/detail/pdf/soa/csv-style GET route across those modules (`api/src/middleware/authorize.ts`, `permissions/repository.ts`'s new `hasAnyGrantOnResource`).
